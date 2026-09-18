@@ -97,6 +97,7 @@ function apply(ctx) {
       enabled: '1',
       palette: 'valley',
       radius: 'square',
+      glass: 'off',
       contour: '0',
       contourAnim: '1',
       contourFps: '24',
@@ -141,6 +142,7 @@ function apply(ctx) {
       'dsh-theme-endfield-enabled': 'enabled',
       'dsh-theme-endfield-palette': 'palette',
       'dsh-theme-endfield-radius': 'radius',
+      'dsh-theme-endfield-glass': 'glass',
       'dsh-theme-endfield-contour': 'contour',
       'dsh-theme-endfield-contour-anim': 'contourAnim',
       'dsh-theme-endfield-contour-fps': 'contourFps',
@@ -580,6 +582,18 @@ function apply(ctx) {
     const RADIUS_KEY = 'dsh-theme-endfield-radius'
     const ENABLED_KEY = 'dsh-theme-endfield-enabled'
     const isEnabled = () => prefsGet(ENABLED_KEY) !== '0'
+    const GLASS_KEY = 'dsh-theme-endfield-glass'
+    const GLASS_OPTIONS = ['off', 'subtle', 'standard', 'strong']
+    const readGlass = () => {
+      const value = prefsGet(GLASS_KEY)
+      return GLASS_OPTIONS.includes(value) ? value : 'off'
+    }
+    const syncGlass = () => {
+      if (typeof document === 'undefined' || document.body === null) return
+      const value = readGlass()
+      if (isEnabled() && value !== 'off') document.body.setAttribute?.('data-endfield-glass', value)
+      else document.body.removeAttribute?.('data-endfield-glass')
+    }
     const syncRadiusMode = () => {
       // The bundle can run before <body> exists (see runLoader's DOMContentLoaded
       // deferral for the same window); a classList touch on null would throw and
@@ -3035,6 +3049,48 @@ function apply(ctx) {
           rgba(0, 0, 0, 0) 0px,
           color-mix(in srgb, var(--dsw-alias-bg-base) 82%, transparent) 36px) !important;
       }
+      /* Optional bounded frost. No full-window blur, nested filters or animation. */
+      body[data-endfield-glass] {
+        --edge-glass-fill: 248 247 240;
+        --edge-glass-alpha: .8;
+        --edge-glass-blur: 14px;
+        --edge-glass-edge: rgb(255 255 255 / .65);
+        --edge-glass-sheen: rgb(255 255 255 / .35);
+      }
+      body[data-endfield-glass][data-ds-dark-theme] {
+        --edge-glass-fill: 31 36 34;
+        --edge-glass-alpha: .76;
+        --edge-glass-edge: rgb(255 255 255 / .18);
+        --edge-glass-sheen: rgb(255 255 255 / .07);
+      }
+      body[data-endfield-glass='subtle'] { --edge-glass-alpha: .68; --edge-glass-blur: 8px; }
+      body[data-endfield-glass='strong'] { --edge-glass-alpha: .9; --edge-glass-blur: 22px; }
+      body[data-endfield-glass='subtle'][data-ds-dark-theme] { --edge-glass-alpha: .64; }
+      body[data-endfield-glass='strong'][data-ds-dark-theme] { --edge-glass-alpha: .88; }
+      body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+        background-color: rgb(var(--edge-glass-fill) / var(--edge-glass-alpha)) !important;
+        background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
+          radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 10%, transparent), transparent 75%) !important;
+        -webkit-backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
+        backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
+        --dsw-elevation-stroke-color: var(--edge-glass-edge);
+      }
+      body[data-endfield-glass] [data-slot='sidebar'] > div {
+        background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
+          radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 8%, transparent), transparent 75%);
+        box-shadow: inset -1px 0 0 var(--edge-glass-edge);
+      }
+      @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+          background-color: rgb(var(--edge-glass-fill) / .96) !important;
+        }
+      }
+      @media (prefers-reduced-transparency: reduce) {
+        body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+          background-color: rgb(var(--edge-glass-fill)) !important;
+          -webkit-backdrop-filter: none; backdrop-filter: none;
+        }
+      }
       ::selection {
         color: #000;
         background: var(--edge-signal, var(--edge-accent));
@@ -3337,9 +3393,10 @@ function apply(ctx) {
       [class*='table' i] tbody tr:hover *,
       [class*='tableScroll' i] tbody tr:hover,
       [class*='tableScroll' i] tbody tr:hover * {
-        color: #000 !important;
-        background: var(--edge-accent) !important;
+        color: var(--dsw-alias-label-primary) !important;
+        background: color-mix(in srgb, var(--edge-accent) 15%, var(--dsw-alias-bg-base)) !important;
       }
+      /* Text selection keeps the full accent, visibly distinct from row hover. */
       /* ---------- New session button (sidebar) ---------- */
       [class$='_newSession'] {
         color: #000 !important;
@@ -4248,6 +4305,7 @@ function apply(ctx) {
       }
     `)
       syncRadiusMode()
+      syncGlass()
       syncPaletteClass()
     }
     const unmount = () => {
@@ -4265,6 +4323,7 @@ function apply(ctx) {
            isWulingPalette() report a palette the page is no longer using. The
            stored preference is untouched, so re-enabling restores it. */
         document.body.classList.remove(PALETTE_CLASS)
+        document.body.removeAttribute?.('data-endfield-glass')
       }
       // The plate is styled by the theme stylesheet just torn down — an orphaned
       // plate would sit there as an unstyled black-less div, so drop it too.
@@ -4316,6 +4375,7 @@ function apply(ctx) {
       if (enabledNext) {
         // These sync helpers read the store on each call, so no snapshot passing.
         syncRadiusMode()
+      syncGlass()
         syncPaletteClass()
         syncWatermarkVisibility()
         syncContour()
@@ -4381,6 +4441,8 @@ function apply(ctx) {
       contourAnimHintOn: '等高线缓慢流动变形（可选 24 / 60 / 120 FPS，关闭后为静态图案）',
       contourAnimHintOff: '静态等高线，不做任何逐帧计算',
       contourAnimHintReduced: '系统已开启「减少动态效果」，当前保持静态',
+      glassRow: '磨砂玻璃', glassHint: '仅输入框和停靠面板使用局部模糊；侧栏保持静态质感',
+      glassOff: '关闭', glassSubtle: '轻度', glassStandard: '标准', glassStrong: '浓厚',
       contourFpsRow: '动态帧率',
       contourFpsHint: '选择等高线动画的刷新档位',
       contourFpsUnit: 'FPS',
@@ -4461,6 +4523,8 @@ function apply(ctx) {
       contourAnimHintOn: 'The field drifts at 24, 60 or 120 FPS (static pattern when off)',
       contourAnimHintOff: 'Static contours, with no per-frame work at all',
       contourAnimHintReduced: 'Your system asks for reduced motion, so it stays static',
+      glassRow: 'Frosted glass', glassHint: 'Local blur on the composer and docked panel; static sidebar texture',
+      glassOff: 'Off', glassSubtle: 'Subtle', glassStandard: 'Standard', glassStrong: 'Strong',
       contourFpsRow: 'Animation frame rate',
       contourFpsHint: 'Choose the contour animation refresh rate',
       contourFpsUnit: 'FPS',
@@ -4566,6 +4630,7 @@ function apply(ctx) {
           const [thunderOn, setThunderOn] = R.useState(isThunderOn())
           const [thunderAnim, setThunderAnim] = R.useState(isThunderAnimOn())
           const [palette, setPalette] = R.useState(readPalette())
+          const [glass, setGlass] = R.useState(readGlass())
           const [mode, setMode] = R.useState(prefsGet(RADIUS_KEY) || 'square')
           const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 0', borderBottom: '1px solid var(--dsw-alias-border-l1)' }
           const labelStyle = { color: 'var(--dsw-alias-label-primary)', fontSize: '13px', fontWeight: 500, lineHeight: '1.5' }
@@ -4599,6 +4664,12 @@ function apply(ctx) {
               opacity: disabled ? 0.45 : 1,
               whiteSpace: 'nowrap',
             }
+          }
+          const setGlassValue = (value) => {
+            if (!GLASS_OPTIONS.includes(value)) return
+            prefsSet(GLASS_KEY, value)
+            setGlass(value)
+            syncGlass()
           }
           const toggleTheme = () => {
             const next = !enabled
@@ -4795,6 +4866,17 @@ function apply(ctx) {
                     style: btnStyleFor(true),
                   }, t(palette === 'wuling' ? 'paletteToValley' : 'paletteToWuling'))
                 )
+              ]),
+              row('glass', false, [
+                R.createElement('span', { style: labelStyle }, t('glassRow'),
+                  R.createElement('span', { style: hintStyle }, t('glassHint'))),
+                R.createElement('select', {
+                  'aria-label': t('glassRow'), value: glass,
+                  onChange: (event) => setGlassValue(event.target.value),
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
+                }, GLASS_OPTIONS.map((value) => R.createElement('option', { key: value, value },
+                  t({ off: 'glassOff', subtle: 'glassSubtle', standard: 'glassStandard', strong: 'glassStrong' }[value]))))
               ]),
               row('radius', true, [
                 R.createElement('span', { style: labelStyle }, t('radiusRow') + t('sep') + t(mode === 'round' ? 'radiusRound' : 'radiusSquare')),

@@ -31,13 +31,14 @@
 const BROWSER_SETTINGS_SCOPE_SNIPPET = `
 var __endfieldFieldDefaults = {
   enabled:'1', palette:'valley', radius:'square', contour:'0', contourAnim:'1',
-  contourFps:'24', contourSpeed:'2', contourScrollPause:'1', watermark:'1',
+  contourTrail:'0', contourFps:'24', contourSpeed:'2', contourScrollPause:'1', watermark:'1',
   watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0'
 };
 var __endfieldKeyToField = {
   'dsh-theme-endfield-enabled':'enabled', 'dsh-theme-endfield-palette':'palette',
   'dsh-theme-endfield-radius':'radius', 'dsh-theme-endfield-contour':'contour',
   'dsh-theme-endfield-contour-anim':'contourAnim',
+  'dsh-theme-endfield-contour-trail':'contourTrail',
   'dsh-theme-endfield-contour-fps':'contourFps',
   'dsh-theme-endfield-contour-speed':'contourSpeed',
   'dsh-theme-endfield-contour-scroll-pause':'contourScrollPause',

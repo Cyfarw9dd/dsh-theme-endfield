@@ -102,6 +102,7 @@ function apply(ctx) {
       contourFps: '24',
       contourSpeed: '2',
       contourScrollPause: '1',
+      contourTrail: '0',
       watermark: '1',
       watermarkPersist: '0',
       loader: '0',
@@ -146,6 +147,7 @@ function apply(ctx) {
       'dsh-theme-endfield-contour-fps': 'contourFps',
       'dsh-theme-endfield-contour-speed': 'contourSpeed',
       'dsh-theme-endfield-contour-scroll-pause': 'contourScrollPause',
+      'dsh-theme-endfield-contour-trail': 'contourTrail',
       'dsh-theme-endfield-watermark': 'watermark',
       'dsh-theme-endfield-watermark-persist': 'watermarkPersist',
       'dsh-theme-endfield-loader': 'loader',
@@ -943,6 +945,7 @@ function apply(ctx) {
     const CONTOUR_FPS_KEY = 'dsh-theme-endfield-contour-fps'
     const CONTOUR_SPEED_KEY = 'dsh-theme-endfield-contour-speed'
     const CONTOUR_SCROLL_PAUSE_KEY = 'dsh-theme-endfield-contour-scroll-pause'
+    const CONTOUR_TRAIL_KEY = 'dsh-theme-endfield-contour-trail'
     const CONTOUR_FPS_OPTIONS = [24, 60, 120]
     const CONTOUR_SPEED_OPTIONS = [1, 2, 4]
     const CONTOUR_PHASE_STEP = 1 / 150
@@ -960,6 +963,62 @@ function apply(ctx) {
       return CONTOUR_SPEED_OPTIONS.includes(speed) ? speed : 2
     }
     const isContourScrollPauseOn = () => prefsGet(CONTOUR_SCROLL_PAUSE_KEY) !== '0'
+    const isContourTrailOn = () => prefsGet(CONTOUR_TRAIL_KEY) === '1'
+
+    /* Optional pointer deformation, adapted from the Endfield Glass plugin.
+       Only the latest mouse position is consumed by each existing contour frame:
+       no second rAF, no pointer-handler layout reads, no persistent coordinates.
+       Head and tail quotas are fixed before age decay, so expiring an old point
+       cannot brighten surviving points. The history is bounded at 24 samples. */
+    const createContourTrail = () => {
+      const points = []
+      const prune = (now) => {
+        while (points.length && now - points[0].t > 2700) points.shift()
+      }
+      return {
+        clear() { points.length = 0 },
+        view(now) { prune(now); return points },
+        push(x, y, time, now) {
+          if (![x, y, now].every(Number.isFinite) || now < 0) return false
+          prune(now)
+          // Some browsers use epoch timestamps. Use the reception clock for
+          // those, but keep a trustworthy event's real age after a busy frame.
+          const t = Number.isFinite(time) && time >= 0 && time < 1e12 && time <= now + 4
+            ? Math.min(time, now) : now
+          if (now - t > 2700) return false
+          const last = points[points.length - 1]
+          if (last && (t - last.t < 8 || (x - last.x) ** 2 + (y - last.y) ** 2 < 4)) return false
+          if (points.length === 24) points.shift()
+          points.push({ x, y, t })
+          return true
+        },
+      }
+    }
+    const contourOverlayTrail = (field, points, now) => {
+      const { cols, rows, step, F } = field
+      // A smooth Gaussian is added AFTER the ambient smoothing/EMA. It never
+      // enters previous, so it responds immediately and leaves no temporal ghost.
+      // 28 CSS px approximates the original 26 px kernel after spatial smoothing.
+      const sigma = 28, radius = sigma * Math.sqrt(2 * 6.76)
+      const inv = 1 / (2 * sigma * sigma)
+      for (let rank = 0; rank < points.length; rank++) {
+        const point = points[points.length - 1 - rank]
+        const age = now - point.t
+        if (age < 0 || age > 2700) continue
+        const quota = rank === 0 ? .9 : .6 * .2 * Math.pow(.8, rank - 1)
+        const amplitude = quota * Math.exp(-age / 900)
+        const i0 = Math.max(0, Math.floor((point.x - radius) / step))
+        const i1 = Math.min(cols - 1, Math.ceil((point.x + radius) / step))
+        const j0 = Math.max(0, Math.floor((point.y - radius) / step))
+        const j1 = Math.min(rows - 1, Math.ceil((point.y + radius) / step))
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const q = ((i * step - point.x) ** 2 + (j * step - point.y) ** 2) * inv
+          if (q >= 6.76) continue
+          const t = Math.max(0, (q - 4.8) / (6.76 - 4.8))
+          F[j * cols + i] += amplitude * Math.exp(-q) * (1 - t * t * (3 - 2 * t))
+        }
+      }
+    }
 
     /* Deterministic PRNG (mulberry32), used with a PER-PAGE-LOAD seed.
        Determinism is still required WITHIN one load: contourBuild() is re-run on
@@ -1012,6 +1071,11 @@ function apply(ctx) {
     let contourField = null     // typed-array state, rebuilt only on resize
     let contourLastField = -1   // timestamp of the last field extraction
     let contourPhase = 0
+    const contourTrail = createContourTrail()
+    let contourTrailPointer = null
+    let contourTrailListening = false
+    let contourTrailPainted = false
+    let contourMotionQuery = null
     /* Last applied animation state. Declared HERE, above every function that touches
        it, because contourTeardown() assigns it and is itself reachable from
        unmount() — a `let` declared further down would still be in its temporal dead
@@ -1079,6 +1143,7 @@ function apply(ctx) {
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const contourWantsAnim = () => isContourAnimOn() && !prefersReducedMotion()
       && !contourLoaderActive && !contourScrollPaused
+      && !(typeof document !== 'undefined' && document.hidden)
     let contourLoaderActive = false
     let contourScrollPaused = false
     let contourScrollTimer = null
@@ -1111,7 +1176,7 @@ function apply(ctx) {
         if (contourResizePending && contourHost !== null) {
           contourResizePending = false
           if (contourSizeTo(contourHost)) {
-            contourExtract(contourPhase)
+            contourExtractFrame(contourPhase)
             contourDrawLines()
           }
         }
@@ -1657,9 +1722,10 @@ function apply(ctx) {
       }
     }
 
-    const contourExtract = (phase) => {
+    const contourExtract = (phase, trailPoints, trailNow) => {
       if (contourField === null) return
       contourEvaluate(phase)
+      if (trailPoints && trailPoints.length) contourOverlayTrail(contourField, trailPoints, trailNow)
       contourPaths = []
       const span = CONTOUR_SPAN
       const stepL = (span * 2) / CONTOUR_LEVELS
@@ -1864,6 +1930,62 @@ function apply(ctx) {
       return frame
     }
 
+    // DOM sampling stays outside the extraction kernel, which remains usable
+    // by headless geometry tests and future renderers with explicit trail input.
+    const contourExtractFrame = (phase) => {
+      if (!contourTrailListening) { contourExtract(phase); return }
+      const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+        ? performance.now() : Date.now()
+      if (contourTrailPointer !== null && contourHost !== null) {
+        const point = contourTrailPointer
+        contourTrailPointer = null
+        const rect = contourHost.getBoundingClientRect()
+        const x = point.x - rect.left, y = point.y - rect.top
+        if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) {
+          contourTrail.push(x, y, point.t, point.receivedAt)
+        }
+      }
+      const points = contourTrail.view(now)
+      contourExtract(phase, points, now)
+      contourTrailPainted = points.length > 0
+    }
+
+    const onContourPointerMove = (event) => {
+      if (event.pointerType !== 'mouse' || event.isPrimary === false || !contourTrailListening) return
+      contourTrailPointer = { x: event.clientX, y: event.clientY, t: event.timeStamp,
+        receivedAt: (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now() : Date.now() }
+    }
+    const onContourPointerLeave = () => { contourTrailPointer = null }
+    const contourResetTrail = (redraw) => {
+      const painted = contourTrailPainted
+      contourTrail.clear()
+      contourTrailPointer = null
+      contourTrailPainted = false
+      if (redraw && painted && contourWrap !== null && contourField !== null) {
+        contourExtractFrame(contourPhase)
+        contourDrawLines()
+      }
+    }
+    const contourSyncTrail = (active) => {
+      if (active === contourTrailListening) return
+      contourTrailListening = active
+      if (contourHost !== null && typeof contourHost.addEventListener === 'function') {
+        if (active) {
+          contourHost.addEventListener('pointermove', onContourPointerMove, { passive: true, capture: true })
+          contourHost.addEventListener('pointerleave', onContourPointerLeave, { passive: true })
+        } else {
+          contourHost.removeEventListener('pointermove', onContourPointerMove, true)
+          contourHost.removeEventListener('pointerleave', onContourPointerLeave)
+        }
+      }
+      if (!active) contourResetTrail(true)
+    }
+    const onContourEnvironmentChange = () => {
+      contourResetTrail(true)
+      contourSwitchSig = ''
+      contourApplySwitches()
+    }
     const contourSizeTo = (host) => {
       const r = host.getBoundingClientRect()
       const w = Math.max(1, Math.round(r.width))
@@ -1881,6 +2003,7 @@ function apply(ctx) {
       const bh = Math.max(1, Math.round(h * dpr))
       if (contourGeom !== null && contourGeom.w === w && contourGeom.h === h
         && (contourLineCv === null || (contourLineCv.width === bw && contourLineCv.height === bh))) return false
+      contourResetTrail(false)
       contourBuild(w, h)
       if (contourLineCv !== null) {
         contourLineCv.width = bw
@@ -1900,6 +2023,7 @@ function apply(ctx) {
       // nothing, not merely skip work inside a still-running rAF.
       if (!contourWantsAnim()) {
         contourRaf = null
+        contourApplySwitches()
         return
       }
       const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
@@ -1913,7 +2037,7 @@ function apply(ctx) {
            teleporting after a scroll, resize or busy main-thread interval. */
         contourLastField = now
         contourPhase += CONTOUR_PHASE_STEP * readContourSpeed() // speed changes drift, not refresh rate
-        contourExtract(contourPhase)
+        contourExtractFrame(contourPhase)
         contourDrawLines()
       }
       contourRaf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(contourFrame) : null
@@ -1929,10 +2053,22 @@ function apply(ctx) {
     const contourStopLoop = () => {
       if (contourRaf !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(contourRaf)
       contourRaf = null
+      contourSyncTrail(false)
     }
 
     const contourTeardown = () => {
+      contourResetTrail(false)
       contourStopLoop()
+      if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+        document.removeEventListener('visibilitychange', onContourEnvironmentChange)
+      }
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('blur', onContourEnvironmentChange)
+      }
+      if (contourMotionQuery !== null && typeof contourMotionQuery.removeEventListener === 'function') {
+        contourMotionQuery.removeEventListener('change', onContourEnvironmentChange)
+      }
+      contourMotionQuery = null
       if (contourRo !== null) {
         contourRo.disconnect()
         contourRo = null
@@ -1964,9 +2100,11 @@ function apply(ctx) {
        token) is a single string compare. */
     const contourApplySwitches = () => {
       const anim = contourWantsAnim()
-      const sig = anim ? 'a' : '-'
+      const trail = anim && contourHost !== null && isContourTrailOn()
+      const sig = (anim ? 'a' : '-') + (trail ? 't' : '-')
       if (sig === contourSwitchSig) return
       contourSwitchSig = sig
+      contourSyncTrail(trail)
       // Animation just switched off: redraw once from the current phase so the
       // static sheet is a complete picture rather than a half-updated frame.
       if (!anim && contourWrap !== null && contourGeom !== null) contourDrawLines()
@@ -2013,8 +2151,18 @@ function apply(ctx) {
           else host.appendChild(wrap)
           contourWrap = wrap
           contourHost = host
+          document.addEventListener('visibilitychange', onContourEnvironmentChange)
+          if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+            window.addEventListener('blur', onContourEnvironmentChange)
+          }
+          if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+            contourMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+            if (typeof contourMotionQuery.addEventListener === 'function') {
+              contourMotionQuery.addEventListener('change', onContourEnvironmentChange)
+            }
+          }
           contourSizeTo(host)
-          contourExtract(contourPhase)
+          contourExtractFrame(contourPhase)
           contourDrawLines()
           // A fresh mount has drawn nothing switch-specific yet, so force the
           // reconciliation below to run rather than trusting a stale signature.
@@ -2027,7 +2175,7 @@ function apply(ctx) {
                 return
               }
               if (contourSizeTo(contourHost)) {
-                contourExtract(contourPhase)
+                contourExtractFrame(contourPhase)
                 contourDrawLines()
               }
             })
@@ -4375,6 +4523,10 @@ function apply(ctx) {
       contourOff: '关闭背景',
       contourHintOn: '当前配色的地形等高线铺满界面底层（置于所有内容之下）',
       contourHintOff: '默认关闭；开启后在界面底层绘制等高线地形纹理',
+      contourTrailRow: '鼠标轨迹',
+      contourTrailOn: '开启轨迹',
+      contourTrailOff: '关闭轨迹',
+      contourTrailHint: '鼠标移动时局部扰动等高线并逐渐恢复；仅动态模式生效，静态或减少动态效果时暂停',
       contourAnimRow: '动态等高线',
       contourAnimOn: '开启动态',
       contourAnimOff: '切为静态',
@@ -4455,6 +4607,10 @@ function apply(ctx) {
       contourOff: 'Turn off',
       contourHintOn: 'Topographic contour lines fill the lowest layer, beneath all content',
       contourHintOff: 'Off by default; draws a contour terrain texture behind the interface',
+      contourTrailRow: 'Mouse trail',
+      contourTrailOn: 'Enable trail',
+      contourTrailOff: 'Disable trail',
+      contourTrailHint: 'Locally deforms contours near the mouse, then fades; pauses in static or reduced-motion mode',
       contourAnimRow: 'Animated contours',
       contourAnimOn: 'Animate',
       contourAnimOff: 'Make static',
@@ -4560,6 +4716,7 @@ function apply(ctx) {
           const [loaderOn, setLoaderOn] = R.useState(isLoaderOn())
           const [contourOn, setContourOn] = R.useState(isContourOn())
           const [contourAnim, setContourAnim] = R.useState(isContourAnimOn())
+          const [contourTrailOn, setContourTrailOn] = R.useState(isContourTrailOn())
           const [contourFps, setContourFps] = R.useState(readContourFps())
           const [contourSpeed, setContourSpeed] = R.useState(readContourSpeed())
           const [contourScrollPause, setContourScrollPause] = R.useState(isContourScrollPauseOn())
@@ -4629,6 +4786,12 @@ function apply(ctx) {
             setPalette(next)
             syncPaletteClass()
             if (contourWrap !== null) contourDrawLines()
+          }
+          const toggleContourTrail = () => {
+            const next = !contourTrailOn
+            prefsSet(CONTOUR_TRAIL_KEY, next ? '1' : '0')
+            setContourTrailOn(next)
+            syncContour()
           }
           const toggleContourAnim = () => {
             const next = !contourAnim
@@ -4833,6 +4996,17 @@ function apply(ctx) {
                   disabled: !contourOn,
                   title: contourOn ? '' : t('contourAnimNeedLayer'),
                 }, t(contourAnim ? 'contourAnimOff' : 'contourAnimOn'))
+              ]),
+              row('contour-trail', false, [
+                R.createElement('span', { style: labelStyle },
+                  t('contourTrailRow') + t('sep') + stateOf(contourTrailOn),
+                  R.createElement('span', { style: hintStyle }, t('contourTrailHint'))
+                ),
+                R.createElement('button', {
+                  type: 'button', onClick: toggleContourTrail,
+                  style: btnStyleFor(contourTrailOn, !contourOn), disabled: !contourOn,
+                  title: contourOn ? '' : t('contourAnimNeedLayer'),
+                }, t(contourTrailOn ? 'contourTrailOff' : 'contourTrailOn'))
               ]),
               row('contour-fps', false, [
                 R.createElement('span', { style: labelStyle },

@@ -23,6 +23,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 - 主题总开关、谷地黄/武陵青配色、直角/圆角模式；
 - 等高线背景、动态开关、`24 / 60 / 120 FPS`；
 - 等高线速度 `1x / 2x / 4x`；
+- 可选鼠标轨迹：鼠标附近的等高线局部变形并逐渐恢复，默认关闭；
 - 背景水印及持续显示；
 - 启动加载动画；
 - 雷霆大字及入场动画。
@@ -37,6 +38,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 | [docs/features.md](docs/features.md) | 功能行为、默认值、存储键与边界情况 |
 | [docs/engineering-notes.md](docs/engineering-notes.md) | 算法、层叠、动画和性能实现说明 |
 | [docs/testing.md](docs/testing.md) | 校验脚本与测试套件说明 |
+| [docs/contour-trail.md](docs/contour-trail.md) | 鼠标轨迹的采样、衰减与验证 |
 
 ## 开发与验证
 

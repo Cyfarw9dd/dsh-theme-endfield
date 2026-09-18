@@ -69,6 +69,7 @@ const FIELD_DEFAULTS = {
   contourAnim: '1',         // 动态等高线 —— default on
   contourFps: '24',         // 动态帧率 —— 24 FPS
   contourSpeed: '2',        // 动态速度 —— 标准 2x
+  contourTrail: '0',        // optional mouse deformation, default off
   contourScrollPause: '1',  // 滚动暂停 —— default on
   watermark: '1',           // 背景水印 —— default on
   watermarkPersist: '0',    // 水印保持显示 —— default off

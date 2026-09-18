@@ -26,6 +26,7 @@
 | | 主题圆角 | 直角 | `radius` |
 | 02 背景 | 等高线背景 | 关 | `contour` |
 | | 动态等高线 | 开 | `contourAnim` |
+| | 鼠标轨迹 | 关 | `contourTrail` |
 | | 动态帧率 | 24 FPS | `contourFps` |
 | | 动态速度 | 标准 | `contourSpeed` |
 | | 背景水印 | 开 | `watermark` |

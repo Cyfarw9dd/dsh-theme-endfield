@@ -31,7 +31,7 @@
 const BROWSER_SETTINGS_SCOPE_SNIPPET = `
 var __endfieldFieldDefaults = {
   enabled:'1', palette:'valley', radius:'square', contour:'0', contourAnim:'1',
-  contourFps:'24', contourSpeed:'2', contourScrollPause:'1', watermark:'1',
+  contourFps:'24', contourSpeed:'2', contourRenderer:'canvas', contourScrollPause:'1', watermark:'1',
   watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0'
 };
 var __endfieldKeyToField = {
@@ -40,6 +40,7 @@ var __endfieldKeyToField = {
   'dsh-theme-endfield-contour-anim':'contourAnim',
   'dsh-theme-endfield-contour-fps':'contourFps',
   'dsh-theme-endfield-contour-speed':'contourSpeed',
+  'dsh-theme-endfield-contour-renderer':'contourRenderer',
   'dsh-theme-endfield-contour-scroll-pause':'contourScrollPause',
   'dsh-theme-endfield-watermark':'watermark',
   'dsh-theme-endfield-watermark-persist':'watermarkPersist',

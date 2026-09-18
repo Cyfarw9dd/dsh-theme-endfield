@@ -101,6 +101,7 @@ function apply(ctx) {
       contourAnim: '1',
       contourFps: '24',
       contourSpeed: '2',
+      contourRenderer: 'canvas',
       contourScrollPause: '1',
       watermark: '1',
       watermarkPersist: '0',
@@ -145,6 +146,7 @@ function apply(ctx) {
       'dsh-theme-endfield-contour-anim': 'contourAnim',
       'dsh-theme-endfield-contour-fps': 'contourFps',
       'dsh-theme-endfield-contour-speed': 'contourSpeed',
+      'dsh-theme-endfield-contour-renderer': 'contourRenderer',
       'dsh-theme-endfield-contour-scroll-pause': 'contourScrollPause',
       'dsh-theme-endfield-watermark': 'watermark',
       'dsh-theme-endfield-watermark-persist': 'watermarkPersist',
@@ -1044,7 +1046,7 @@ function apply(ctx) {
        removal, not thinning. */
     const CONTOUR_MIN_LEN = 40      // px of on-canvas stroke; below this it is a speck
     const CONTOUR_MIN_RING_BOX = 21 // px; one median line spacing
-    /* keep() judges the RAW stitched polyline, but contourDrawLines() redraws it as
+    /* keep() judges the RAW stitched polyline, but contourRefresh(false) redraws it as
        a smoothed curve (Chaikin corner-cutting followed by a clamped cubic spline),
        which does not follow the raw polyline exactly: corner-cutting drops the
        sharp extremes, so measured against the real output a path can land slightly
@@ -1079,6 +1081,7 @@ function apply(ctx) {
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const contourWantsAnim = () => isContourAnimOn() && !prefersReducedMotion()
       && !contourLoaderActive && !contourScrollPaused
+      && (typeof document === 'undefined' || !document.hidden)
     let contourLoaderActive = false
     let contourScrollPaused = false
     let contourScrollTimer = null
@@ -1088,6 +1091,7 @@ function apply(ctx) {
       if (!isEnabled() || contourWrap === null || !isContourScrollPauseOn() || !isContourAnimOn()) return
       if (!contourScrollPaused) {
         contourScrollPaused = true
+        if (contourWorker) contourWorker.pending = null
         contourSwitchSig = ''
         contourStopLoop()
       }
@@ -1111,8 +1115,7 @@ function apply(ctx) {
         if (contourResizePending && contourHost !== null) {
           contourResizePending = false
           if (contourSizeTo(contourHost)) {
-            contourExtract(contourPhase)
-            contourDrawLines()
+            contourRefresh(true)
           }
         }
         contourApplySwitches()
@@ -1842,6 +1845,89 @@ function apply(ctx) {
       ctx.stroke()
     }
 
+    /* Optional worker backend. One in-flight frame and one latest pending frame. */
+    const CONTOUR_RENDERER_KEY = 'dsh-theme-endfield-contour-renderer'
+    const readContourRenderer = () => prefsGet(CONTOUR_RENDERER_KEY) === 'worker-webgl' ? 'worker-webgl' : 'canvas'
+    let contourWorker = null, contourWorkerFailed = false, contourBackendChoice = 'canvas'
+    const contourDisposeWorker = () => {
+      const state = contourWorker
+      contourWorker = null
+      if (!state) return
+      clearTimeout(state.timer)
+      state.worker.terminate()
+      URL.revokeObjectURL(state.url)
+      state.pending = null
+    }
+    const contourWorkerFail = (state, reason) => {
+      if (contourWorker !== state) return
+      contourWorkerFailed = true
+      contourTeardown()
+      syncContour()
+      if (contourWrap) contourWrap.setAttribute('data-endfield-renderer-reason', reason)
+    }
+    const contourFlushWorker = () => {
+      const state = contourWorker
+      if (!state || !state.ready || state.busy || !state.pending || document.hidden) return
+      const frame = state.pending
+      state.pending = null; state.busy = true
+      state.seq += 1
+      state.timer = setTimeout(() => contourWorkerFail(state, 'worker render timeout'), 2000)
+      try { state.worker.postMessage({...frame, type:'frame', seq:state.seq}) }
+      catch (error) { contourWorkerFail(state, 'worker frame submission failed') }
+    }
+    const contourStartWorker = (canvas) => {
+      if (readContourRenderer() !== 'worker-webgl' || contourWorkerFailed) return
+      if (typeof Worker !== 'function' || typeof OffscreenCanvas !== 'function'
+        || typeof canvas.transferControlToOffscreen !== 'function') {
+        contourWorkerFailed = true
+        return
+      }
+      let url = null, worker = null
+      try {
+        url = URL.createObjectURL(new Blob([CONTOUR_WORKER_SOURCE], {type:'text/javascript'}))
+        worker = new Worker(url)
+        const state = {worker,url,ready:false,busy:false,pending:null,seq:0,timer:null}
+        contourWorker = state
+        state.timer = setTimeout(() => contourWorkerFail(state, 'worker initialization timeout'), 8000)
+        worker.onmessage = ({data}) => {
+          if (contourWorker !== state) return
+          if (data.type === 'ready') {
+            try {
+              const offscreen = canvas.transferControlToOffscreen()
+              worker.postMessage({type:'init',canvas:offscreen,seed:contourSeed},[offscreen])
+            } catch(error) { contourWorkerFail(state,'canvas transfer failed') }
+          } else if (data.type === 'initialized') {
+            clearTimeout(state.timer); state.ready = true
+            if (contourWrap) contourWrap.setAttribute('data-endfield-renderer',data.rasterizer)
+            contourFlushWorker()
+          } else if (data.type === 'painted') {
+            if (!state.busy || data.seq !== state.seq) return
+            clearTimeout(state.timer);state.busy = false
+            contourFlushWorker()
+          } else if (data.type === 'error') contourWorkerFail(state,data.message || 'worker failed')
+        }
+        worker.addEventListener('error', () => contourWorkerFail(state,'worker error'))
+        worker.addEventListener('messageerror', () => contourWorkerFail(state,'worker message error'))
+      } catch(error) {
+        if(worker)worker.terminate()
+        if(url)URL.revokeObjectURL(url)
+        contourWorker = null;contourWorkerFailed = true
+      }
+    }
+    const contourRefresh = (geometry) => {
+      if (contourWorker !== null) {
+        if (!contourGeom || document.hidden) return
+        const ratio = Math.min(2, Math.max(.1, window.devicePixelRatio || 1))
+        const pending = contourWorker.pending
+        contourWorker.pending = {w:contourGeom.w,h:contourGeom.h,dpr:ratio,phase:contourPhase,
+          color:contourStroke(),geometry:geometry || !!(pending && pending.geometry)}
+        contourFlushWorker()
+      } else {
+        if(geometry)contourExtract(contourPhase)
+        contourDrawLines()
+      }
+    }
+
     /* The app frame: the only ancestor that is both position:relative and free of a
        stacking context, so an inset:0 child paints above the frame's own background
        and below every positioned descendant.
@@ -1877,6 +1963,12 @@ function apply(ctx) {
         && typeof window.devicePixelRatio === 'number'
         && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1
       const dpr = Math.min(2, ratio)
+      if (contourWorker !== null) {
+        const changed = contourGeom === null || contourGeom.w !== w || contourGeom.h !== h || contourGeom.dpr !== dpr
+        contourGeom = {w,h,dpr}
+        if (contourLineCv) { contourLineCv.style.width = w + 'px'; contourLineCv.style.height = h + 'px' }
+        return changed
+      }
       const bw = Math.max(1, Math.round(w * dpr))
       const bh = Math.max(1, Math.round(h * dpr))
       if (contourGeom !== null && contourGeom.w === w && contourGeom.h === h
@@ -1913,8 +2005,7 @@ function apply(ctx) {
            teleporting after a scroll, resize or busy main-thread interval. */
         contourLastField = now
         contourPhase += CONTOUR_PHASE_STEP * readContourSpeed() // speed changes drift, not refresh rate
-        contourExtract(contourPhase)
-        contourDrawLines()
+        contourRefresh(true)
       }
       contourRaf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(contourFrame) : null
     }
@@ -1933,6 +2024,7 @@ function apply(ctx) {
 
     const contourTeardown = () => {
       contourStopLoop()
+      contourDisposeWorker()
       if (contourRo !== null) {
         contourRo.disconnect()
         contourRo = null
@@ -1969,13 +2061,19 @@ function apply(ctx) {
       contourSwitchSig = sig
       // Animation just switched off: redraw once from the current phase so the
       // static sheet is a complete picture rather than a half-updated frame.
-      if (!anim && contourWrap !== null && contourGeom !== null) contourDrawLines()
+      if (!anim && contourWrap !== null && contourGeom !== null) contourRefresh(false)
       if (anim) contourStartLoop()
       else contourStopLoop()
     }
 
     /** Build/refresh/remove the layer to match the switches and the current page. */
     const syncContour = () => {
+      const choice = readContourRenderer()
+      if (choice !== contourBackendChoice) {
+        contourTeardown()
+        contourWorkerFailed = false
+        contourBackendChoice = choice
+      }
       const on = isEnabled() && isContourOn()
       if (!on) {
         if (contourWrap !== null) contourTeardown()
@@ -2013,9 +2111,11 @@ function apply(ctx) {
           else host.appendChild(wrap)
           contourWrap = wrap
           contourHost = host
+          contourStartWorker(line)
+          wrap.setAttribute('data-endfield-renderer', contourWorker ? 'starting' : 'main-canvas2d')
+          if (contourWorkerFailed) wrap.setAttribute('data-endfield-renderer-reason', 'worker unavailable; main Canvas2D fallback')
           contourSizeTo(host)
-          contourExtract(contourPhase)
-          contourDrawLines()
+          contourRefresh(true)
           // A fresh mount has drawn nothing switch-specific yet, so force the
           // reconciliation below to run rather than trusting a stale signature.
           contourSwitchSig = ''
@@ -2027,8 +2127,7 @@ function apply(ctx) {
                 return
               }
               if (contourSizeTo(contourHost)) {
-                contourExtract(contourPhase)
-                contourDrawLines()
+                contourRefresh(true)
               }
             })
             contourRo.observe(host)
@@ -2054,14 +2153,14 @@ function apply(ctx) {
       if (typeof MutationObserver === 'undefined' || typeof document === 'undefined' || document.body === null) return
       contourSchemeObserver = new MutationObserver(() => {
         if (contourWrap === null) return
-        contourDrawLines()
+        contourRefresh(false)
       })
       contourSchemeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'class'] })
     }
     const contourSchemeObserverLate = () => {
       installContourSchemeObserver()
       // Catch up: the scheme may have settled while the observer was absent.
-      if (contourSchemeObserver !== null && contourWrap !== null) contourDrawLines()
+      if (contourSchemeObserver !== null && contourWrap !== null) contourRefresh(false)
     }
     if (typeof document !== 'undefined' && document.body !== null) installContourSchemeObserver()
     else if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
@@ -2069,6 +2168,19 @@ function apply(ctx) {
     }
     // Let the page observer declared above re-attach the layer as the app renders.
     contourSyncHook = syncContour
+    /* BEGIN GENERATED CONTOUR WORKER */
+    const CONTOUR_WORKER_SOURCE = "/* Dedicated contour worker. Kernel is extracted from client.js by the build script.\n * MIT; original terrain Copyright (c) 2026 ymh0000123. */\nconst CONTOUR_STEP = 6, CONTOUR_LEVELS = 20, CONTOUR_SPAN = 1.45\nconst CONTOUR_MIN_LEN = 40, CONTOUR_MIN_RING_BOX = 21\nconst CONTOUR_KEEP_LEN = CONTOUR_MIN_LEN * 1.35, CONTOUR_KEEP_RING = CONTOUR_MIN_RING_BOX * 1.5\nconst CONTOUR_MIN_CROSSINGS = 3\nlet contourSeed = 1, contourField = null, contourGeom = null, contourPaths = []\nlet contourLineCv = null, canvas = null, painter = null, stroke = 'rgba(0,0,0,0)', rasterizer = null\nconst contourStroke = () => stroke\nconst contourRng = (seed) => {\n      let a = seed >>> 0\n      return () => {\n        a = (a + 0x6D2B79F5) >>> 0\n        let t = Math.imul(a ^ (a >>> 15), 1 | a)\n        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t\n        return ((t ^ (t >>> 14)) >>> 0) / 4294967296\n      }\n    }\nconst contourBuild = (w, h) => {\n      /* ACCEPT-OR-REROLL. A random layout is not automatically a GOOD layout, and\n         this is the concrete lesson from making the seed per-load: the old fixed\n         seed had silently guaranteed a well-spread field, and once real randomness\n         arrived, some layouts left regions with no contour lines at all. Measured on\n         the 8x5 coverage grid (\"near-empty\" = under 0.6% ink):\n             independent uniform placement   5 failures in 12 seeds (up to 3 cells)\n             stratified placement alone      6 failures in 24 seeds (down to 0.00%)\n         Stratification fixes clumping but cannot fix the real mechanism: lines\n         appear only where the field CROSSES one of the 21 fixed levels, so a region\n         that is locally flat between two levels is blank no matter how the bumps\n         sit. Forcing a gradient steep enough to guarantee a crossing per cell would\n         take ~9.5 parallel lines across the width, which reads as stripes, not\n         terrain -- so distorting the field is the wrong lever.\n         Instead the candidate layout is CHECKED against the same invariant the test\n         asserts, and rejected if it fails. Each attempt is cheap (one field\n         evaluation on a coarse grid, no extraction, no drawing) and bounded, so the\n         worst case is a handful of evaluations at mount/resize time only.\n\n         The two halves are BOTH load-bearing, which was verified rather than\n         assumed -- with the validator in place but placement reverted to uniform,\n         4 of 8 loads exhausted the 12-attempt cap and shipped a fallback layout\n         (one run in four still rendered a blank cell). Stratification is what makes\n         an acceptable layout the common case: mean 2.5 candidates, max 6, never at\n         the cap. Validation is what makes it a guarantee. */\n      const attempts = 32\n      let best = null\n      for (let attempt = 0; attempt < attempts; attempt++) {\n        const cand = contourBuildCandidate(w, h, attempt)\n        const score = contourCoverageScore(cand, w, h)\n        if (best === null || score.worst > best.score.worst) best = { cand, score }\n        // Comfortably above the 0.6%-ink failure line, in field terms: every cell\n        // must contain a spread of values wider than one level gap, so at least one\n        // level is guaranteed to cross it.\n        if (score.ok) break\n      }\n      contourField = best.cand.field\n      contourGeom = { w, h, cols: best.cand.cols, rows: best.cand.rows, step: CONTOUR_STEP }\n    }\nconst contourBuildCandidate = (w, h, salt) => {\n      const step = CONTOUR_STEP\n      const cols = Math.ceil(w / step) + 1\n      const rows = Math.ceil(h / step) + 1\n      const K = 22                       // bump count: tuned to the reference's island density\n      const rnd = contourRng((contourSeed + salt * 0x9E3779B1) >>> 0)\n      const m = Math.min(w, h)\n      const bx = new Float32Array(K), by = new Float32Array(K)\n      const ba = new Float32Array(K), bs = new Float32Array(K)\n      const dx = new Float32Array(K), dy = new Float32Array(K)\n      /* STRATIFIED placement, not independent uniform draws.\n\n         Uniform sampling clumps: measured over 12 random seeds it left up to 3\n         near-empty cells. Jittered grid instead -- the viewport is cut into a\n         near-square lattice of at least K cells and each bump is placed at a random\n         point inside its own cell. That keeps placement random while making a large\n         empty patch geometrically impossible. Cells are ordered by a Fisher-Yates\n         shuffle so the bump INDEX carries no positional bias: index drives\n         amplitude, radius and drift below, and walking cells in raster order would\n         correlate \"left side of the screen\" with \"first sizes drawn\".\n         The lattice spans the same -0.1..1.1 over-scan as before, so islands are\n         still cut by the viewport edges rather than all sitting fully inside. */\n      const gx = Math.max(1, Math.round(Math.sqrt(K * (w / Math.max(1, h)))))\n      const gy = Math.max(1, Math.ceil(K / gx))\n      const cells = []\n      for (let j = 0; j < gy; j++) for (let i = 0; i < gx; i++) cells.push(i + j * gx)\n      for (let i = cells.length - 1; i > 0; i--) {\n        const j = Math.floor(rnd() * (i + 1))\n        const t = cells[i]; cells[i] = cells[j]; cells[j] = t\n      }\n      const spanX = 1.2 * w, spanY = 1.2 * h\n      for (let k = 0; k < K; k++) {\n        const cell = cells[k % cells.length]\n        const ci = cell % gx\n        const cj = Math.floor(cell / gx)\n        // Random point inside this cell, in the over-scanned -0.1..1.1 space.\n        bx[k] = -0.1 * w + ((ci + rnd()) / gx) * spanX\n        by[k] = -0.1 * h + ((cj + rnd()) / gy) * spanY\n        // Mixed sign gives peaks AND basins; equal signs would read as one blob.\n        ba[k] = (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.9)\n        bs[k] = (0.05 + rnd() * 0.09) * m\n        dx[k] = rnd() * 2 - 1\n        dy[k] = rnd() * 2 - 1\n      }\n      /* Base undulation: three long, low-amplitude sine ridges spanning the whole\n         viewport. Reason this exists, from reviewing the first render: a sum of\n         gaussians decays to EXACTLY zero between islands, so the field there is\n         perfectly flat, no level ever crosses it, and the result had large blank\n         patches that exposed the construction. Real terrain has no such voids. The\n         ridges are far too gentle to create islands of their own — they just tilt\n         the whole sheet enough that contour lines keep running through the gaps,\n         which is what turns isolated bullseyes into one continuous landscape. */\n      const W2 = new Float32Array(9)\n      for (let i = 0; i < 3; i++) {\n        W2[i * 3] = (0.35 + rnd() * 0.5) * (Math.PI * 2) / Math.max(1, w)  // x freq\n        W2[i * 3 + 1] = (0.35 + rnd() * 0.5) * (Math.PI * 2) / Math.max(1, h) // y freq\n        W2[i * 3 + 2] = rnd() * Math.PI * 2                                 // phase\n      }\n      const hCount = (cols - 1) * rows\n      const eCount = hCount + cols * (rows - 1)\n      const field = {\n        cols, rows, step, K, bx, by, ba, bs, dx, dy, hCount, W2,\n        F: new Float32Array(cols * rows),\n        previous: new Float32Array(cols * rows),\n        hasPrevious: false,\n        smooth: new Float32Array(cols * rows),\n        ex: new Float32Array(eCount),\n        ey: new Float32Array(eCount),\n        es: new Int32Array(eCount).fill(-1),\n        n1: new Int32Array(eCount).fill(-1),\n        n2: new Int32Array(eCount).fill(-1),\n        seen: new Int32Array(eCount).fill(-1),\n        touched: new Int32Array(eCount),\n        seq: 0,\n      }\n      return { field, cols, rows }\n    }\nconst contourCoverageScore = (cand, w, h) => {\n      const f = cand.field\n      // Evaluate at phase 0: the accepted layout must be sound as first painted.\n      const prev = contourField\n      contourField = f\n      contourEvaluate(0)\n      contourField = prev\n      const { cols, rows, F } = f\n      const GX = 8, GY = 5\n      const span = CONTOUR_SPAN\n      const levelStep = (span * 2) / CONTOUR_LEVELS\n      let worst = Infinity\n      let ok = true\n      for (let gy = 0; gy < GY; gy++) {\n        for (let gx = 0; gx < GX; gx++) {\n          const i0 = Math.floor(gx * (cols - 1) / GX), i1 = Math.ceil((gx + 1) * (cols - 1) / GX)\n          const j0 = Math.floor(gy * (rows - 1) / GY), j1 = Math.ceil((gy + 1) * (rows - 1) / GY)\n          let mn = Infinity, mx = -Infinity\n          for (let j = j0; j <= j1 && j < rows; j++) {\n            const row = j * cols\n            for (let i = i0; i <= i1 && i < cols; i++) {\n              const v = F[row + i]\n              if (v < mn) mn = v\n              if (v > mx) mx = v\n            }\n          }\n          // Clamp to the drawn level range: values beyond +/-SPAN produce no lines.\n          const lo = Math.max(mn, -span), hi = Math.min(mx, span)\n          // How many level boundaries fall inside this cell's clamped range.\n          const crossings = hi <= lo ? 0\n            : Math.floor(hi / levelStep) - Math.ceil(lo / levelStep) + 1\n          if (crossings < worst) worst = crossings\n          if (crossings < CONTOUR_MIN_CROSSINGS) ok = false\n        }\n      }\n      return { ok, worst }\n    }\nconst contourEvaluate = (phase) => {\n      const f = contourField\n      if (f === null) return\n      const { cols, rows, step, K, bx, by, ba, bs, dx, dy, F, W2 } = f\n      /* Seed the sheet with the base undulation instead of zero, so the gaps\n         between islands still have a gradient for the levels to cross. Separable\n         evaluation: sin(a+b) is expanded so the y term is computed once per row\n         rather than once per cell, which keeps this pass cheap. */\n      const BASE = 0.62\n      for (let i = 0; i < 3; i++) {\n        const fx = W2[i * 3], fy = W2[i * 3 + 1], ph = W2[i * 3 + 2] + phase * 0.11\n        const amp = BASE / 3\n        for (let j = 0; j < rows; j++) {\n          const yb = fy * (j * step) + ph\n          const sy = Math.sin(yb), cy2 = Math.cos(yb)\n          const row = j * cols\n          for (let c2 = 0; c2 < cols; c2++) {\n            const xb = fx * (c2 * step)\n            // sin(xb + yb) without a per-cell sin() of the sum\n            const v = Math.sin(xb) * cy2 + Math.cos(xb) * sy\n            if (i === 0) F[row + c2] = amp * v\n            else F[row + c2] += amp * v\n          }\n        }\n      }\n      for (let k = 0; k < K; k++) {\n        const s = bs[k]\n        const amp = s * 0.55\n        const cx = bx[k] + Math.sin(phase * dx[k] + k * 1.7) * amp\n        const cy = by[k] + Math.cos(phase * dy[k] + k * 2.3) * amp\n        const a = ba[k]\n        const inv = 1 / (2 * s * s)\n        const rad = 2.6 * s\n        let i0 = Math.floor((cx - rad) / step)\n        let i1 = Math.ceil((cx + rad) / step)\n        let j0 = Math.floor((cy - rad) / step)\n        let j1 = Math.ceil((cy + rad) / step)\n        if (i0 < 0) i0 = 0\n        if (j0 < 0) j0 = 0\n        if (i1 > cols - 1) i1 = cols - 1\n        if (j1 > rows - 1) j1 = rows - 1\n        for (let j = j0; j <= j1; j++) {\n          const ddy = j * step - cy\n          const dy2 = ddy * ddy\n          const row = j * cols\n          for (let i = i0; i <= i1; i++) {\n            const ddx = i * step - cx\n            const q = (ddx * ddx + dy2) * inv\n            if (q < 6.76) {\n              let weight = Math.exp(-q)\n              if (q > 4.8) {\n                const t = (q - 4.8) / (6.76 - 4.8)\n                const fade = 1 - t * t * (3 - 2 * t)\n                weight *= fade\n              }\n              F[row + i] += a * weight\n            }\n          }\n        }\n      }\n      const smooth = f.smooth\n      for (let pass = 0; pass < 5; pass++) {\n        for (let j = 0; j < rows; j++) {\n          const row = j * cols\n          for (let i = 0; i < cols; i++) {\n            const left = F[row + Math.max(0, i - 1)]\n            const center = F[row + i]\n            const right = F[row + Math.min(cols - 1, i + 1)]\n            smooth[row + i] = (left + 2 * center + right) * 0.25\n          }\n        }\n        for (let j = 0; j < rows; j++) {\n          const row = j * cols\n          const up = Math.max(0, j - 1) * cols\n          const down = Math.min(rows - 1, j + 1) * cols\n          for (let i = 0; i < cols; i++) {\n            F[row + i] = (smooth[up + i] + 2 * smooth[row + i] + smooth[down + i]) * 0.25\n          }\n        }\n      }\n      /* Track the field continuously between animation samples. Marching squares\n         can change an entire path at once when a saddle crosses a level; blending\n         the sampled field keeps that topology change from appearing as a twitch. */\n      if (f.hasPrevious && f.previous !== undefined) {\n        for (let i = 0; i < F.length; i++) {\n          f.previous[i] = f.previous[i] * 0.65 + F[i] * 0.35\n          F[i] = f.previous[i]\n        }\n      } else if (f.previous !== undefined) {\n        f.previous.set(F)\n      }\n      f.hasPrevious = true\n    }\nconst contourExtractLevel = (L, out) => {\n      const f = contourField\n      const { cols, rows, step, F, ex, ey, es, n1, n2, seen, touched, hCount } = f\n      const st = ++f.seq\n      let tn = 0\n      const pt = (id, i0, j0, i1, j1) => {\n        if (es[id] === st) return id\n        const a = F[j0 * cols + i0]\n        const b = F[j1 * cols + i1]\n        let t = (L - a) / (b - a)\n        if (!(t >= 0)) t = 0\n        else if (t > 1) t = 1\n        ex[id] = (i0 + (i1 - i0) * t) * step\n        ey[id] = (j0 + (j1 - j0) * t) * step\n        es[id] = st\n        n1[id] = -1\n        n2[id] = -1\n        touched[tn++] = id\n        return id\n      }\n      const link = (a, b) => {\n        if (n1[a] < 0) n1[a] = b\n        else if (n2[a] < 0) n2[a] = b\n        if (n1[b] < 0) n1[b] = a\n        else if (n2[b] < 0) n2[b] = a\n      }\n      for (let j = 0; j < rows - 1; j++) {\n        const row = j * cols\n        for (let i = 0; i < cols - 1; i++) {\n          const p0 = row + i\n          const p1 = p0 + 1\n          const p3 = p0 + cols\n          const p2 = p3 + 1\n          const v0 = F[p0], v1 = F[p1], v2 = F[p2], v3 = F[p3]\n          let mn = v0, mx = v0\n          if (v1 < mn) mn = v1; else if (v1 > mx) mx = v1\n          if (v2 < mn) mn = v2; else if (v2 > mx) mx = v2\n          if (v3 < mn) mn = v3; else if (v3 > mx) mx = v3\n          // Whole cell on one side of the level: nothing crosses it.\n          if (L <= mn || L > mx) continue\n          const idx = (v0 > L ? 1 : 0) | (v1 > L ? 2 : 0) | (v2 > L ? 4 : 0) | (v3 > L ? 8 : 0)\n          const T = () => pt(j * (cols - 1) + i, i, j, i + 1, j)\n          const B = () => pt((j + 1) * (cols - 1) + i, i, j + 1, i + 1, j + 1)\n          const Le = () => pt(hCount + j * cols + i, i, j, i, j + 1)\n          const Ri = () => pt(hCount + j * cols + i + 1, i + 1, j, i + 1, j + 1)\n          switch (idx) {\n            case 1: case 14: link(T(), Le()); break\n            case 2: case 13: link(T(), Ri()); break\n            case 3: case 12: link(Le(), Ri()); break\n            case 4: case 11: link(Ri(), B()); break\n            case 6: case 9: link(T(), B()); break\n            case 7: case 8: link(Le(), B()); break\n            // Ambiguous saddles use the bilinear asymptotic decider. The sign of\n            // a*c-b*d selects whether the diagonal high/low regions are connected;\n            // using the cell average alone is wrong when opposite corners differ in\n            // magnitude and produces the long V-shaped joins seen in the render.\n            case 5: {\n              const a = v0 - L, b = v1 - L, c = v2 - L, d = v3 - L\n              const saddle = a * c - b * d\n              if (saddle > 0) { link(T(), Ri()); link(Le(), B()) }\n              else { link(T(), Le()); link(Ri(), B()) }\n              break\n            }\n            case 10: {\n              const a = v0 - L, b = v1 - L, c = v2 - L, d = v3 - L\n              const saddle = a * c - b * d\n              if (saddle < 0) { link(T(), Le()); link(Ri(), B()) }\n              else { link(T(), Ri()); link(Le(), B()) }\n              break\n            }\n          }\n        }\n      }\n      const walk = (start) => {\n        const path = []\n        let cur = start\n        let prev = -1\n        for (;;) {\n          path.push(ex[cur], ey[cur])\n          seen[cur] = st\n          const a = n1[cur]\n          const b = n2[cur]\n          let nx = -1\n          if (a >= 0 && a !== prev && seen[a] !== st) nx = a\n          else if (b >= 0 && b !== prev && seen[b] !== st) nx = b\n          if (nx < 0) {\n            // Closed loop: step back onto the first point so the ring has no gap.\n            if ((a === start || b === start) && path.length > 4) path.push(ex[start], ey[start])\n            break\n          }\n          prev = cur\n          cur = nx\n        }\n        return path\n      }\n      /* Reject debris before it reaches the draw list. Judged on the path's\n         ON-CANVAS geometry, so an off-grid sliver with no visible pixels is\n         dropped even when its raw length looks respectable. See the note on\n         CONTOUR_MIN_LEN / CONTOUR_MIN_RING_BOX for the measurements behind both\n         thresholds. */\n      const W = contourGeom !== null ? contourGeom.w : 0\n      const H = contourGeom !== null ? contourGeom.h : 0\n      const keep = (p) => {\n        if (p.length < 8) return false\n        // Visible length, plus the bounding box of the part actually on screen.\n        let vis = 0\n        let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity\n        let seenIn = false\n        for (let k = 0; k < p.length; k += 2) {\n          const x = p[k], y = p[k + 1]\n          const inside = x >= 0 && x <= W && y >= 0 && y <= H\n          if (inside) {\n            seenIn = true\n            if (x < minx) minx = x\n            if (x > maxx) maxx = x\n            if (y < miny) miny = y\n            if (y > maxy) maxy = y\n          }\n          if (k >= 2) {\n            const px2 = p[k - 2], py2 = p[k - 1]\n            const prevIn = px2 >= 0 && px2 <= W && py2 >= 0 && py2 <= H\n            if (inside && prevIn) {\n              const dx = x - px2, dy = y - py2\n              vis += Math.sqrt(dx * dx + dy * dy)\n            }\n          }\n        }\n        if (!seenIn) return false            // entirely off-canvas: pure debris\n        if (vis < CONTOUR_KEEP_LEN) return false\n        /* A tiny CLOSED ring is an apex bullseye and reads as a dot. Open chains of\n           the same extent are left alone: they are the visible corner of a stroke\n           that continues off-canvas, and clipping one would punch a hole in a line\n           the user can see running to the edge. */\n        const gapx = p[0] - p[p.length - 2]\n        const gapy = p[1] - p[p.length - 1]\n        const closed = (gapx * gapx + gapy * gapy) < 4\n        if (closed && (maxx - minx) < CONTOUR_KEEP_RING\n          && (maxy - miny) < CONTOUR_KEEP_RING) return false\n        return true\n      }\n      /* TANGENCY NEEDLES. Where a level runs nearly TANGENT to the field, the true\n         isoline has a smooth, very high curvature tip. Marching squares interpolates\n         linearly on a 10px grid, so it cannot represent that tip: it emits a hairpin\n         that goes out and comes straight back, with a BASE (the gap between the\n         apex's two neighbours) far narrower than the 1px stroke. Measured on the real\n         output, worst case: apex 6.26px out from a base of 0.831px.\n\n         At that width the outbound and return strokes paint the SAME pixels, so the\n         pair does not read as a narrow valley — only the protruding whisker shows,\n         which is precisely the \"irregular sharp angle\" in issue #3. Smoothing cannot\n         help: the midpoint spline faithfully reproduces a feature that is genuinely\n         in the geometry, so it has to be removed here, at the source.\n\n         The whole hairpin is collapsed (see the note on the merge below). Both tests\n         are required and were measured over 24 frames (152.6k vertices, 1.18Mpx of\n         ink):\n           base < 2px   the stroke cannot resolve it (a 1px line is ~1px wide)\n           turn > 90    it doubles back rather than merely turning a corner\n         That is 0.7 vertices per frame and 0.0037% of total ink -- artifact removal,\n         not thinning. Real narrow features are untouched: turns over 90 degrees have\n         a median base of 4.03px, well clear of the cutoff, and the whole 8-12px base\n         band (29562 vertices) has a p99 turn of only 21.7 degrees. */\n      const deneedle = (p) => {\n        const n = p.length / 2\n        if (n < 4) return p\n        /* Scan first and return the ORIGINAL array when there is nothing to do, so\n           the overwhelmingly common path allocates nothing at 24fps. */\n        let found = false\n        for (let k = 1; k < n - 1; k++) {\n          const bx = p[(k + 1) * 2] - p[(k - 1) * 2]\n          const by = p[(k + 1) * 2 + 1] - p[(k - 1) * 2 + 1]\n          if (bx * bx + by * by >= 4) continue          // base >= 2px: keep\n          const ax = p[k * 2] - p[(k - 1) * 2]\n          const ay = p[k * 2 + 1] - p[(k - 1) * 2 + 1]\n          const cx = p[(k + 1) * 2] - p[k * 2]\n          const cy = p[(k + 1) * 2 + 1] - p[k * 2 + 1]\n          // turn > 90 degrees <=> the two segment vectors point against each other.\n          if (ax * cx + ay * cy < 0) { found = true; break }\n        }\n        if (!found) return p\n        const gx = p[0] - p[(n - 1) * 2]\n        const gy = p[1] - p[(n - 1) * 2 + 1]\n        const closed = (gx * gx + gy * gy) < 4\n        /* COLLAPSE THE WHOLE NEEDLE, not just its tip. Dropping the apex alone leaves\n           the base itself as a real segment, and that was measured to be worse than\n           the disease: a 0.831px stub inherits the reversal as TWO ~78-degree turns\n           (10.20 -> 0.83 -> 10.25px). The apex AND its far neighbour are therefore\n           both consumed, and the surviving previous vertex is pulled onto the base\n           midpoint -- a sub-pixel move (half of at most 2px) that no 1px stroke can\n           show, leaving one smooth vertex where the hairpin was.\n           Each test uses the SURVIVING previous vertex, so a run of needles collapses\n           progressively instead of each test being fooled by a neighbour that is\n           itself about to be consumed. */\n        const q = [p[0], p[1]]\n        let k = 1\n        while (k < n - 1) {\n          const px = q[q.length - 2], py = q[q.length - 1]\n          const bx = p[(k + 1) * 2] - px, by = p[(k + 1) * 2 + 1] - py\n          if (bx * bx + by * by < 4) {\n            const ax = p[k * 2] - px, ay = p[k * 2 + 1] - py\n            const cx = p[(k + 1) * 2] - p[k * 2], cy = p[(k + 1) * 2 + 1] - p[k * 2 + 1]\n            if (ax * cx + ay * cy < 0) {\n              if (k + 1 < n - 1) {\n                q[q.length - 2] = (px + p[(k + 1) * 2]) / 2\n                q[q.length - 1] = (py + p[(k + 1) * 2 + 1]) / 2\n                k += 2\n                continue\n              }\n              // The far neighbour is the final vertex, which must survive to keep an\n              // endpoint (or a ring's closure) intact: consume only the apex.\n              k += 1\n              continue\n            }\n          }\n          q.push(p[k * 2], p[k * 2 + 1])\n          k += 1\n        }\n        q.push(p[(n - 1) * 2], p[(n - 1) * 2 + 1])\n        /* A ring is closed by REPEATING its start vertex, and the merge above may have\n           nudged that start. Re-anchor the repeat so the ring stays exactly closed and\n           both keep() and the cyclic draw path still classify it as one. */\n        if (closed) {\n          q[q.length - 2] = q[0]\n          q[q.length - 1] = q[1]\n        }\n        return q\n      }\n      // Open chains first (they have a free end), then whatever remains is a loop.\n      // Doing it in this order stops a ring being entered mid-way and split in two.\n      for (let k = 0; k < tn; k++) {\n        const id = touched[k]\n        if (seen[id] !== st && n2[id] < 0) {\n          const p = deneedle(walk(id))\n          if (keep(p)) out.push(p)\n        }\n      }\n      for (let k = 0; k < tn; k++) {\n        const id = touched[k]\n        if (seen[id] !== st) {\n          const p = deneedle(walk(id))\n          if (keep(p)) out.push(p)\n        }\n      }\n    }\nconst contourExtract = (phase) => {\n      if (contourField === null) return\n      contourEvaluate(phase)\n      contourPaths = []\n      const span = CONTOUR_SPAN\n      const stepL = (span * 2) / CONTOUR_LEVELS\n      for (let n = 0; n <= CONTOUR_LEVELS; n++) {\n        contourExtractLevel(-span + n * stepL, contourPaths)\n      }\n    }\nconst contourDrawLines = () => {\n      if (contourLineCv === null || contourGeom === null) return\n      const ctx = contourLineCv.getContext('2d')\n      if (!ctx) return\n      const { w, h } = contourGeom\n      /* Geometry stays in CSS px; scale the context to the backing store that\n         contourSizeTo sized at (capped) devicePixelRatio, so strokes rasterise\n         at device resolution instead of being upsampled into blur on HiDPI\n         screens. Derived from the canvas itself, and skipped entirely at a 1x\n         store or when the context has no setTransform (the spliced-in test\n         harnesses), so a 1x render is byte-identical to before. */\n      const scale = (w > 0 && typeof contourLineCv.width === 'number' && contourLineCv.width > 0 && contourLineCv.width !== w)\n        ? contourLineCv.width / w : 1\n      if (scale !== 1 && typeof ctx.setTransform === 'function') ctx.setTransform(scale, 0, 0, scale, 0, 0)\n      ctx.clearRect(0, 0, w, h)\n      ctx.strokeStyle = contourStroke()\n      ctx.lineWidth = 1\n      ctx.lineJoin = 'round'\n      /* Marching squares emits one vertex per grid-cell edge. Three Chaikin passes\n         cut local corners before the clamped cubic B-spline rounds broad bends.\n         This reduces angularity without changing the field or adding another\n         extraction pass. Open endpoints remain fixed; closed rings wrap cyclically. */\n      const smoothPath = (source) => {\n        const count = source.length / 2\n        if (count < 3) return source\n        let points = []\n        for (let k = 0; k < source.length; k += 2) points.push([source[k], source[k + 1]])\n        const closed = (points[0][0] - points[points.length - 1][0]) ** 2\n          + (points[0][1] - points[points.length - 1][1]) ** 2 < 4\n        if (closed) points.pop()\n        for (let pass = 0; pass < 3; pass++) {\n          const next = []\n          const limit = closed ? points.length : points.length - 1\n          if (!closed) next.push(points[0])\n          for (let k = 0; k < limit; k++) {\n            const a = points[k]\n            const b = points[(k + 1) % points.length]\n            next.push([\n              a[0] * 0.75 + b[0] * 0.25,\n              a[1] * 0.75 + b[1] * 0.25,\n            ], [\n              a[0] * 0.25 + b[0] * 0.75,\n              a[1] * 0.25 + b[1] * 0.75,\n            ])\n          }\n          if (!closed) next.push(points[points.length - 1])\n          points = next\n        }\n        const result = []\n        for (const point of points) result.push(point[0], point[1])\n        if (closed) result.push(result[0], result[1])\n        return result\n      }\n      /* Chaikin removes local grid noise. A constrained Catmull-Rom cubic then\n         gives each join one shared tangent. The handle cap prevents overshoot at\n         narrow saddles while the larger tangent factor removes long rounded-polygon\n         bends that remain visible with midpoint quadratics. */\n      const drawSmoothPath = (source) => {\n        const count = source.length / 2\n        if (count < 3) {\n          ctx.moveTo(source[0], source[1])\n          for (let k = 2; k < source.length; k += 2) ctx.lineTo(source[k], source[k + 1])\n          return\n        }\n        const closed = (source[0] - source[source.length - 2]) ** 2\n          + (source[1] - source[source.length - 1]) ** 2 < 4\n        const limit = closed ? count - 1 : count\n        const point = (index) => {\n          const k = closed\n            ? (index + limit) % limit\n            : Math.max(0, Math.min(limit - 1, index))\n          return [source[k * 2], source[k * 2 + 1]]\n        }\n        const tangent = (index) => {\n          const current = point(index)\n          const previous = point(index - 1)\n          const next = point(index + 1)\n          let tx, ty, cap\n          const incomingX = current[0] - previous[0]\n          const incomingY = current[1] - previous[1]\n          const outgoingX = next[0] - current[0]\n          const outgoingY = next[1] - current[1]\n          if (!closed && index === 0) {\n            tx = outgoingX * 0.4\n            ty = outgoingY * 0.4\n            cap = Math.hypot(outgoingX, outgoingY) * 0.55\n          } else if (!closed && index === limit - 1) {\n            tx = incomingX * 0.4\n            ty = incomingY * 0.4\n            cap = Math.hypot(incomingX, incomingY) * 0.55\n          } else {\n            tx = (next[0] - previous[0]) * 0.32\n            ty = (next[1] - previous[1]) * 0.32\n            cap = Math.min(\n              Math.hypot(incomingX, incomingY),\n              Math.hypot(outgoingX, outgoingY),\n            ) * 0.62\n          }\n          const length = Math.hypot(tx, ty)\n          if (length > cap && length > 0) {\n            tx *= cap / length\n            ty *= cap / length\n          }\n          return [tx, ty]\n        }\n        ctx.moveTo(source[0], source[1])\n        const segments = closed ? limit : limit - 1\n        for (let k = 0; k < segments; k++) {\n          const start = point(k)\n          const end = point(k + 1)\n          const startTangent = tangent(k)\n          const endTangent = tangent(k + 1)\n          ctx.bezierCurveTo(\n            start[0] + startTangent[0], start[1] + startTangent[1],\n            end[0] - endTangent[0], end[1] - endTangent[1],\n            end[0], end[1],\n          )\n        }\n        /* Mark a ring as a RING. The cyclic tangents above already make the seam C1\n           and the final span already lands exactly on the start point, so this adds\n           no geometry — but without it the canvas treats the path as open and butts\n           two caps together at the seam instead of joining them, which is defect (2)\n           of issue #3. contour-cusps.test.js guards this. */\n        if (closed) ctx.closePath()\n      }\n      ctx.beginPath()\n      for (let i = 0; i < contourPaths.length; i++) drawSmoothPath(smoothPath(contourPaths[i]))\n      ctx.stroke()\n    }\n/* MIT; contributed by higekibaka. GPU stroke painter from Endfield Glass. */\nconst CURVE_TOLERANCE_PX = 0.04;\nconst STRIDE = 6;\nclass StrokeSegments {\n  data = new Float32Array(4096 * STRIDE);\n  used = 0;\n  tolerance = CURVE_TOLERANCE_PX;\n  x = 0;\n  y = 0;\n  startX = 0;\n  startY = 0;\n  first = 0;\n  reset() {\n    this.used = 0;\n    this.first = 0;\n  }\n  moveTo(x, y) {\n    this.x = this.startX = x;\n    this.y = this.startY = y;\n    this.first = this.used;\n  }\n  lineTo(x, y) {\n    if (x === this.x && y === this.y) return;\n    if (this.used + STRIDE > this.data.length) {\n      const next = new Float32Array(this.data.length * 2);\n      next.set(this.data);\n      this.data = next;\n    }\n    const i = this.used;\n    this.data[i] = this.x;\n    this.data[i + 1] = this.y;\n    this.data[i + 2] = x;\n    this.data[i + 3] = y;\n    this.data[i + 4] = i === this.first ? 1 : 0;\n    this.data[i + 5] = 1;\n    if (i > this.first) this.data[i - 1] = 0;\n    this.used += STRIDE;\n    this.x = x;\n    this.y = y;\n  }\n  closePath() {\n    this.lineTo(this.startX, this.startY);\n    if (this.used > this.first) {\n      this.data[this.first + 4] = 0;\n      this.data[this.used - 1] = 0;\n    }\n  }\n  bezierCurveTo(ax, ay, bx, by, x, y) {\n    this.cubic(this.x, this.y, ax, ay, bx, by, x, y, 0);\n  }\n  cubic(x0, y0, x1, y1, x2, y2, x3, y3, depth) {\n    const dx = x3 - x0, dy = y3 - y0, length2 = dx * dx + dy * dy;\n    const tolerance2 = this.tolerance * this.tolerance;\n    const t1 = length2 > 0 ? Math.max(0, Math.min(1, ((x1 - x0) * dx + (y1 - y0) * dy) / length2)) : 0;\n    const t2 = length2 > 0 ? Math.max(0, Math.min(1, ((x2 - x0) * dx + (y2 - y0) * dy) / length2)) : 0;\n    const e1x = x1 - x0 - t1 * dx, e1y = y1 - y0 - t1 * dy;\n    const e2x = x2 - x0 - t2 * dx, e2y = y2 - y0 - t2 * dy;\n    if (e1x * e1x + e1y * e1y <= tolerance2 && e2x * e2x + e2y * e2y <= tolerance2 || depth >= 16) {\n      this.lineTo(x3, y3);\n      return;\n    }\n    const a = (x0 + x1) / 2, b = (y0 + y1) / 2, c = (x1 + x2) / 2, d = (y1 + y2) / 2;\n    const e = (x2 + x3) / 2, f = (y2 + y3) / 2, g = (a + c) / 2, h = (b + d) / 2;\n    const i = (c + e) / 2, j = (d + f) / 2, k = (g + i) / 2, l = (h + j) / 2;\n    this.cubic(x0, y0, a, b, g, h, k, l, depth + 1);\n    this.cubic(k, l, i, j, e, f, x3, y3, depth + 1);\n  }\n}\nfunction parseStrokeColor(value) {\n  const m = value.match(/^rgba?\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*,\\s*([\\d.]+)(?:\\s*,\\s*([\\d.]+))?\\s*\\)$/);\n  if (!m) return null;\n  const values = [Number(m[1]) / 255, Number(m[2]) / 255, Number(m[3]) / 255, m[4] === void 0 ? 1 : Number(m[4])];\n  return values.every((v) => Number.isFinite(v) && v >= 0 && v <= 1) ? values : null;\n}\nconst VERTEX = `#version 300 es\nprecision highp float;\nlayout(location=0) in vec4 segment;\nlayout(location=1) in vec2 caps;\nuniform vec2 viewportSize;\nuniform vec2 scale;\nuniform float width;\nout vec2 local;\nflat out float segmentLength;\nflat out float radius;\nflat out vec2 endCaps;\nvoid main() {\n  vec2 a = segment.xy * scale, b = segment.zw * scale;\n  vec2 delta = b-a;\n  segmentLength = max(length(delta), 0.000001);\n  vec2 tangent = delta / segmentLength;\n  vec2 normal = vec2(-tangent.y, tangent.x);\n  radius = 0.5 * width * scale.x * scale.y * length(segment.zw-segment.xy) / segmentLength;\n  float margin = radius + 1.0;\n  // Two triangles per segment, generated without a second vertex buffer.\n  vec2 corners[6] = vec2[6](vec2(0,-1),vec2(1,-1),vec2(0,1),vec2(0,1),vec2(1,-1),vec2(1,1));\n  vec2 corner = corners[gl_VertexID];\n  local = vec2(mix(-margin, segmentLength+margin, corner.x), corner.y * margin);\n  vec2 pixel = a + tangent * local.x + normal * local.y;\n  gl_Position = vec4(pixel.x/viewportSize.x*2.0-1.0, 1.0-pixel.y/viewportSize.y*2.0, 0, 1);\n  endCaps = caps;\n}`;\nconst FRAGMENT = `#version 300 es\nprecision highp float;\nin vec2 local;\nflat in float segmentLength;\nflat in float radius;\nflat in vec2 endCaps;\nuniform vec4 color;\nout vec4 outputColor;\nvoid main() {\n  vec2 nearest = vec2(clamp(local.x, 0.0, segmentLength), 0);\n  float distance = length(local-nearest)-radius;\n  if (endCaps.x > 0.5) distance = max(distance, -local.x);\n  if (endCaps.y > 0.5) distance = max(distance, local.x-segmentLength);\n  float coverage = clamp(0.5-distance, 0.0, 1.0);\n  float alpha = color.a * coverage;\n  outputColor = vec4(color.rgb * alpha, alpha);\n}`;\nfunction createWebGLContourContext(canvas, onContextLost) {\n  const gl = canvas.getContext(\"webgl2\", {\n    alpha: true,\n    premultipliedAlpha: true,\n    antialias: false,\n    depth: false,\n    stencil: false,\n    preserveDrawingBuffer: false\n  });\n  if (!gl) return null;\n  let program = null;\n  let buffer = null;\n  let vao = null;\n  const shaders = [];\n  const events = canvas;\n  const lost = () => onContextLost?.();\n  const releaseContext = gl.getExtension(\"WEBGL_lose_context\");\n  const release = () => {\n    events.removeEventListener?.(\"webglcontextlost\", lost);\n    if (buffer) gl.deleteBuffer(buffer);\n    if (vao) gl.deleteVertexArray(vao);\n    if (program) gl.deleteProgram(program);\n    for (const shader of shaders) gl.deleteShader(shader);\n    buffer = null;\n    vao = null;\n    program = null;\n    shaders.length = 0;\n    releaseContext?.loseContext();\n  };\n  try {\n    const compile = (type, source) => {\n      const shader = gl.createShader(type);\n      if (!shader) throw new Error(\"WebGL shader allocation failed\");\n      shaders.push(shader);\n      gl.shaderSource(shader, source);\n      gl.compileShader(shader);\n      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(\"Contour shader: \" + gl.getShaderInfoLog(shader));\n      return shader;\n    };\n    const vs = compile(gl.VERTEX_SHADER, VERTEX), fs = compile(gl.FRAGMENT_SHADER, FRAGMENT);\n    program = gl.createProgram();\n    buffer = gl.createBuffer();\n    vao = gl.createVertexArray();\n    if (!program || !buffer || !vao) throw new Error(\"WebGL allocation failed\");\n    gl.attachShader(program, vs);\n    gl.attachShader(program, fs);\n    gl.linkProgram(program);\n    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(\"Contour shader link: \" + gl.getProgramInfoLog(program));\n    gl.useProgram(program);\n    gl.bindVertexArray(vao);\n    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);\n    gl.enableVertexAttribArray(0);\n    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, STRIDE * 4, 0);\n    gl.vertexAttribDivisor(0, 1);\n    gl.enableVertexAttribArray(1);\n    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, STRIDE * 4, 16);\n    gl.vertexAttribDivisor(1, 1);\n    gl.disable(gl.DEPTH_TEST);\n    gl.disable(gl.CULL_FACE);\n    gl.disable(gl.DITHER);\n    gl.enable(gl.BLEND);\n    gl.blendEquation(gl.MAX);\n    gl.blendFunc(gl.ONE, gl.ONE);\n    const viewport = gl.getUniformLocation(program, \"viewportSize\");\n    const scaling = gl.getUniformLocation(program, \"scale\");\n    const color = gl.getUniformLocation(program, \"color\");\n    const width = gl.getUniformLocation(program, \"width\");\n    const segments = new StrokeSegments();\n    let sx = 1, sy = 1, capacity = 0, disposed = false;\n    const context = {\n      strokeStyle: \"rgba(16,17,16,0.16)\",\n      lineWidth: 1,\n      lineJoin: \"round\",\n      setTransform(a, b, c, d, e, f) {\n        if (b !== 0 || c !== 0 || e !== 0 || f !== 0 || a <= 0 || d <= 0) throw new Error(\"Unsupported contour transform\");\n        sx = a;\n        sy = d;\n        segments.tolerance = CURVE_TOLERANCE_PX / Math.max(sx, sy);\n      },\n      clearRect() {\n        if (disposed || gl.isContextLost()) throw new Error(\"Contour WebGL context lost\");\n        gl.viewport(0, 0, canvas.width, canvas.height);\n        gl.clearColor(0, 0, 0, 0);\n        gl.clear(gl.COLOR_BUFFER_BIT);\n      },\n      beginPath: () => segments.reset(),\n      moveTo: (x, y) => segments.moveTo(x, y),\n      lineTo: (x, y) => segments.lineTo(x, y),\n      bezierCurveTo: (a, b, c, d, e, f) => segments.bezierCurveTo(a, b, c, d, e, f),\n      closePath: () => segments.closePath(),\n      stroke() {\n        const rgba = parseStrokeColor(context.strokeStyle);\n        if (!rgba) throw new Error(\"Unsupported contour stroke color\");\n        if (segments.used === 0) {\n          gl.flush();\n          return;\n        }\n        gl.uniform2f(viewport, canvas.width, canvas.height);\n        gl.uniform2f(scaling, sx, sy);\n        gl.uniform4fv(color, rgba);\n        gl.uniform1f(width, context.lineWidth);\n        if (capacity < segments.data.byteLength) {\n          capacity = segments.data.byteLength;\n          gl.bufferData(gl.ARRAY_BUFFER, capacity, gl.STREAM_DRAW);\n        }\n        gl.bufferSubData(gl.ARRAY_BUFFER, 0, segments.data, 0, segments.used);\n        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, segments.used / STRIDE);\n        gl.flush();\n      },\n      dispose() {\n        if (disposed) return;\n        disposed = true;\n        segments.data = new Float32Array(0);\n        segments.used = 0;\n        release();\n      }\n    };\n    events.addEventListener?.(\"webglcontextlost\", lost);\n    return context;\n  } catch (error) {\n    release();\n    throw error;\n  }\n}\n\nself.onmessage = ({data}) => {\n  try {\n    if (data.type === 'init') {\n      if (canvas !== null) throw new Error('duplicate worker init')\n      canvas = data.canvas; contourSeed = data.seed\n      painter = createWebGLContourContext(canvas, () => self.postMessage({type:'error',message:'WebGL context lost'}))\n      rasterizer = painter ? 'worker-webgl2' : 'worker-canvas2d'\n      if (!painter) painter = canvas.getContext('2d', {willReadFrequently:true})\n      if (!painter) throw new Error('worker canvas unavailable')\n      contourLineCv = {getContext:()=>painter, get width(){return canvas.width},get height(){return canvas.height}}\n      self.postMessage({type:'initialized',rasterizer})\n    } else if (data.type === 'frame') {\n      if (!canvas || !painter) throw new Error('worker not initialized')\n      const {w,h,dpr,phase,geometry,color,seq}=data\n      if (![w,h,dpr,phase,seq].every(Number.isFinite) || w<1 || h<1 || dpr<=0 || dpr>2\n        || Math.round(w*dpr)*Math.round(h*dpr)>8000000 || !/^#[0-9a-f]{8}$/i.test(color)) throw new Error('invalid frame')\n      const resized = !contourGeom || contourGeom.w!==w || contourGeom.h!==h\n      if (resized) contourBuild(w,h)\n      const width=Math.round(w*dpr),height=Math.round(h*dpr)\n      if(canvas.width!==width)canvas.width=width\n      if(canvas.height!==height)canvas.height=height\n      const c=color.slice(1)\n      stroke=`rgba(${parseInt(c.slice(0,2),16)},${parseInt(c.slice(2,4),16)},${parseInt(c.slice(4,6),16)},${parseInt(c.slice(6,8),16)/255})`\n      if(geometry || resized)contourExtract(phase)\n      painter.setTransform(1,0,0,1,0,0)\n      contourDrawLines()\n      self.postMessage({type:'painted',seq,rasterizer})\n    } else if (data.type === 'dispose') {\n      if(painter && painter.dispose)painter.dispose()\n      contourField=null;contourPaths=[];painter=null;canvas=null\n      self.close()\n    }\n  } catch(error) { self.postMessage({type:'error',message:String(error.message || error)}) }\n}\nself.postMessage({type:'ready'})\n"
+    /* END GENERATED CONTOUR WORKER */
+    const onContourVisibility = () => {
+      if (document.hidden && contourWorker) contourWorker.pending = null
+      if (!document.hidden && contourWrap) contourRefresh(true)
+      contourSwitchSig = ''
+      contourApplySwitches()
+    }
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', onContourVisibility)
+      ctx.effect(() => () => document.removeEventListener('visibilitychange', onContourVisibility))
+    }
 
     /* ---------- boot loading screen (settings-toggleable, default OFF) ----------
        Recreates the Endfield launcher boot screen: a full-viewport black plate with
@@ -4381,6 +4493,8 @@ function apply(ctx) {
       contourAnimHintOn: '等高线缓慢流动变形（可选 24 / 60 / 120 FPS，关闭后为静态图案）',
       contourAnimHintOff: '静态等高线，不做任何逐帧计算',
       contourAnimHintReduced: '系统已开启「减少动态效果」，当前保持静态',
+      contourRendererRow: '等高线绘制', contourRendererCanvas: 'Canvas', contourRendererWorker: 'Worker / WebGL',
+      contourRendererHint: '实验性后台绘制；不支持时自动回退，适合对照滚动性能',
       contourFpsRow: '动态帧率',
       contourFpsHint: '选择等高线动画的刷新档位',
       contourFpsUnit: 'FPS',
@@ -4461,6 +4575,8 @@ function apply(ctx) {
       contourAnimHintOn: 'The field drifts at 24, 60 or 120 FPS (static pattern when off)',
       contourAnimHintOff: 'Static contours, with no per-frame work at all',
       contourAnimHintReduced: 'Your system asks for reduced motion, so it stays static',
+      contourRendererRow: 'Contour renderer', contourRendererCanvas: 'Canvas', contourRendererWorker: 'Worker / WebGL',
+      contourRendererHint: 'Experimental background rendering with automatic fallback; compare scrolling on your device',
       contourFpsRow: 'Animation frame rate',
       contourFpsHint: 'Choose the contour animation refresh rate',
       contourFpsUnit: 'FPS',
@@ -4560,6 +4676,7 @@ function apply(ctx) {
           const [loaderOn, setLoaderOn] = R.useState(isLoaderOn())
           const [contourOn, setContourOn] = R.useState(isContourOn())
           const [contourAnim, setContourAnim] = R.useState(isContourAnimOn())
+          const [contourRenderer, setContourRenderer] = R.useState(readContourRenderer())
           const [contourFps, setContourFps] = R.useState(readContourFps())
           const [contourSpeed, setContourSpeed] = R.useState(readContourSpeed())
           const [contourScrollPause, setContourScrollPause] = R.useState(isContourScrollPauseOn())
@@ -4600,6 +4717,12 @@ function apply(ctx) {
               whiteSpace: 'nowrap',
             }
           }
+          const setContourRendererValue = (value) => {
+            if (value !== 'canvas' && value !== 'worker-webgl') return
+            prefsSet(CONTOUR_RENDERER_KEY, value)
+            setContourRenderer(value)
+            syncContour()
+          }
           const toggleTheme = () => {
             const next = !enabled
             prefsSet(ENABLED_KEY, next ? '1' : '0')
@@ -4628,7 +4751,7 @@ function apply(ctx) {
             prefsSet(PALETTE_KEY, next)
             setPalette(next)
             syncPaletteClass()
-            if (contourWrap !== null) contourDrawLines()
+            if (contourWrap !== null) contourRefresh(false)
           }
           const toggleContourAnim = () => {
             const next = !contourAnim
@@ -4833,6 +4956,16 @@ function apply(ctx) {
                   disabled: !contourOn,
                   title: contourOn ? '' : t('contourAnimNeedLayer'),
                 }, t(contourAnim ? 'contourAnimOff' : 'contourAnimOn'))
+              ]),
+              row('contour-renderer', false, [
+                R.createElement('span', { style: labelStyle }, t('contourRendererRow'),
+                  R.createElement('span', { style: hintStyle }, t('contourRendererHint'))),
+                R.createElement('select', { 'aria-label': t('contourRendererRow'), value: contourRenderer,
+                  onChange: (event) => setContourRendererValue(event.target.value),
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' } },
+                  R.createElement('option', { value: 'canvas' }, t('contourRendererCanvas')),
+                  R.createElement('option', { value: 'worker-webgl' }, t('contourRendererWorker')))
               ]),
               row('contour-fps', false, [
                 R.createElement('span', { style: labelStyle },

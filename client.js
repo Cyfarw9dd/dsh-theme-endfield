@@ -219,6 +219,11 @@ function apply(ctx) {
     /* Theme layers install *their* reconcile here once they exist (updated from
        the bottom of apply) so a transport event can live-apply a real change. */
     let reconcileFromPrefs = null
+    /* True once an authoritative (status:'ready') section has been read for THIS
+       page load, plus the one-shot hook the startup surfaces that depend on such a
+       section install below. See prefsMarkSettled. */
+    let prefsSettledOnce = false
+    let onPrefsSettled = null
     // Try the idiomatic injected-property access first (how DSH client plugins like
     // dsh-client-locale consume settingsScope — exports.inject plus `ctx.xxx`), then
     // the lookup form this module has historically used for optional services.
@@ -262,6 +267,23 @@ function apply(ctx) {
     const prefsEmit = () => {
       for (const l of prefsListeners.slice()) { try { l() } catch (e) { /* keep going */ } }
       if (reconcileFromPrefs) try { reconcileFromPrefs() } catch (e) { /* keep going */ }
+    }
+    /* The FIRST authoritative section of a page load is a moment of its own: it is
+       the instant the stored preferences become knowable at all. On a real page
+       load the Host serves that section over the wire, so every read made while
+       apply() runs — including the boot plate's — falls back to the schema
+       defaults. A surface whose whole job happens at startup therefore cannot act
+       on its apply()-time read; it hangs off this transition instead.
+
+       Fires at most once per page load, and only AFTER the section has been
+       resolved (prefsFieldValue assigned) and any legacy migration has run, so a
+       hook reading prefsGet() sees final values rather than a half-applied
+       snapshot. Deliberately not re-fired by later sections: a section that
+       changes later is an ordinary runtime edit, not a page load. */
+    const prefsMarkSettled = () => {
+      if (prefsSettledOnce) return
+      prefsSettledOnce = true
+      if (onPrefsSettled) try { onPrefsSettled() } catch (e) { /* keep going */ }
     }
     /** write one field with the exact stored-string value the UI derives. */
     const dbg = (...a) => { try { if (typeof console !== 'undefined' && console.warn) console.warn('[dsh-theme-endfield:prefs]', ...a) } catch (e) { /* noop */ } }
@@ -548,6 +570,11 @@ function apply(ctx) {
             prefsMigrateLegacy(snap.value)
             prefsReplayDirty()
             prefsEmit()
+            /* Deliberately last: the startup hook must read the section only after
+               it is resolved and migrated (and after prefsEmit has let the layer
+               reconciler mount a theme the settled section switched on), and it
+               must fire once rather than on every snapshot. */
+            if (snap.status === 'ready' && snap.value !== undefined) prefsMarkSettled()
           }
         })
       }
@@ -559,6 +586,12 @@ function apply(ctx) {
       // spelling, and re-run the catch-up for whatever that migration queued.
       prefsMigrateLegacy(initial && initial.value)
       prefsReplayDirty()
+      /* A section that was ALREADY ready when the scope bound is authoritative on
+         the first read too. In practice no hook is installed yet at this point in
+         apply() (the boot-loader block below runs later), so this normally just
+         records the transition — the plate's own apply()-time read is already
+         correct when the section beat apply(), and that path is unchanged. */
+      if (initial && initial.status === 'ready' && initial.value !== undefined) prefsMarkSettled()
     }
     // Kick off the (re)trying binder acquisition.
     rebindPrefs(0)
@@ -567,6 +600,7 @@ function apply(ctx) {
       prefsListeners.length = 0
       prefsScope = null
       prefsFieldValue = null
+      onPrefsSettled = null
       if (prefsBindTimer !== null && typeof clearTimeout === 'function') clearTimeout(prefsBindTimer)
       prefsBindTimer = null
       if (prefsRetryTimer !== null && typeof clearTimeout === 'function') clearTimeout(prefsRetryTimer)
@@ -2511,6 +2545,35 @@ function apply(ctx) {
       }
     }
 
+    /* The first authoritative settings section can land AFTER apply() has run (the
+       Host serves it over the wire), and until it does every prefsGet falls back
+       to the schema default — for the loader that default is '0' ("default off"),
+       so the boot-time call in apply() is a silent no-op and the plate never plays
+       however the user has it stored. That is the whole "the startup animation
+       stopped appearing" symptom, and it is invisible to any test whose fixture
+       scope answers 'ready' from the first synchronous read.
+
+       This closes the window. The store calls it once, on the first real section
+       of the page load — which IS the "once per page load" moment the boot-time
+       call is trying to hit — and the guards below keep every other case out:
+         - a section that changes LATER (another window, a reverting host) never
+           reaches here at all, because the store fires this hook only once;
+         - a plate already played or mid-play is left alone;
+         - a user who has answered this question in-session (the settings toggle)
+           outranks a section that was still in flight when they answered it. What
+           enforces that is prefsGetValue overlaying prefsLocalEdited, so
+           isLoaderOn() already reads the session value; the prefsEdited check
+           below merely pins the same intent at this call site instead of leaning
+           on the overlay's internals. The plain 预览 button needs neither guard:
+           runLoader() sets loaderDone the instant it starts. */
+    onPrefsSettled = () => {
+      if (loaderDone || loaderEl !== null) return
+      if (prefsEdited.has('loader')) return
+      if (!isEnabled()) return
+      if (!isLoaderOn()) return
+      runLoader()
+    }
+
     /* ---------- 雷霆大字 (娱乐模式, default OFF) ----------
        A task-boundary announcement: when a turn starts, 「任务开始」 slams into the
        middle of the screen in heavy white type; when it ends, 「任务完成」 does the
@@ -4452,10 +4515,13 @@ function apply(ctx) {
        paints exactly the live surfaces it can: the master switch mounts/unmounts
        the token + stylesheet layers, then radius/palette/watermark/contour/
        thunder re-derive from the new value. The boot loader is deliberately not
-       replayed here — it is a once-per-page-load plate that only its own toggle
-       and 预览 button may start. Every layer entry point is idempotent (mount()
-       and unmount() guard on `mounted`, syncContour is a no-op until the frame
-       and stylesheet exist), so repeated echoes are cheap and safe. */
+       replayed here: it is a once-per-page-load plate, so a mid-session section
+       change must not slam a startup animation over a running app. The one thing
+       that DOES start it outside apply() is the first authoritative settle
+       (onPrefsSettled) — that is the same page-load moment, not a later edit — plus
+       the plate's own toggle and 预览 button. Every layer entry point is idempotent
+       (mount() and unmount() guard on `mounted`, syncContour is a no-op until the
+       frame and stylesheet exist), so repeated echoes are cheap and safe. */
     reconcileFromPrefs = () => {
       const enabledNext = isEnabled()
       const enabledNow = mounted

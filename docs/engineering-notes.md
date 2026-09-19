@@ -333,6 +333,16 @@ body{font-family:var( --dsw-font-family, -apple-system, … )}
 
 若照此发布，用户会看到左边一条 10px 黄条僵在原地。改为 JS 按墙钟时间逐帧写 `width` / `opacity` 后，实测同一渲染器下取到 17 个不同宽度、10px → 500px，并在真实速度截图中抓到中途帧。
 
+### 启动读取不能只信 `apply()` 那一刻
+
+加载屏是唯一一个**必须在启动瞬间做决定**的表面：它在 `apply()` 里同步读一次 `loader`，读到就播。而设置节的实际到达顺序是异步的——`settingsScope` 的首次快照是 `{ status:'loading', value: undefined }`（`dsh-client-ui-settings` 的 `SettingsScopeSnapshot` 契约明写了这一点），Host 那份 section 走线上回来时 `apply()` 早已跑完。于是那次读落在 schema 默认值 `'0'` 上：用户即使存着 `loader:"1"`，也什么都不播。
+
+其余每个开关都从这场竞态里活了下来，因为它们**各自都有稍后重推的路径**：主开关 / 圆角 / 配色 / 水印随 `reconcileFromPrefs` 重画，等高线由水印的 `MutationObserver` 反复重试，雷霆大字在每次节变化时重订阅。**只有加载屏被显式排除在重放之外**（它是一次页面加载只播一次的片子，不能让运行期改动静悄悄盖上全屏），所以它没有第二次机会——这就是「开关是开的、动画却再也不出现」的全部原因。
+
+修法不是放开重放，而是把「首次权威节」做成一个独立信号：存储层读到一个 `status:'ready'` 的节、并跑完解析与旧拼写迁移之后，回调一次 `onPrefsSettled`；加载屏挂在这个信号上，且仍然只播一次。后续的节变化根本不经过它，「每次页面加载」的语义没有被稀释。
+
+这个 bug 能穿过整套测试，是因为既有用例的假 scope 都**同步答 `ready`**：`apply()` 那一刻读到的已经是真值。`test/loader-late-prefs.test.js` 因此给假 scope 加上 `{ readyDelayMs }`——先答 `loading`、再翻 `ready`，只有这个形状能复现线上。
+
 ---
 
 ## 设置页国际化

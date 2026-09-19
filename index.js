@@ -64,10 +64,12 @@ const NAMESPACE = 'dsh-theme-endfield';
 const FIELD_DEFAULTS = {
   enabled: '1',             // 终末地主题 —— default on
   palette: 'valley',        // 主题配色 —— 谷地黄 (walley default)
+  glass: 'off',             // optional local frost; original material by default
   radius: 'square',         // 主题圆角 —— 直角
   contour: '0',             // 等高线背景 —— default off
   contourAnim: '1',         // 动态等高线 —— default on
   contourFps: '24',         // 动态帧率 —— 24 FPS
+  contourRenderer: 'canvas', // opt-in Worker/WebGL; original backend by default
   contourSpeed: '2',        // 动态速度 —— 标准 2x
   contourTrail: '0',        // optional mouse deformation, default off
   contourScrollPause: '1',  // 滚动暂停 —— default on

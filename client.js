@@ -1249,6 +1249,12 @@ function apply(ctx) {
         previous: new Float32Array(cols * rows),
         hasPrevious: false,
         smooth: new Float32Array(cols * rows),
+        // Exact row-block bounds include both rows and the shared right vertex.
+        // They reject empty regions without changing retained cells or path order.
+        blockCols: Math.ceil((cols - 1) / 16),
+        blockMin: new Float32Array(Math.ceil((cols - 1) / 16) * (rows - 1)),
+        blockMax: new Float32Array(Math.ceil((cols - 1) / 16) * (rows - 1)),
+        boundsReady: false,
         ex: new Float32Array(eCount),
         ey: new Float32Array(eCount),
         es: new Int32Array(eCount).fill(-1),
@@ -1316,6 +1322,7 @@ function apply(ctx) {
        over evaluating every bump at every grid point. */
     const contourEvaluate = (phase) => {
       const f = contourField
+      if (f !== null) f.boundsReady = false
       if (f === null) return
       const { cols, rows, step, K, bx, by, ba, bs, dx, dy, F, W2 } = f
       /* Seed the sheet with the base undulation instead of zero, so the gaps
@@ -1441,6 +1448,13 @@ function apply(ctx) {
       for (let j = 0; j < rows - 1; j++) {
         const row = j * cols
         for (let i = 0; i < cols - 1; i++) {
+          if (f.boundsReady && i % 16 === 0) {
+            const block = j * f.blockCols + Math.floor(i / 16)
+            if (L <= f.blockMin[block] || L > f.blockMax[block]) {
+              i = Math.min(i + 16, cols - 1) - 1
+              continue
+            }
+          }
           const p0 = row + i
           const p1 = p0 + 1
           const p3 = p0 + cols
@@ -1660,6 +1674,28 @@ function apply(ctx) {
     const contourExtract = (phase) => {
       if (contourField === null) return
       contourEvaluate(phase)
+      const f = contourField
+      // One O(cells) range pass is shared by all 21 extraction levels. Scratch
+      // survives across frames; no resolution, smoothing or density is reduced.
+      for (let j = 0; j < f.rows - 1; j++) {
+        const row = j * f.cols
+        for (let block = 0; block < f.blockCols; block++) {
+          const begin = block * 16
+          const end = Math.min(begin + 16, f.cols - 1)
+          let min = Infinity, max = -Infinity
+          for (let i = begin; i <= end; i++) {
+            const a = f.F[row + i], b = f.F[row + f.cols + i]
+            if (a < min) min = a
+            if (a > max) max = a
+            if (b < min) min = b
+            if (b > max) max = b
+          }
+          const k = j * f.blockCols + block
+          f.blockMin[k] = min
+          f.blockMax[k] = max
+        }
+      }
+      f.boundsReady = true
       contourPaths = []
       const span = CONTOUR_SPAN
       const stepL = (span * 2) / CONTOUR_LEVELS

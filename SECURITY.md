@@ -92,3 +92,12 @@ git clone https://github.com/863683348/dsh-plugin-gate
 
 发现真实漏洞请开 issue（或按仓库主页的联系方式私信）。请附上：命中的文件与行号、
 复现步骤、以及该命中属于第 3 节（误报）还是第 4 节（有意保留）之外的新情况。
+
+## Optional local contour worker
+
+The opt-in renderer creates a Blob URL containing source embedded in client.js.
+The source is generated exclusively from this repository's contour functions and
+src/contour-worker.js / src/contour-webgl.js. It does not load a CDN or fetch code.
+Only canvas ownership, size/phase/color instructions and completion messages
+cross the worker boundary; session content and credentials do not.
+`test/fixtures/chrome-cdp.js` launches a separate temporary browser only for tests.

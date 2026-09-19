@@ -46,6 +46,7 @@ const FIELD_DEFAULTS = {
   contourAnim: '1',
   contourFps: '24',
   contourSpeed: '2',
+  contourTrail: '0',        // optional mouse deformation, default off
   contourRenderer: 'canvas',
   contourScrollPause: '1',
   watermark: '1',
@@ -67,6 +68,7 @@ const KEY_TO_FIELD = {
   'dsh-theme-endfield-contour-speed': 'contourSpeed',
   'dsh-theme-endfield-contour-renderer': 'contourRenderer',
   'dsh-theme-endfield-contour-scroll-pause': 'contourScrollPause',
+  'dsh-theme-endfield-contour-trail': 'contourTrail',
   'dsh-theme-endfield-watermark': 'watermark',
   'dsh-theme-endfield-watermark-persist': 'watermarkPersist',
   'dsh-theme-endfield-loader': 'loader',

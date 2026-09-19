@@ -157,12 +157,12 @@ const buttons = nodes.filter((n) => n.type === 'button')
    happened when 大字入场动画 was added (the count stayed at 9 and the assertion
    passed while a tenth row was on screen). The independent total below is what
    makes that impossible now. */
-const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'contour', 'contour-anim', 'contour-renderer', 'contour-fps', 'contour-speed', 'contour-scroll-pause', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim']
+const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'contour', 'contour-anim', 'contour-trail', 'contour-renderer', 'contour-fps', 'contour-speed', 'contour-scroll-pause', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim']
 const rows = nodes.filter((n) => n.type === 'div' && n.props && ROW_KEYS.includes(n.props.key))
 const groups = (tree.children || []).filter((c) => c && c.type === 'div' && c.props && /^group-/.test(c.props.key))
 
-if (rows.length === 15) pass('panel has all 15 setting rows')
-else fail('expected 15 rows, found ' + rows.length)
+if (rows.length === 16) pass('panel has all 16 setting rows')
+else fail('expected 16 rows, found ' + rows.length)
 
 /* Count the rows the way the PAGE defines them — every direct child of a group
    container — so an unlisted new row shows up as a mismatch instead of vanishing. */
@@ -226,6 +226,9 @@ else {
 /* --- the two sub-switches must be DISABLED while the layer itself is off --- */
 const findBtn = (re) => buttons.find((b) => re.test(textOf(b)))
 const animBtn = findBtn(/切为静态|开启动态/)
+const trailBtn = findBtn(/开启轨迹|关闭轨迹/)
+if (trailBtn && textOf(trailBtn) === '开启轨迹' && trailBtn.props.disabled === true) pass('鼠标轨迹默认关闭，背景关闭时禁用')
+else fail('鼠标轨迹 should default off and be disabled while the layer is off')
 if (animBtn && animBtn.props.disabled === true) pass('动态等高线 disabled while layer off')
 else fail('动态等高线 should be disabled while the contour layer is off')
 const fpsRow = rows.find((r) => r.props.key === 'contour-fps')
@@ -301,6 +304,17 @@ const buttons2 = walk(tree2).filter((n) => n.type === 'button')
 const animBtn2 = buttons2.find((b) => /切为静态|开启动态/.test(textOf(b)))
 if (animBtn2 && !animBtn2.props.disabled) pass('动态等高线 enabled once the layer is on')
 else fail('动态等高线 should be enabled once the contour layer is on')
+const trailRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-trail')
+const trailBtn2 = trailRow2 ? walk(trailRow2).find((b) => b.type === 'button') : null
+if (trailBtn2 && !trailBtn2.props.disabled) pass('鼠标轨迹在背景开启后可用')
+else fail('鼠标轨迹 should be enabled with the contour layer')
+if (trailBtn2 && typeof trailBtn2.props.onClick === 'function') {
+  try { trailBtn2.props.onClick() } catch (e) { fail('鼠标轨迹 toggle threw: ' + e.message) }
+  if (prefStore.get('contourTrail') === '1') pass('鼠标轨迹写入持久化 contourTrail 字段')
+  else fail('鼠标轨迹 did not persist contourTrail=1')
+  if (textOf(rendered()).includes('鼠标轨迹：开启')) pass('重新渲染读取持久化轨迹状态')
+  else fail('鼠标轨迹 did not render the persisted preference')
+}
 const fpsRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-fps')
 const fpsButtons2 = fpsRow2 ? walk(fpsRow2).filter((b) => b.type === 'button') : []
 const fps120 = fpsButtons2.find((b) => textOf(b) === '120')

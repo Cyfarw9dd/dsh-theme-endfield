@@ -92,6 +92,27 @@ node test/settings-locale.test.js   # 跟随语言设置（zh/en 词典对齐 + 
 
 ---
 
+## 启动加载屏
+
+```bash
+node test/loader-performance.test.js   # 启动窗口内的开销与几何
+node test/loader-late-prefs.test.js    # 设置节晚于 apply() 到达时，动画还播不播
+```
+
+**`loader-late-prefs.test.js`** 守的是「开关明明写着开，启动动画却再也不出现」。加载屏在 `apply()` 里**同步读一次** `loader` 就决定播不播，而真实页面上设置节是**走线上拉的**：`settingsScope` 快照此刻还是 `{ status:'loading', value: undefined }`（见 `dsh-client-ui-settings` 的 `SettingsScopeSnapshot` 契约），于是这次读落到 schema 默认值 `'0'`——默认关——加载屏永远不播；而 `reconcileFromPrefs` 又**刻意不重放**启动屏（它是「每次页面加载只播一次」的片子），所以它再没有第二次机会。
+
+这正是它比别的开关更脆的地方：其余每个由偏好驱动的表面都会在稍后的 ready 转变里重新推导（`mount` / `syncContour` / `syncThunder` / 圆角 / 配色…），**只有加载屏那次读取无从恢复**。修复由存储层的**首次权威节**（`prefsMarkSettled` → `onPrefsSettled`）回调启动屏，并仍然只播一次。
+
+测试给 `__endfieldSettingsScope(initial, { readyDelayMs })` 传延迟，让假 scope 先答 `loading` 再翻 `ready`，三个场景各起一页真实浏览器（真实 `apply()` + 真实 DOM，轮询整个片子生命周期）：
+
+- **A** 存 `loader:"1"`、节迟到 250ms —— 片子必须真的播出来（**这就是原 bug**）；
+- **B** 存 `"0"` —— 不得播；
+- **C** 首个节是 `"0"`、之后运行期改成 `"1"` —— 不得重放（每次页面加载只播一次的契约）。
+
+> 变异验证 2 类，都必须报错：删掉订阅里的首次节回调（回到原 bug，A 立刻红）、去掉 `prefsSettledOnce` 一次性护栏（运行期改动会重放，C 立刻红）。
+
+---
+
 ## 雷霆大字
 
 ```bash

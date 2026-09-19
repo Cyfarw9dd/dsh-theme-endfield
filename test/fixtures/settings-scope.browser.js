@@ -22,6 +22,11 @@
  * Usage inside a page <script> (after client.js has loaded):
  *
  *   var __prefs = __endfieldSettingsScope({ enabled: '1', contour: '1', ... });
+ *
+ * A second, optional argument models the Host fetch window, which is what a real
+ * page load actually sees (the scope is still 'loading' while apply() runs):
+ *
+ *   var __prefs = __endfieldSettingsScope({ loader: '1' }, { readyDelayMs: 250 });
  *   mod.apply({ get: function (n) {
  *     if (n === 'theme')      return { overrideTokens: function () { return function () {} } };
  *     if (n === 'settingsScope') return __prefs.binder;
@@ -31,7 +36,7 @@
 const BROWSER_SETTINGS_SCOPE_SNIPPET = `
 var __endfieldFieldDefaults = {
   enabled:'1', palette:'valley', radius:'square', glass:'off', contour:'0', contourAnim:'1',
-  contourFps:'24', contourSpeed:'2', contourScrollPause:'1', watermark:'1',
+  contourFps:'24', contourSpeed:'2', contourRenderer:'canvas', contourScrollPause:'1', watermark:'1',
   watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0'
 };
 var __endfieldKeyToField = {
@@ -41,6 +46,7 @@ var __endfieldKeyToField = {
   'dsh-theme-endfield-contour-anim':'contourAnim',
   'dsh-theme-endfield-contour-fps':'contourFps',
   'dsh-theme-endfield-contour-speed':'contourSpeed',
+  'dsh-theme-endfield-contour-renderer':'contourRenderer',
   'dsh-theme-endfield-contour-scroll-pause':'contourScrollPause',
   'dsh-theme-endfield-watermark':'watermark',
   'dsh-theme-endfield-watermark-persist':'watermarkPersist',
@@ -63,7 +69,7 @@ function fieldOf(name){
   }
   return name;
 }
-function __endfieldSettingsScope(initial) {
+function __endfieldSettingsScope(initial, opts) {
   var section = {};
   for (var k in __endfieldFieldDefaults) section[k] = __endfieldFieldDefaults[k];
   if (initial) for (var k2 in initial) {
@@ -73,7 +79,18 @@ function __endfieldSettingsScope(initial) {
   var listeners = [];
   var notify = function () { for (var i=0;i<listeners.length;i++){ try{listeners[i]();}catch(e){} } };
   function __copy(o){ var r={}; for(var k in o) r[k]=o[k]; return r; }
-  var snap = function () { return { status:'ready', value: __copy(section), writable:true, mode:'host' }; };
+  /* opt.readyDelayMs models the REAL Host round-trip: the section is fetched over
+     the wire, so for the first moments of a page load the mirror reports
+     status:'loading' with NO value, and only later flips to 'ready'. Pages that
+     need that startup window pass a delay; every existing page omits opts and so
+     stays ready from the first synchronous read, exactly as before. */
+  var readyDelay = (opts && Number(opts.readyDelayMs)) || 0;
+  var ready = readyDelay <= 0;
+  var snap = function () {
+    if (!ready) return { status:'loading', value: undefined, writable:false, mode:'host' };
+    return { status:'ready', value: __copy(section), writable:true, mode:'host' };
+  };
+  if (!ready) setTimeout(function () { ready = true; notify(); }, readyDelay);
   var scope = {
     getSnapshot: snap,
     subscribe: function (l) { listeners.push(l); return function(){var i=listeners.indexOf(l); if(i>=0)listeners.splice(i,1);}; },

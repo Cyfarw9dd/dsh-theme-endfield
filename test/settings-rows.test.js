@@ -149,7 +149,7 @@ pass('settings panel rendered without throwing')
 const nodes = walk(tree)
 const buttons = nodes.filter((n) => n.type === 'button')
 /* The rows live inside four group containers (主题 / 背景 / 动画 / 娱乐), so "all
-   rows" means every div whose key is one of the ten switch rows, wherever
+   rows" means every div whose key is one of the fifteen switch rows, wherever
    it sits in the tree.
 
    ROW_KEYS is BOTH the expected set and the counter, so a new row that is not
@@ -157,12 +157,12 @@ const buttons = nodes.filter((n) => n.type === 'button')
    happened when 大字入场动画 was added (the count stayed at 9 and the assertion
    passed while a tenth row was on screen). The independent total below is what
    makes that impossible now. */
-const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'contour', 'contour-anim', 'contour-fps', 'contour-speed', 'contour-scroll-pause', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim']
+const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'contour', 'contour-anim', 'contour-renderer', 'contour-fps', 'contour-speed', 'contour-scroll-pause', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim']
 const rows = nodes.filter((n) => n.type === 'div' && n.props && ROW_KEYS.includes(n.props.key))
 const groups = (tree.children || []).filter((c) => c && c.type === 'div' && c.props && /^group-/.test(c.props.key))
 
-if (rows.length === 14) pass('panel has all 14 setting rows')
-else fail('expected 14 rows, found ' + rows.length)
+if (rows.length === 15) pass('panel has all 15 setting rows')
+else fail('expected 15 rows, found ' + rows.length)
 
 /* Count the rows the way the PAGE defines them — every direct child of a group
    container — so an unlisted new row shows up as a mismatch instead of vanishing. */

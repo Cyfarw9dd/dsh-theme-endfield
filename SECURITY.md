@@ -10,16 +10,48 @@
 | --- | --- | --- |
 | `index.js`（宿主半） | 是 | 是 |
 | `client.js`（Web 半） | 是 | 是 |
+| `lib/`（宿主侧通知引擎：`audio.js` / `tone.js` / `slots.js`） | 是 | 是（`index.js` 顶层 `require('./lib/audio.js')`） |
+| `sounds/`（5 个 `.wav` 提示音） | 是 | 是（作为数据由 `lib/audio.js` 读取、拷贝到缓存目录后交给播放器） |
 | `cordis.patch.yml` | 是 | 是（挂载入口） |
 | `README.md` / `docs/` / `LICENSE` | 是 | 否（纯文档） |
 | `check.js` / `selftest.js` / `test/` / `.github/` | **否** | **否** |
 
 发布产物由 `package.json` 的 `files` 字段定义（`index.js, client.js, cordis.patch.yml,
-README.md, docs, LICENSE`，外加 npm 始终包含的 `package.json`）。三个运行时入口对
-`check.js`、`selftest.js`、`test/` **零引用**：它们只能由 `npm run check` /
-`npm run selftest` / `npm test` 显式启动。本文件本身是仓库文档，不进发布产物。
+README.md, docs, lib, sounds, LICENSE`，外加 npm 始终包含的 `package.json`）。四个运行时
+入口（`index.js`、`client.js`、`lib/`、`cordis.patch.yml`）对 `check.js`、`selftest.js`、
+`test/` **零引用**：它们只能由 `npm run check` / `npm run selftest` / `npm test` 显式启动。
+本文件本身是仓库文档，不进发布产物。
+
+上面这张表与 `files` 白名单的一致性由 `.github/scripts/package-check.js` 在 CI 里逐项核对：
+新增一个发布物却不在这里交代它，静态检查就会红。第 2 节的扫描结论曾漏掉 `lib/` 与
+`sounds/`（音频功能加入时只改了 `files`），扫描器若照旧清单取值，扫的会比装的小一圈。
+
+### 1.1 宿主半真正拥有的能力（人工审阅从这里开始）
+
+签名扫描只会报"长得像危险"的字符串，下面三处才是需要判断的**实际权限**：
+
+1. **派生子进程放声**（`lib/audio.js:307-346`）。不直接用 `child_process`，而是取宿主的
+   `subprocess` 服务、以固定 argv 表（`playerCommands`）派生系统播放器；Windows 分支走
+   `powershell -EncodedCommand`，参数经 `''` 转义、无 shell 拼接。宿主没有该服务时只记
+   note 并保持安静。**用户可在设置面板填一个自定义声音目录**（`audioSoundDir`），它会
+   进入 `path.join` 并被扫描（只读 `.wav`）：这是"用户自己填的路径"，不是外部输入。
+2. **启动期的模块解析扫掠**（`index.js:202-268`、`389-396`）。为了在 dev-link 安装下找回
+   宿主自己的 `schemastery`，`resolutionRoots()` 会枚举 cwd 及其祖先、每个 profile 的
+   `node_modules`、`PATH` 前 40 项等，并对固定包名执行 `require.resolve` + `require`。
+   也就是说：**任一被扫掠目录里放一个名为 `schemastery` / `@deepseek-ai/schemastery` 的
+   包，其顶层代码会在宿主进程里执行**。这是有意的降级（找不到 `Config` 等于所有设置刷新
+   即丢），但它是信任边界而不是误报，扫描器不会替你判断。
+3. **一条回环 HTTP 路由**（`index.js:846-944`，`/theme-endfield/audio`）。供设置页做试听
+   与诊断，`POST` 分支会以 `force: true` 绕过限速直接放声。该 handler **自身不做 Origin /
+   会话校验**，依赖宿主 webServer 的鉴权与前缀归属；`readJson` 有 64 KB 截断但没有超时。
 
 ## 2. 实测扫描结果
+
+> **本节的行号与结论是对某一次扫描的记录，不随代码维护。** 它测于 2026-09-11、音频功能
+> 合并之前，因此扫描对象还不含 `lib/` 与 `sounds/`；下表里的 `index.js:106`、
+> `client.js:2089` 之类的定位在今天已经漂移到别处（例如 `homedir` 现在在 `index.js:321`，
+> `DSH_HOME` 在 `index.js:320`）。要看当前结论请按第 5 节的命令对新产物集重跑一次，
+> 并在这里更新 verdict 与日期。
 
 用 [dsh-plugin-gate](https://github.com/863683348/dsh-plugin-gate) 的规则
 （`lib/rules.js` + `lib/scan.js`，main@`b75c3a1`，2026-09-11）在本机复现，

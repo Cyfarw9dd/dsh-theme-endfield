@@ -155,39 +155,44 @@ const CASES = [
 
 let bad = 0
 
-// 0. the guard must PASS on the pristine file
-fs.writeFileSync(tmp, original)
-let base = runCheck()
-if (base.failed) {
-  console.error('FAIL  baseline: guard rejects the real client.js\n' + base.text)
-  bad++
-} else {
-  console.log('ok    baseline: guard passes on the real client.js')
-}
-
-// 1..n: each injected bug must be caught
-for (const c of CASES) {
-  const mutated = c.mutate(original)
-  if (mutated === original) {
-    console.error(`FAIL  ${c.name}: INJECTION DID NOT APPLY (test is vacuous)`)
-    bad++
-    continue
-  }
-  fs.writeFileSync(tmp, mutated)
-  const r = runCheck()
-  if (!r.failed) {
-    console.error(`FAIL  ${c.name}: guard did NOT fail`)
-    bad++
-  } else if (!c.expect.test(r.text)) {
-    console.error(`FAIL  ${c.name}: failed, but not with the expected message`)
-    console.error(r.text.split('\n').filter((l) => l.startsWith('FAIL')).join('\n'))
+// The scratch copy lives in the repo root and is not gitignored, so it must not
+// survive a failed or interrupted run — hence finally, not a tail call.
+try {
+  // 0. the guard must PASS on the pristine file
+  fs.writeFileSync(tmp, original)
+  let base = runCheck()
+  if (base.failed) {
+    console.error('FAIL  baseline: guard rejects the real client.js\n' + base.text)
     bad++
   } else {
-    console.log(`ok    caught: ${c.name}`)
+    console.log('ok    baseline: guard passes on the real client.js')
   }
+
+  // 1..n: each injected bug must be caught
+  for (const c of CASES) {
+    const mutated = c.mutate(original)
+    if (mutated === original) {
+      console.error(`FAIL  ${c.name}: INJECTION DID NOT APPLY (test is vacuous)`)
+      bad++
+      continue
+    }
+    fs.writeFileSync(tmp, mutated)
+    const r = runCheck()
+    if (!r.failed) {
+      console.error(`FAIL  ${c.name}: guard did NOT fail`)
+      bad++
+    } else if (!c.expect.test(r.text)) {
+      console.error(`FAIL  ${c.name}: failed, but not with the expected message`)
+      console.error(r.text.split('\n').filter((l) => l.startsWith('FAIL')).join('\n'))
+      bad++
+    } else {
+      console.log(`ok    caught: ${c.name}`)
+    }
+  }
+} finally {
+  try { fs.unlinkSync(tmp) } catch (e) { /* never created */ }
 }
 
-fs.unlinkSync(tmp)
 console.log('')
 if (bad) {
   console.error(`${bad} self-test(s) failed`)

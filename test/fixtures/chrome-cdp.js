@@ -2,6 +2,11 @@
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path')
 const { spawn } = require('node:child_process')
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+// A test process that dies between launch and close (timeout kill, crash) would
+// otherwise leave a headless Chrome holding an isolated profile. One module-level
+// hook reaps every live child at exit; close() is still the polite path.
+const liveChildren = new Set()
+process.on('exit', () => { for (const c of liveChildren) { try { c.kill() } catch {} } })
 async function launch() {
   const chrome = [process.env.CHROME_PATH,
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -12,13 +17,14 @@ async function launch() {
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'endfield-cdp-'))
   const child=spawn(chrome,['--headless=new','--no-sandbox','--no-first-run','--no-default-browser-check',
     '--remote-debugging-port=0','--user-data-dir='+profile,'about:blank'],{stdio:'ignore'})
+  liveChildren.add(child)
   let startupError=null
   child.on('error',e=>{startupError=e})
   let ws,seq=0
   const pending=new Map(),errors=[]
   async function close(){
     if(ws?.readyState===WebSocket.OPEN) { try { await send('Browser.close') } catch {} }
-    ws?.close();child.kill()
+    ws?.close();child.kill();liveChildren.delete(child)
     for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error('Browser closed'))}
     pending.clear()
     // Chromium may still be releasing files on Windows; leave only this isolated
@@ -37,7 +43,7 @@ async function launch() {
     for(let i=0;!fs.existsSync(portFile)&&i<150;i++){if(startupError)throw startupError;await sleep(100)}
     if(!fs.existsSync(portFile))throw Error('Chrome startup timed out')
     const port=fs.readFileSync(portFile,'utf8').split('\n')[0]
-    const targets=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json()
+    const targets=await (await fetch('http://127.0.0.1:'+port+'/json/list',{signal:AbortSignal.timeout(5000)})).json()
     ws=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl)
     await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true})})
     ws.addEventListener('message',event=>{

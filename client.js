@@ -2711,7 +2711,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       return true
     }
 
+    /* One chain per run. The refresh inside the frame can reenter this loop from
+       the worker-failure path (contourWorkerFail -> contourTeardown -> syncContour
+       -> contourStartLoop) and queue the next frame while this callback is still
+       executing; the stamp lets the tail notice that and keep its hands off,
+       instead of stranding a second chain that no later teardown can cancel. */
+    let contourLoopGen = 0
     const contourFrame = () => {
+      const gen = contourLoopGen
       if (contourWrap === null) {
         contourRaf = null
         return
@@ -2736,6 +2743,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         contourPhase += CONTOUR_PHASE_STEP * readContourSpeed() // speed changes drift, not refresh rate
         contourRefresh(true)
       }
+      if (gen !== contourLoopGen) return
       contourRaf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(contourFrame) : null
     }
 
@@ -2744,9 +2752,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       if (typeof requestAnimationFrame !== 'function') return
       if (!contourWantsAnim()) return
       contourLastField = -1
+      contourLoopGen += 1
       contourRaf = requestAnimationFrame(contourFrame)
     }
     const contourStopLoop = () => {
+      contourLoopGen += 1
       if (contourRaf !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(contourRaf)
       contourRaf = null
       contourSyncTrail(false)

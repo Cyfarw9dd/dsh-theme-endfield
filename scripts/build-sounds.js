@@ -19,7 +19,9 @@ const OUT_DIR = path.join(__dirname, '..', 'sounds');
 const checkOnly = process.argv.includes('--check');
 
 let drifted = 0;
-fs.mkdirSync(OUT_DIR, { recursive: true });
+// --check must stay read-only: creating the directory as a side effect would
+// turn a "sounds/ is missing" diagnosis into a freshly minted empty dir.
+if (!checkOnly) fs.mkdirSync(OUT_DIR, { recursive: true });
 for (const id of SLOT_IDS) {
   const target = path.join(OUT_DIR, `${id}.wav`);
   const bytes = renderWav(SLOTS[id]);

@@ -1010,7 +1010,7 @@ function apply(ctx, config) {
 
   /* The notification feature installs alongside the settings work below: which
      settings GENERATION answered does not matter to it, so it is started on
-     every path — including "no settings service at all", where the sound engine
+     every path — including "no settings seam at all", where the sound engine
      simply runs on the shipped defaults. The guard keeps a double mount from
      installing two engines on one context. */
   let audioInstalled = false;
@@ -1033,6 +1033,15 @@ function apply(ctx, config) {
   // dsh-agent-presets, …), so registration is reliable however concurrently
   // mounted plugins interleave; a synchronous `ctx.get('settings')` probe would
   // race and could see it absent.
+  //
+  // It is still only an ASK, and asking is what has to be feature-detected — the
+  // webServer lookup above does. A context without `inject` used to throw here
+  // and take the whole mount down; it now ends up on the same defaults-only
+  // engine that a host with no settings service gets.
+  if (typeof ctx.inject !== 'function') {
+    startAudio(undefined);
+    return;
+  }
   ctx.inject(['settings'], (settingsCtx) => {
     if (!settingsCtx || !settingsCtx.settings) {
       startAudio(undefined);

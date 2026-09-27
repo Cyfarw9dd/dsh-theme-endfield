@@ -17,11 +17,21 @@ const names=['contourRng','contourBuild','contourBuildCandidate','contourCoverag
 let worker=fs.readFileSync(path.join(root,'src/contour-worker.js'),'utf8')
 worker=worker.replace('/* CONTOUR_KERNEL */',names.map(grab).join('\n'))
 worker=worker.replace('/* CONTOUR_WEBGL */',fs.readFileSync(path.join(root,'src/contour-webgl.js'),'utf8'))
+// The artifact must be byte-stable across checkouts: JSON.stringify preserves
+// raw \r\n, so a CRLF working tree would bake \r into the embedded string and a
+// normalized LF copy of the same sources would rebuild to a different blob —
+// failing the equality gate on a copy that is not stale. LF is also what the
+// runtime Blob worker expects.
+worker=worker.replace(/\r\n/g,'\n')
 new vm.Script(worker)
 const start='    /* BEGIN GENERATED CONTOUR WORKER */',end='    /* END GENERATED CONTOUR WORKER */'
 const a=source.indexOf(start),b=source.indexOf(end,a)
 if(a<0 || b<0)throw Error('Missing generated worker markers')
-const next=source.slice(0,a)+start+'\n    const CONTOUR_WORKER_SOURCE = '+JSON.stringify(worker)+'\n'+end+source.slice(b+end.length)
+// The equality test below is byte-for-byte, so the two separators this writes
+// have to be the checkout's own: a CRLF working tree (core.autocrlf on Windows)
+// joined with '\n' would leave the gate failing on a copy that is not stale.
+const nl=source.includes('\r\n')?'\r\n':'\n'
+const next=source.slice(0,a)+start+nl+'    const CONTOUR_WORKER_SOURCE = '+JSON.stringify(worker)+nl+end+source.slice(b+end.length)
 if(process.argv.includes('--check')) {
   if(next!==source)throw Error('Embedded worker is stale; run npm run build:worker')
 } else fs.writeFileSync(file,next)

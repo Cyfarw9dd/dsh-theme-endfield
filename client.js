@@ -552,11 +552,22 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
        new state while the theme still acted on the old one until the round-trip
        closed. Only EDITED fields are overlaid (see prefsLocalEdited), so a served
        value for any other field is still what the theme reads. */
+    let prefsOverlayCache = null
     const prefsGetValue = () => {
       const base = prefsFieldValue || PREFS_FIELD_DEFAULTS
       if (prefsLocalEdited.size === 0) return base
+      /* Hot path: the contour loop and the watermark observer read prefs many
+         times per frame. Rebuilding this overlay per read allocated a fresh
+         ~24-key object every time; caching it against the base-section
+         REFERENCE keeps those reads allocation-free. prefsSet invalidates on
+         every edit (the only place prefsLocalEdited grows), and a new section
+         from the host arrives as a different `base` reference, so a stale pair
+         can never be served. Callers treat the result as read-only — prefsGet
+         is the sole runtime consumer and only reads single fields. */
+      if (prefsOverlayCache !== null && prefsOverlayCache.base === base) return prefsOverlayCache.out
       const out = Object.assign({}, base)
       for (const field of prefsLocalEdited) out[field] = prefsLocal[field]
+      prefsOverlayCache = { base, out }
       return out
     }
     /** read one field as its raw stored string: <stored-or-default>, never null. */
@@ -774,6 +785,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       prefsLocal[field] = String(encoded)
       prefsLocalEdited.add(field)
       prefsEdited.add(field)
+      prefsOverlayCache = null
       prefsCommit(field, prefsLocal[field])
     }
     /* Normalize a section the transport handed us to a full set of SCHEMA
@@ -984,6 +996,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     const PREFS_SETTLE_LIMIT = 20 // ~20 * 500ms = up to ~10s after the bind
     const prefsStartSettleWatch = (attempt) => {
       if (prefsScope === null) return
+      /* A re-bind or a re-selection can start a new chain while an earlier one
+         is still pending; drop the old timer first so exactly one chain runs.
+         The passes are idempotent, but duplicate chains duplicate logs and
+         duplicate snapshot work. Clearing an already-fired handle is harmless. */
+      if (prefsSettleTimer !== null && typeof clearTimeout === 'function') clearTimeout(prefsSettleTimer)
+      prefsSettleTimer = null
       const snap = prefsSnapshotOf(prefsScope)
       if (snap !== null && snap.status === 'ready') {
         /* The form is served but its store never emitted (or the value arrived
@@ -1042,45 +1060,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         'hostServes=', prefsServedNamespaces(),
         'candidates=', PREFS_ENTRY_CANDIDATES)
     }
+    /* DIAG-ROUND5 (a host-vs-store value comparison printed on every load) was
+       removed here: its cause was confirmed and fixed by the durable
+       configForms transport, and dbg() is an unconditional console.warn, so the
+       probe had become pure console noise on healthy pages. */
+    let prefsBootReportTimer = null
     if (typeof setTimeout === 'function') {
       // After the mirror has had a fair chance to answer (the settle watch's own
-      // budget), state the outcome once whether or not it worked.
-      setTimeout(prefsReportBoot, PREFS_SETTLE_LIMIT * 500 + 500)
-    }
-    if (typeof setTimeout === 'function') {
-      /* DIAG-ROUND5: the one comparison the previous rounds could not make.
-         The profile patch FILE holds the user's values, but the Host's `value`
-         section (entry.fiber.config) has been observed reporting the schema
-         defaults for palette/radius. That can only mean the live fiber and the
-         patch row disagree, so print BOTH sides of every section next to each
-         other, plus whether this page's own store ended up on the file's value.
-         One line, unambiguous, removed once the cause is confirmed. */
-      setTimeout(() => {
-        try {
-          const forms = getConfigForms()
-          if (!forms || typeof forms.describe !== 'function') { dbg('DIAG5 no configForms.describe'); return }
-          const mirrored = forms.describe().getSnapshot()
-          const view = mirrored && mirrored.view
-          if (!view || !Array.isArray(view.namespaces)) {
-            dbg('DIAG5 mirror not ready. status=', mirrored && mirrored.status, 'err=', mirrored && mirrored.error)
-            return
-          }
-          const ours = view.namespaces.find((r) => r && r.ns === 'theme-endfield')
-          if (!ours) { dbg('DIAG5 theme-endfield NOT among', view.namespaces.length, 'namespaces'); return }
-          const keys = ['palette', 'radius', 'contour', 'loader', 'thunder']
-          const rows = keys.map((k) => {
-            const v = ours.value ? String(ours.value[k]) : '-'
-            const u = ours.user ? String(ours.user[k]) : '-'
-            const b = ours.base ? String(ours.base[k]) : '-'
-            const s = String(prefsGet('dsh-theme-endfield-' + k))
-            return k + '{value=' + v + ' user=' + u + ' base=' + b + ' store=' + s + '}'
-          })
-          dbg('DIAG5', 'revision=', ours.revision, 'autoGenerate=', ours.autoGenerate, 'writable=', view.writable)
-          dbg('DIAG5', rows.join(' '))
-          const stale = keys.filter((k) => ours.user && ours.value && String(ours.user[k]) !== String(ours.value[k]))
-          dbg('DIAG5 STALE(user!=value)=', JSON.stringify(stale), 'storeMatchesValue=', keys.every((k) => !ours.value || String(prefsGet('dsh-theme-endfield-' + k)) === String(ours.value[k])))
-        } catch (e) { dbg('DIAG5 threw', String(e && e.message || e)) }
-      }, PREFS_SETTLE_LIMIT * 500 + 700)
+      // budget), state the outcome once whether or not it worked. Tracked so the
+      // dispose effect below can revoke it: after a teardown prefsScope is null,
+      // which reads as "unhealthy" and would print a misleading boot report for
+      // a page that is simply gone.
+      prefsBootReportTimer = setTimeout(prefsReportBoot, PREFS_SETTLE_LIMIT * 500 + 500)
     }
     /* Repeatedly try to obtain a settings transport until one is servable. DSH
        web mounts plugin rows concurrently, so the settings service (and its
@@ -1134,6 +1125,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       prefsRetryTimer = null
       if (prefsSettleTimer !== null && typeof clearTimeout === 'function') clearTimeout(prefsSettleTimer)
       prefsSettleTimer = null
+      if (prefsBootReportTimer !== null && typeof clearTimeout === 'function') clearTimeout(prefsBootReportTimer)
+      prefsBootReportTimer = null
     })
 
     const RADIUS_KEY = 'dsh-theme-endfield-radius'
@@ -1364,6 +1357,21 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
     }
     const syncWatermarkVisibility = () => {
+      /* Streaming fast path. A mounted persist-mode mark is still correctly
+         placed while (a) the switches that could turn it off are unchanged,
+         (b) no hero root exists in the document and (c) its host is still
+         attached — all three decidable WITHOUT a single getBoundingClientRect.
+         The observer fires on every body mutation batch, so during token
+         streaming this used to run the full mountPointFor() below (several
+         querySelector(All) + rect reads = one forced layout) per frame. Any
+         check failing here falls through to the full decision, so every real
+         transition — theme off, hero appearing, host detached, persist flipped
+         off — is still caught on the same batch. */
+      if (watermarkEl !== null && watermarkHost !== null && watermarkHost.isConnected
+        && typeof document !== 'undefined'
+        && watermarkEl.getAttribute('data-endfield-watermark') === 'persist'
+        && isEnabled() && isWatermarkOn() && isWatermarkPersistOn()
+        && document.querySelector('[class$="_root"][data-phase="hero"]') === null) return
       const on = isEnabled() && isWatermarkOn()
       const target = on ? mountPointFor() : null
       // Off the hero page the mark only survives when the persist switch is on.
@@ -3412,6 +3420,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     let thunderUnsubList = null
     let thunderUnsubSession = null
     let thunderRebindTimer = null
+    /* Retry budget for thunderRebind, bounded like every other retry in this
+       file (rebindPrefs 40, settle watch 20): a permanently absent sessions
+       service must not leave a 120 ms poll running for the life of the page.
+       A settings change re-runs syncThunder -> thunderRebind, which restarts
+       the budget. */
+    let thunderRebindAttempts = 0
     let thunderWatchedId = null
     // null = nothing readable observed yet, so the next value is a baseline.
     let thunderLastRunning = null
@@ -3451,8 +3465,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       if (thunderRebindTimer !== null && typeof clearTimeout === 'function') clearTimeout(thunderRebindTimer)
       thunderRebindTimer = null
       /* Service not there yet: keep retrying rather than giving up for good, since
-         the only reason to be here is that the feature is switched on. */
+         the only reason to be here is that the feature is switched on — but only
+         within the budget above. */
       if (sessions === undefined) {
+        if (thunderRebindAttempts >= 100) {
+          dbg('thunder rebind gave up: no sessions service after', thunderRebindAttempts, 'tries')
+          return
+        }
+        thunderRebindAttempts += 1
         if (typeof setTimeout === 'function') thunderRebindTimer = setTimeout(thunderRebind, 120)
         return
       }
@@ -3490,9 +3510,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         face = null
       }
       if (face === null || typeof face.subscribe !== 'function' || typeof face.getSnapshot !== 'function') {
+        if (thunderRebindAttempts >= 100) {
+          dbg('thunder rebind gave up: session face never became bindable for', id)
+          return
+        }
+        thunderRebindAttempts += 1
         if (typeof setTimeout === 'function') thunderRebindTimer = setTimeout(thunderRebind, 120)
         return
       }
+      thunderRebindAttempts = 0
       thunderWatchedId = id
       thunderLastRunning = thunderReadRunning(face)
       let unsub = null
@@ -3515,6 +3541,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     const thunderStopWatch = () => {
       if (thunderRebindTimer !== null && typeof clearTimeout === 'function') clearTimeout(thunderRebindTimer)
       thunderRebindTimer = null
+      thunderRebindAttempts = 0
       if (thunderUnsubList !== null) {
         try { thunderUnsubList() } catch (e) { /* already torn down */ }
         thunderUnsubList = null
@@ -5368,6 +5395,19 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          announce into. */
       thunderStopWatch()
       destroyThunder()
+      /* The watermark must go with the stylesheet too, and it cannot wait for
+         syncWatermarkVisibility(): with the sheet torn down its
+         `opacity: var(--edge-wm-alpha)` computes invalid and falls back to 1,
+         so an orphaned mark sits on the page as a fully opaque 9.5vw ENDFIELD.
+         This path also runs when the switch is turned off from ANOTHER window
+         (reconcileFromPrefs -> unmount), where nothing else removes the node —
+         the local toggle path only looked covered because toggleTheme happened
+         to call syncWatermarkVisibility() itself. */
+      if (watermarkRaf !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(watermarkRaf)
+      watermarkRaf = null
+      if (watermarkEl !== null && watermarkEl.parentNode) watermarkEl.parentNode.removeChild(watermarkEl)
+      watermarkEl = null
+      watermarkHost = null
       // The attention poll belongs to the themed, audio-enabled page; leaving it
       // running would keep reporting confirmations for a theme that is off.
       stopAudioAttentionWatch()

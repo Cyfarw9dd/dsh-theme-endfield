@@ -83,7 +83,7 @@ for (const argv of tests) {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${label}  (${ms}ms)`)
   if (!ok) {
     console.log(out.trimEnd().split(/\r?\n/).map((l) => '      ' + l).join('\n'))
-    console.log(`::error file=${rel},line=1,title=测试失败::${esc(results[results.length - 1].reason)}`)
+    console.log(`::error file=${label},line=1,title=测试失败::${esc(results[results.length - 1].reason)}`)
   }
 }
 

@@ -46,6 +46,7 @@
 | | 需要你回应 | 开 | `audioAttention` |
 | | 出错提示音 | 开 | `audioTurnFail` |
 | | 音量 | 100 | `audioVolume` |
+| | 同槽位最小间隔 | 2500 ms | `audioDebounceMs` |
 | | 开始音仅认会话框 | 开 | `audioHumanOnly` |
 | | 自定义音效目录 | （空） | `audioSoundDir` |
 | | 诊断日志 | 关 | `audioDiag` |

@@ -129,6 +129,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       palette: 'gray',
       radius: 'square',
       glass: 'off',
+      motion: 'signal',
       watermark: '1',
       watermarkPersist: '0',
       loader: '0',
@@ -193,6 +194,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       'dsh-theme-endfield-palette': 'palette',
       'dsh-theme-endfield-radius': 'radius',
       'dsh-theme-endfield-glass': 'glass',
+      'dsh-theme-endfield-motion': 'motion',
       'dsh-theme-endfield-watermark': 'watermark',
       'dsh-theme-endfield-watermark-persist': 'watermarkPersist',
       'dsh-theme-endfield-loader': 'loader',
@@ -1119,6 +1121,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     const RADIUS_KEY = 'dsh-theme-endfield-radius'
     const ENABLED_KEY = 'dsh-theme-endfield-enabled'
     const isEnabled = () => prefsGet(ENABLED_KEY) !== '0'
+    const MOTION_KEY = 'dsh-theme-endfield-motion'
+    const MOTION_OPTIONS = ['signal', 'silent', 'impact', 'off']
+    const readMotion = () => {
+      const value = prefsGet(MOTION_KEY)
+      return MOTION_OPTIONS.includes(value) ? value : 'signal'
+    }
+    const syncMotion = () => {
+      if (typeof document === 'undefined' || document.body === null) return
+      const value = readMotion()
+      if (isEnabled() && value !== 'off') document.body.setAttribute?.('data-endfield-motion', value)
+      else document.body.removeAttribute?.('data-endfield-motion')
+    }
     const GLASS_KEY = 'dsh-theme-endfield-glass'
     const GLASS_OPTIONS = ['off', 'subtle', 'standard', 'strong']
     const readGlass = () => {
@@ -2868,6 +2882,128 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         color: var(--edge-select-ink, #000);
         background: var(--edge-select-fill, #d9d9d9);
       }
+      /* ================= 按钮交互动效（三套方案，data-endfield-motion 切换） =======
+
+         方案A signal（默认）：官网签名复刻
+           · 全局 .2s 颜色过渡（hover 不再瞬变）
+           · :active 按下 = 底色暗一档
+           · 悬停圆角软化 0 → 4px（仅直角模式）
+           · 主 CTA / 新会话按钮：信号色 clip-path 箭头变形（官网签名）
+
+         方案B silent：极简克制
+           · 仅全局 .2s 颜色过渡 + :active 暗一档
+           · 无 clip-path、无圆角变化——零视觉噪音
+
+         方案C impact：冲压反馈
+           · 全局 .2s 颜色过渡 + :active 暗一档
+           · 悬停硬阴影位移（4px→2px，模拟被压入页面）
+           · 悬停时左侧信号色边条闪现（width 0→3px）
+
+         off：完全关闭，回到无动效的瞬变状态。
+
+         官网实测数据支撑（见 endfield-ui-research.md）：
+         · 时长全部 ≤.3s；无弹跳/无回弹
+         · 变形优先于位移；颜色就是状态（hover亮/active暗）
+         · 零 JS 动画库，纯 CSS transition */
+
+      /* ---------- 共通（signal + silent + impact）：全局颜色过渡 ---------- */
+      body[data-endfield-motion] button,
+      body[data-endfield-motion] [role='button'],
+      body[data-endfield-motion] [role='tab'],
+      body[data-endfield-motion] [role='menuitem'],
+      body[data-endfield-motion] [role='option'],
+      body[data-endfield-motion] a {
+        transition: background-color .2s ease, color .2s ease, border-color .2s ease,
+          box-shadow .2s ease;
+      }
+
+      /* ---------- 共通（signal + silent + impact）：:active 按下暗一档 ---------- */
+      body[data-endfield-motion] button:active:not(:disabled),
+      body[data-endfield-motion] [role='button']:active:not(:disabled) {
+        filter: brightness(.85);
+      }
+
+      /* ================= 方案A signal：官网签名复刻 ================= */
+
+      /* A-1. 悬停圆角软化（仅直角模式） */
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:hover:not(:disabled),
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:hover:not(:disabled) {
+        border-radius: 4px !important;
+      }
+
+      /* A-2. 主 CTA / 新会话按钮：clip-path 箭头变形（官网签名动效）。
+         信号色窄条 (::after) 在悬停时变形为右指箭头并向右滑动。
+         与 hover 色变并行，不串行。 */
+      body[data-endfield-motion='signal'] [class$='_newSession'] {
+        position: relative;
+      }
+      body[data-endfield-motion='signal'] [class$='_newSession']::after {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 10px;
+        height: 55%;
+        background-color: var(--edge-accent-ink, #101110);
+        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
+        transition: clip-path .2s ease, transform .2s ease;
+        pointer-events: none;
+      }
+      body[data-endfield-motion='signal'] [class$='_newSession']:hover::after {
+        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
+        transform: translateY(-50%) translateX(6px);
+      }
+
+      /* A-3. 审批按钮也获得箭头（approve 方向朝右 = 批准） */
+      body[data-endfield-motion='signal'] [data-cordis-approve] {
+        position: relative;
+      }
+      body[data-endfield-motion='signal'] [data-cordis-approve]::after {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 8px;
+        height: 55%;
+        background-color: currentColor;
+        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
+        transition: clip-path .2s ease, transform .2s ease;
+        pointer-events: none;
+        opacity: 0;
+      }
+      body[data-endfield-motion='signal'] [data-cordis-approve]:hover::after {
+        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
+        transform: translateY(-50%) translateX(4px);
+        opacity: 1;
+      }
+
+      /* ================= 方案C impact：冲压反馈 ================= */
+
+      /* C-1. 悬停硬阴影收紧（4px→2px：被压向页面） */
+      body[data-endfield-motion='impact'] button:not(:disabled),
+      body[data-endfield-motion='impact'] [role='button']:not(:disabled) {
+        box-shadow: 4px 4px 0 rgba(16, 17, 16, 0.2);
+      }
+      body[data-endfield-motion='impact'] button:active:not(:disabled),
+      body[data-endfield-motion='impact'] [role='button']:active:not(:disabled) {
+        box-shadow: 2px 2px 0 rgba(16, 17, 16, 0.25);
+        transform: translate(2px, 2px);
+      }
+
+      /* C-2. 悬停左侧信号色边条 */
+      body[data-endfield-motion='impact'] button:not(:disabled),
+      body[data-endfield-motion='impact'] [role='button']:not(:disabled) {
+        border-left: 3px solid transparent;
+      }
+      body[data-endfield-motion='impact'] button:hover:not(:disabled),
+      body[data-endfield-motion='impact'] [role='button']:hover:not(:disabled) {
+        border-left-color: var(--edge-accent, currentColor);
+      }
+
+      /* ---------- 方案B silent 无额外规则（仅共通的过渡 + active） ---------- */
+
       /* Square corners (default): zero EVERY classed element, then restore circles/pills below.
          body.theme-endfield-round disables all of this and restores app-native rounding. */
       body:not(.theme-endfield-round) button,
@@ -4240,6 +4376,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
     `)
       syncRadiusMode()
+      syncMotion()
       syncGlass()
       syncPaletteClass()
     }
@@ -4324,6 +4461,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       if (enabledNext) {
         // These sync helpers read the store on each call, so no snapshot passing.
         syncRadiusMode()
+        syncMotion()
         syncGlass()
         syncPaletteClass()
         syncWatermarkVisibility()
@@ -4412,6 +4550,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimOff: '关闭动画',
       thunderAnimHintOn: '大字由大缩小砸入并淡出（关闭后为直接显示，仍保持 3 秒）',
       thunderAnimHintOff: '默认关闭；大字直接出现、3 秒后消失，不做缩放与淡入淡出',
+      motionRow: '按钮动效',
+      motionHint: '三套方案：A 信号（官网签名）· B 静默（极简）· C 冲压（激进）',
+      motionSignal: '方案A · 信号（官网签名）',
+      motionSilent: '方案B · 静默（极简）',
+      motionImpact: '方案C · 冲压（激进）',
+      motionOff: '关闭（无动效）',
       notifyRow: '工业风通知',
       notifyOn: '开启通知',
       notifyOff: '关闭通知',
@@ -4543,6 +4687,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimOff: 'Turn off',
       thunderAnimHintOn: 'The word punches in from oversized and fades out (appears instantly when off, still held 3s)',
       thunderAnimHintOff: 'Off by default; the word appears instantly and leaves after 3s, with no scaling or fading',
+      motionRow: 'Button motion',
+      motionHint: 'Three schemes: A Signal (official signature), B Silent (minimal), C Impact (aggressive)',
+      motionSignal: 'A · Signal (official)',
+      motionSilent: 'B · Silent (minimal)',
+      motionImpact: 'C · Impact (aggressive)',
+      motionOff: 'Off (no animation)',
       notifyRow: 'Industrial notify',
       notifyOn: 'Turn on',
       notifyOff: 'Turn off',
@@ -4677,6 +4827,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           const [palette, setPalette] = R.useState(readPalette())
           const [glass, setGlass] = R.useState(readGlass())
           const [mode, setMode] = R.useState(prefsGet(RADIUS_KEY) || 'square')
+          const [motion, setMotion] = R.useState(readMotion())
           /* 音频通知 is a HOST feature: the browser only owns its switches and
              the preview buttons. `hostState` mirrors what the host half reports
              over /theme-endfield/audio/state (which file each slot actually
@@ -4745,6 +4896,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               setPalette(readPalette())
               setGlass(readGlass())
               setMode(prefsGet(RADIUS_KEY) || 'square')
+              setMotion(readMotion())
               /* The 音频 rows seed themselves from the same store, so they are
                  re-derived here as well — the section can arrive after the
                  panel's first render, which would otherwise leave every audio
@@ -5115,6 +5267,24 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
                 }, ['gray', 'valley', 'wuling'].map((value) => R.createElement('option', { key: value, value },
                   t(value === 'gray' ? 'paletteGray' : value === 'valley' ? 'paletteValley' : 'paletteWuling')
+                )))
+              ]),
+              row('motion', false, [
+                R.createElement('span', { style: labelStyle }, t('motionRow'),
+                  R.createElement('span', { style: hintStyle }, t('motionHint'))),
+                R.createElement('select', {
+                  'aria-label': t('motionRow'), value: motion,
+                  onChange: (event) => {
+                    const v = event.target.value
+                    if (!MOTION_OPTIONS.includes(v)) return
+                    prefsSet(MOTION_KEY, v)
+                    setMotion(v)
+                    syncMotion()
+                  },
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
+                }, MOTION_OPTIONS.map((v) => R.createElement('option', { key: v, value: v },
+                  t(v === 'signal' ? 'motionSignal' : v === 'silent' ? 'motionSilent' : v === 'impact' ? 'motionImpact' : 'motionOff')
                 )))
               ]),
               row('glass', false, [

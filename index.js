@@ -107,6 +107,7 @@ const FIELD_DEFAULTS = {
   enabled: '1',             // 终末地主题 —— default on
   palette: 'gray',          // 主题配色 —— 终末地灰 (gray default; 官网灰阶交互语法)
   glass: 'off',             // optional local frost; original material by default
+  motion: 'signal',          // 按钮动效 —— signal/silent/impact/off; default A signal
   radius: 'square',         // 主题圆角 —— 直角
   watermark: '1',           // 背景水印 —— default on
   watermarkPersist: '0',    // 水印保持显示 —— default off

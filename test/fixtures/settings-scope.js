@@ -52,6 +52,7 @@ const FIELD_DEFAULTS = {
   palette: 'gray',
   radius: 'square',
   glass: 'off',
+  motion: 'signal',
 
   watermark: '1',
   watermarkPersist: '0',
@@ -85,6 +86,7 @@ const KEY_TO_FIELD = {
   'dsh-theme-endfield-palette': 'palette',
   'dsh-theme-endfield-radius': 'radius',
   'dsh-theme-endfield-glass': 'glass',
+  'dsh-theme-endfield-motion': 'motion',
 
   'dsh-theme-endfield-watermark': 'watermark',
   'dsh-theme-endfield-watermark-persist': 'watermarkPersist',

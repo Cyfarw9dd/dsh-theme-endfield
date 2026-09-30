@@ -35,7 +35,7 @@
  */
 const BROWSER_SETTINGS_SCOPE_SNIPPET = `
 var __endfieldFieldDefaults = {
-  enabled:'1', palette:'gray', radius:'square', glass:'off', watermark:'1',
+  enabled:'1', palette:'gray', radius:'square', glass:'off', motion:'signal', watermark:'1',
   watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0',
   audioEnabled:'0', audioVolume:'100', audioBoot:'1', audioTurnStart:'1', audioTurnDone:'1',
   audioAttention:'1', audioTurnFail:'1', audioDebounceMs:'2500', audioSoundDir:'',

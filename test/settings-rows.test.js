@@ -210,20 +210,21 @@ for (const label of ['主题配色', '背景水印']) {
   else fail('row missing: ' + label)
 }
 
-/* --- the palette row: default 终末地灰, and switching writes the field --- */
-if (all.includes('终末地灰')) pass('默认配色显示为终末地灰')
+/* --- the palette row: default 终末地灰, dropdown selection writes the field --- */
+if (all.includes('终末地灰')) pass('默认配色下拉显示终末地灰')
 else fail('palette row does not show 终末地灰 as the default')
 
-const paletteBtn = buttons.find((b) => /切换武陵青|切换谷地黄|切换终末地灰/.test(textOf(b)))
-if (!paletteBtn) fail('no palette switch button rendered')
+const paletteSel = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
+if (!paletteSel) fail('no palette select rendered')
 else {
-  // The 3-way cycle is 终末地灰 -> 谷地黄 -> 武陵青 -> 终末地灰, so from the
-  // default the button must OFFER 谷地黄.
-  if (/切换谷地黄/.test(textOf(paletteBtn))) pass('默认（终末地灰）状态下按钮提供「切换谷地黄」')
-  else fail('palette button should offer 谷地黄 while the default is active, got: ' + textOf(paletteBtn))
-  try { paletteBtn.props.onClick() } catch (e) { fail('palette toggle threw: ' + e.message) }
-  if (prefStore.get('palette') === 'valley') pass('点击写入 dsh-theme-endfield.palette=valley')
-  else fail('palette toggle wrote ' + JSON.stringify(prefStore.get('palette')) + ', expected "valley"')
+  const opts = paletteSel.children || []
+  if (opts.length === 3) pass('下拉提供三档')
+  else fail('palette select has ' + opts.length + ' options, expected 3')
+  if (paletteSel.props.value === 'gray') pass('当前值 = 终末地灰（默认）')
+  else fail('palette select value is ' + paletteSel.props.value + ', expected gray')
+  try { paletteSel.props.onChange({ target: { value: 'valley' } }) } catch (e) { fail('palette onChange threw: ' + e.message) }
+  if (prefStore.get('palette') === 'valley') pass('选择谷地黄写入 palette=valley')
+  else fail('palette select wrote ' + JSON.stringify(prefStore.get('palette')) + ', expected "valley"')
 }
 
 /* --- 雷霆大字 (娱乐): default OFF, and its 预览 follows the same rule ---
@@ -314,26 +315,21 @@ else fail('with the animation on the row should offer 关闭动画')
 prefStore.setField('thunderAnim', '0')
 prefStore.setField('thunder', '0')
 
-/* --- with 武陵青 active, the row must render the wrap-around affordance ---
-   The panel's React state follows its OWN toggles in this harness (the stub has
-   no re-sync subscription), so the second click drives valley -> wuling exactly
-   the way a user would. */
+/* --- with 武陵青 selected, the select follows the store --- */
 {
-  const tree2b = rendered()
-  const buttons2b = walk(tree2b).filter((n) => n.type === 'button')
-  const paletteBtn2 = buttons2b.find((b) => /切换武陵青|切换谷地黄|切换终末地灰/.test(textOf(b)))
-  if (!paletteBtn2) fail('no palette button for the second toggle')
+  const sel = walk(rendered()).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
+  if (!sel) fail('no palette select for the wuling assertion')
   else {
-    try { paletteBtn2.props.onClick() } catch (e) { fail('second palette toggle threw: ' + e.message) }
-    if (prefStore.get('palette') === 'wuling') pass('第二次点击写入 palette=wuling')
-    else fail('second toggle wrote ' + JSON.stringify(prefStore.get('palette')) + ', expected "wuling"')
+    try { sel.props.onChange({ target: { value: 'wuling' } }) } catch (e) { fail('wuling onChange threw: ' + e.message) }
+    if (prefStore.get('palette') === 'wuling') pass('选择武陵青写入 palette=wuling')
+    else fail('wuling select wrote ' + JSON.stringify(prefStore.get('palette')) + ', expected "wuling"')
   }
 }
 let tree3
 try { tree3 = rendered() } catch (e) { fail('re-render (wuling) threw: ' + e.message); process.exit(1) }
 const text3 = textOf(tree3)
-if (text3.includes('武陵青') && /切换终末地灰/.test(text3)) pass('武陵青 生效时按钮提供「切换终末地灰」')
-else fail('with wuling stored the palette row should offer 切换终末地灰')
+if (text3.includes('武陵青')) pass('武陵青 生效时下拉选中武陵青')
+else fail('with wuling stored the palette select should reflect it')
 // The accent must be surfaced to the user, in hex.
 if (text3.includes('#14d0d0')) pass('设置行标注 #14d0d0')
 else fail('the palette row should state #14d0d0')

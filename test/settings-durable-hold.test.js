@@ -185,9 +185,9 @@ const radiusBtn = findBtn(/切换直角|切换圆角/)
 if (!radiusBtn) { fail('no radius toggle button rendered'); process.exit(1) }
 try { radiusBtn.props.onClick() } catch (e) { fail('radius toggle threw: ' + e.message) }
 
-const paletteRow = buttons.filter((b) => /切换武陵青|切换谷地黄|切换终末地灰/.test(textOf(b)))[0]
-if (!paletteRow) { fail('no palette toggle button rendered'); process.exit(1) }
-try { paletteRow.props.onClick() } catch (e) { fail('palette toggle threw: ' + e.message) }
+const paletteRow = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
+if (!paletteRow) { fail('no palette select rendered'); process.exit(1) }
+try { paletteRow.props.onChange({ target: { value: 'valley' } }) } catch (e) { fail('palette onChange threw: ' + e.message) }
 
 /* Phase A: nothing durable yet, so NOTHING may reach the wire and both edits
    must be HELD (page-local) for the later replay. `section` in this fake always

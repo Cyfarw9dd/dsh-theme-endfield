@@ -4377,9 +4377,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       paletteGray: '终末地灰',
       paletteValley: '谷地黄',
       paletteWuling: '武陵青',
-      paletteToGray: '切换终末地灰',
-      paletteToValley: '切换谷地黄',
-      paletteToWuling: '切换武陵青',
       paletteHintGray: '官网工业灰：悬停/选中用灰阶（亮 #d9d9d9 · 暗 #6a6a6a），默认',
       paletteHintValley: '信号黄 #fff500（终末地官网强调色）',
       paletteHintWuling: '青碧色强调 #14d0d0，用于按钮、悬停与选中行',
@@ -4511,9 +4508,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       paletteGray: 'Endfield Gray',
       paletteValley: 'Valley Yellow',
       paletteWuling: 'Wuling Cyan',
-      paletteToGray: 'Use Endfield Gray',
-      paletteToValley: 'Use Valley Yellow',
-      paletteToWuling: 'Use Wuling Cyan',
       paletteHintGray: 'Official industrial gray for hover/selection (light #d9d9d9, dark #6a6a6a); default',
       paletteHintValley: 'Signal yellow #fff500 (the Endfield site accent)',
       paletteHintWuling: 'Teal-cyan accent #14d0d0 for buttons, hover and selected rows',
@@ -4855,14 +4849,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                until the next page load. */
             syncThunder()
           }
-          /* Palette switch. Everything visual is carried by the class flip inside
-             syncPaletteClass(); the only thing that needs explicit work is the
-             class flip is the whole mechanism. */
-          const togglePalette = () => {
-            const order = ['gray', 'valley', 'wuling']
-            const next = order[(order.indexOf(readPalette()) + 1) % order.length]
-            prefsSet(PALETTE_KEY, next)
-            setPalette(next)
+          /* Palette selection via <select>. Everything visual is carried by the
+             class flip inside syncPaletteClass(); a select fires onChange with
+             the chosen value, so no cycle order is needed. */
+          const setPaletteValue = (value) => {
+            if (value !== 'gray' && value !== 'valley' && value !== 'wuling') return
+            if (value === readPalette()) return
+            prefsSet(PALETTE_KEY, value)
+            setPalette(value)
             syncPaletteClass()
           }
           const toggleWm = () => {
@@ -5107,33 +5101,21 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               ]),
               row('palette', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('paletteRow') + t('sep') + t('palette' + (palette === 'gray' ? 'Gray' : palette === 'wuling' ? 'Wuling' : 'Valley')),
+                  t('paletteRow'),
                   R.createElement('span', { style: hintStyle },
                     t('paletteHint' + (palette === 'gray' ? 'Gray' : palette === 'wuling' ? 'Wuling' : 'Valley'))
                   )
                 ),
-                // A colour switch should show the colour it offers, not only name it.
-                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto', alignItems: 'center' } },
-                  R.createElement('span', {
-                    'aria-hidden': 'true',
-                    style: {
-                      width: '14px',
-                      height: '14px',
-                      flex: '0 0 auto',
-                      // --edge-accent only exists while the theme stylesheet is
-                      // mounted; with the theme off the chip falls back to the
-                      // app's own filled surface so it stays visible.
-                      background: enabled ? 'var(--edge-accent)' : 'var(--dsw-alias-interactive-bg-hover-solid)',
-                      border: '1px solid var(--dsw-alias-border-l2)',
-                      borderRadius: mode === 'round' ? '999px' : '0',
-                    },
-                  }),
-                  R.createElement('button', {
-                    type: 'button',
-                    onClick: togglePalette,
-                    style: btnStyleFor(true),
-                  }, t('paletteTo' + (palette === 'gray' ? 'Valley' : palette === 'valley' ? 'Wuling' : 'Gray')))
-                )
+                /* A select mirrors the glass row's pattern: the current value
+                   preselects, onChange writes through the store-derived handler. */
+                R.createElement('select', {
+                  'aria-label': t('paletteRow'), value: palette,
+                  onChange: (event) => setPaletteValue(event.target.value),
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
+                }, ['gray', 'valley', 'wuling'].map((value) => R.createElement('option', { key: value, value },
+                  t(value === 'gray' ? 'paletteGray' : value === 'valley' ? 'paletteValley' : 'paletteWuling')
+                )))
               ]),
               row('glass', false, [
                 R.createElement('span', { style: labelStyle }, t('glassRow'),

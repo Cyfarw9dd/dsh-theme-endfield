@@ -113,6 +113,11 @@ const FIELD_DEFAULTS = {
   loader: '0',              // 启动加载动画 —— default off
   thunder: '0',             // 雷霆大字 —— default off
   thunderAnim: '0',         // 大字入场动画 —— default off
+  // --- 工业风通知 ---------------------------------------------------------
+  notify: '1',              // 通知主开关 —— default on
+  notifyDone: '1',          // 任务完成通知 —— default on
+  notifyQuestion: '1',      // 提问通知 —— default on
+  notifyApprove: '1',       // 索权通知（含方案审阅）—— default on
   // --- 音频通知 ---------------------------------------------------------
   // Four live slots: the boot plate, the prompt that starts a turn, the final
   // answer that ends one, and `attention` for the two moments that actually

@@ -58,6 +58,10 @@ const FIELD_DEFAULTS = {
   loader: '0',
   thunder: '0',
   thunderAnim: '0',
+  notify: '1',
+  notifyDone: '1',
+  notifyQuestion: '1',
+  notifyApprove: '1',
   /* 音频通知 — same defaults as index.js FIELD_DEFAULTS. These names are already
      camelCase schema fields, so they pass through fieldName() unchanged; they are
      listed here so the fixture stays a faithful projection of the host schema
@@ -87,6 +91,10 @@ const KEY_TO_FIELD = {
   'dsh-theme-endfield-loader': 'loader',
   'dsh-theme-endfield-thunder': 'thunder',
   'dsh-theme-endfield-thunder-anim': 'thunderAnim',
+  'dsh-theme-endfield-notify': 'notify',
+  'dsh-theme-endfield-notify-done': 'notifyDone',
+  'dsh-theme-endfield-notify-question': 'notifyQuestion',
+  'dsh-theme-endfield-notify-approve': 'notifyApprove',
   /* Audio rows: the tail already equals the schema field, but the mapping is
      asserted to cover EVERY declared field, so they are listed like the rest. */
   'dsh-theme-endfield-audio-enabled': 'audioEnabled',

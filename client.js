@@ -134,6 +134,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       loader: '0',
       thunder: '0',
       thunderAnim: '0',
+      /* 通知模块：主开关 + 三触发（默认随主开关开启）。 */
+      notify: '1',
+      notifyDone: '1',
+      notifyQuestion: '1',
+      notifyApprove: '1',
       /* 音频通知 (host half: lib/audio.js). Two live slots — the prompt that
          starts a turn and the final answer that ends one. `audioAttention` and
          `audioTurnFail` are 预留: the sounds and switches ship, the triggers do
@@ -193,6 +198,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       'dsh-theme-endfield-loader': 'loader',
       'dsh-theme-endfield-thunder': 'thunder',
       'dsh-theme-endfield-thunder-anim': 'thunderAnim',
+      'dsh-theme-endfield-notify': 'notify',
+      'dsh-theme-endfield-notify-done': 'notifyDone',
+      'dsh-theme-endfield-notify-question': 'notifyQuestion',
+      'dsh-theme-endfield-notify-approve': 'notifyApprove',
       /* 音频通知. These tails happen to equal their schema fields, so every one of
          them would also resolve correctly through the prefix-strip fallback — they
          are listed explicitly because test/settings-namespace.test.js asserts that
@@ -2056,6 +2065,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           // First readable value is the baseline, not an edge — see the note above.
           if (prev === null) return
           showThunder(next ? THUNDER_START : THUNDER_DONE)
+          // Falling edge is also the notification module's 任务完成 trigger:
+          // the SAME authoritative bit, one subscription, two consumers.
+          if (!next) showNotify('done')
         })
       } catch (e) {
         unsub = null
@@ -2075,9 +2087,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     }
     /* Switched off costs nothing: no subscription, no timer, no plate — an off
        switch must not leave a listener behind that wakes on every streamed
-       token just to return early. */
+       token just to return early. The watch is now shared with the notify
+       module's 任务完成 trigger, so it stays armed while EITHER feature is on
+       (showThunder and showNotify both self-guard, so the idle consumer is a
+       no-op call, not a second subscription). */
     const syncThunder = () => {
-      if (!(isEnabled() && isThunderOn())) {
+      if (!(isEnabled() && (isThunderOn() || isNotifyDoneOn()))) {
         thunderStopWatch()
         destroyThunder()
         return
@@ -2123,11 +2138,16 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       try {
         const kind = detectPendingInteraction()
         if (kind === null) {
+          // Resolution clears every sticky notification: the question was
+          // answered / the approval decided, so the card has no reason to stay.
+          if (audioAttentionKind !== null) notifyResolveAttention()
           audioAttentionKind = null
           return
         }
         if (kind === audioAttentionKind) return
         audioAttentionKind = kind
+        // Visual half of the same event (self-guarded on the notify switches).
+        showNotify(kind)
         if (!isAudioOn()) return
         reportAttention(kind)
       } catch (e) { /* never let the watcher break the page */ }
@@ -2145,7 +2165,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       })
     }
     const syncAudioAttentionWatch = () => {
-      const wanted = isEnabled() && isAudioOn()
+      /* The watch now serves TWO consumers: the audio chime and the visual
+         notification, so it must run when EITHER is switched on. The notify
+         master alone is not enough — all three kind switches could be off. */
+      const notifyWantsWatch = isNotifyOn() && (isNotifyQuestionOn() || isNotifyApproveOn())
+      const wanted = isEnabled() && (isAudioOn() || notifyWantsWatch)
       if (wanted && audioAttentionTimer === null && typeof setInterval === 'function') {
         audioAttentionKind = null
         audioAttentionTimer = setInterval(audioAttentionTick, AUDIO_ATTENTION_POLL_MS)
@@ -2179,6 +2203,140 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     // callback in a browser) without a real MutationObserver.
     module.exports.__attentionCheck = audioAttentionTick
     module.exports.__attentionSchedule = audioAttentionSchedule
+
+    /* ---------- 终末地工业风通知 ----------------------------------------------
+       Three triggers, one visual language: 任务完成 (turn end, from the SAME
+       ConversationSnapshot.running edge the thunder announcement reads) and
+       提问 / 索权 (the attention watcher's question / approval / plan-review
+       kinds). Sound is NOT re-implemented: the existing audio slots already fire
+       for exactly these moments (attention via reportAttention above, turn end
+       via the host's own listener), so a notification is the VISUAL half of the
+       same event and the audio switches keep owning the audible half.
+
+       Lifetime rules differ by urgency, deliberately:
+         done      auto-dismisses after NOTIFY_DONE_MS — it is a receipt;
+         attention STICKS until the interaction resolves (the watcher's
+                   kind -> null transition clears it) or the user dismisses it —
+                   these need a human decision, and a receipt-style fade could
+                   hide exactly the moment the user was being called for.
+
+       The stack is plain DOM (same decision as thunder/watermark): the panel's
+       mini-React owns settings, not page chrome, and a fixed-position stack has
+       no interaction with the app's layout. */
+    const NOTIFY_KEY = 'dsh-theme-endfield-notify'
+    const NOTIFY_DONE_KEY = 'dsh-theme-endfield-notify-done'
+    const NOTIFY_QUESTION_KEY = 'dsh-theme-endfield-notify-question'
+    const NOTIFY_APPROVE_KEY = 'dsh-theme-endfield-notify-approve'
+    // Master default ON: the module was requested as a feature, not as an
+    // opt-in experiment. Sub-switches default ON and read independently.
+    const isNotifyOn = () => prefsGet(NOTIFY_KEY) !== '0'
+    const isNotifyDoneOn = () => prefsGet(NOTIFY_DONE_KEY) !== '0'
+    const isNotifyQuestionOn = () => prefsGet(NOTIFY_QUESTION_KEY) !== '0'
+    const isNotifyApproveOn = () => prefsGet(NOTIFY_APPROVE_KEY) !== '0'
+    /** Does this attention kind have a notification switch flipped on? */
+    const notifyWantsKind = (kind) => {
+      if (kind === 'question') return isNotifyQuestionOn()
+      // plan-review is an approval-family surface (same human decision).
+      return isNotifyApproveOn()
+    }
+    const NOTIFY_DONE_MS = 6000
+    let notifyStack = null
+    const notifyTimers = new Map() // kind -> dismissal timeout (done only)
+    /** The industrial card: square, 2px ink border, paper fill, signal rail. */
+    /** Copy per kind. Hardcoded zh like the thunder words: page chrome, not a
+        settings string, and the theme's face is bilingual-unfriendly by design. */
+    const notifyCopy = (kind) => ({
+      done: { title: '任务完成', body: '回合已结束，可以继续。' },
+      question: { title: '等待回答', body: '助手提出了一个需要你选择的问题。' },
+      approval: { title: '需要授权', body: '一个操作正在等待你的批准。' },
+      'plan-review': { title: '方案确认', body: '计划变更正在等待你的审阅。' },
+    }[kind] || { title: '通知', body: '' })
+    const notifyCard = (kind, title, body) => {
+      const el = document.createElement('div')
+      el.setAttribute('data-endfield-notify', kind)
+      el.setAttribute('data-endfield-notify-kind', kind)
+      // done is a receipt -> status; attention kinds call for a human -> alert.
+      el.setAttribute('role', kind === 'done' ? 'status' : 'alert')
+      const rail = document.createElement('span')
+      rail.setAttribute('data-endfield-notify-rail', '')
+      rail.setAttribute('aria-hidden', 'true')
+      const main = document.createElement('div')
+      main.setAttribute('data-endfield-notify-main', '')
+      const head = document.createElement('span')
+      head.setAttribute('data-endfield-notify-head', '')
+      head.textContent = title
+      const text = document.createElement('span')
+      text.setAttribute('data-endfield-notify-body', '')
+      text.textContent = body
+      main.appendChild(head)
+      main.appendChild(text)
+      el.appendChild(rail)
+      el.appendChild(main)
+      // Sticky kinds carry their own dismissal; the receipt does not need one.
+      if (kind !== 'done') {
+        const close = document.createElement('button')
+        close.setAttribute('data-endfield-notify-close', '')
+        close.setAttribute('aria-label', '×')
+        close.type = 'button'
+        close.textContent = '×'
+        close.addEventListener('click', () => dismissNotify(kind))
+        el.appendChild(close)
+      }
+      return el
+    }
+    /** Idempotent stack host, created on first use and torn down with the run. */
+    const notifyHost = () => {
+      if (notifyStack !== null && notifyStack.isConnected) return notifyStack
+      if (typeof document === 'undefined' || !document.body) return null
+      if (notifyStack === null) notifyStack = document.createElement('div')
+      notifyStack.setAttribute('data-endfield-notify-stack', '')
+      // Newest on top: the stack is a column and toasts prepend, so the live
+      // interaction is always the closest to the corner.
+      document.body.appendChild(notifyStack)
+      return notifyStack
+    }
+    /** Show (or replace) the toast for one kind. Self-guarded on every switch. */
+    const showNotify = (kind) => {
+      if (!isEnabled() || !isNotifyOn()) return
+      if (kind === 'done' && !isNotifyDoneOn()) return
+      if (kind !== 'done' && !notifyWantsKind(kind)) return
+      if (typeof document === 'undefined' || !document.body) return
+      const host = notifyHost()
+      if (host === null) return
+      dismissNotify(kind, true)
+      const copy = notifyCopy(kind)
+      const el = notifyCard(kind, copy.title, copy.body)
+      host.insertBefore(el, host.firstChild)
+      if (kind === 'done' && typeof setTimeout === 'function') {
+        notifyTimers.set(kind, setTimeout(() => dismissNotify('done'), NOTIFY_DONE_MS))
+      }
+    }
+    /** Remove the toast for a kind; `quiet` skips timer cleanup recursion. */
+    const dismissNotify = (kind, quiet) => {
+      if (!quiet && notifyTimers.has(kind)) {
+        clearTimeout(notifyTimers.get(kind))
+        notifyTimers.delete(kind)
+      }
+      if (notifyStack === null) return
+      const el = notifyStack.querySelector('[data-endfield-notify-kind="' + kind + '"]')
+      if (el !== null) el.remove()
+    }
+    /** Attention resolution clears every sticky kind (question answered,
+        approval decided, panel replaced by another kind). */
+    const notifyResolveAttention = () => {
+      for (const kind of ['question', 'approval', 'plan-review']) dismissNotify(kind)
+    }
+    const destroyNotify = () => {
+      for (const t of notifyTimers.values()) clearTimeout(t)
+      notifyTimers.clear()
+      if (notifyStack !== null && notifyStack.parentNode) notifyStack.parentNode.removeChild(notifyStack)
+      notifyStack = null
+    }
+    // Exposed for tests: drive one notification directly (the done edge needs a
+    // sessions service, which in-process harnesses stub differently).
+    module.exports.__notifyFire = showNotify
+    module.exports.__notifyDismiss = dismissNotify
+
 
     let disposeToken = () => {}
     let disposeStyles = () => {}
@@ -3992,6 +4150,94 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           transform: none;
         }
       }
+      /* ================= 终末地工业风通知 =================
+         The toast stack: bottom-right column of square industrial cards.
+         Design language: paper fill, 2px ink border, ZERO radius, a signal-colour
+         left rail (the accent as a 6px stripe — the same rail grammar as the boot
+         plate), barcode-style head row. Attention kinds carry their own dismiss
+         button; the done receipt does not (it auto-dismisses). */
+      [data-endfield-notify-stack] {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 2147481000;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        /* Above the app's own chrome but below the thunder plate; the stack is
+           interactive (dismiss buttons), so it must not be pointer-events:none. */
+        pointer-events: none;
+        max-width: min(340px, calc(100vw - 32px));
+      }
+      [data-endfield-notify] {
+        pointer-events: auto;
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        background: var(--dsw-alias-bg-layer-1);
+        border: 2px solid var(--dsw-alias-label-primary);
+        border-radius: 0;
+        box-shadow: 4px 4px 0 rgba(16, 17, 16, 0.35);
+        overflow: hidden;
+        animation: endfield-notify-in 220ms cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+      }
+      [data-endfield-notify-rail] {
+        flex: 0 0 6px;
+        background: var(--edge-accent);
+      }
+      /* Attention kinds keep the ink border; the receipt swaps the rail for a
+         thinner one so urgency is readable at a glance. */
+      [data-endfield-notify='done'] [data-endfield-notify-rail] {
+        flex-basis: 4px;
+        background: var(--edge-accent-onpaper, var(--edge-accent));
+      }
+      [data-endfield-notify-main] {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      [data-endfield-notify-head] {
+        font-family: "Arial Black", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-weight: 900;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: var(--dsw-alias-label-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      [data-endfield-notify-body] {
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--dsw-alias-label-secondary);
+      }
+      [data-endfield-notify-close] {
+        flex: 0 0 auto;
+        align-self: flex-start;
+        margin: 6px 6px auto 0;
+        width: 22px;
+        height: 22px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        border-radius: 0;
+        background: transparent;
+        color: var(--dsw-alias-label-secondary);
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      [data-endfield-notify-close]:hover {
+        background: var(--dsw-alias-label-primary);
+        color: var(--dsw-alias-bg-layer-1);
+      }
+      @keyframes endfield-notify-in {
+        from { opacity: 0; transform: translateX(24px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-endfield-notify] { animation: none; }
+      }
     `)
       syncRadiusMode()
       syncGlass()
@@ -4123,6 +4369,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       groupBg: '背景',
       groupAnim: '动画',
       groupFun: '娱乐',
+      groupNotify: '通知',
       themeRow: '终末地主题',
       themeOn: '开启主题',
       themeOff: '关闭主题',
@@ -4168,6 +4415,24 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimOff: '关闭动画',
       thunderAnimHintOn: '大字由大缩小砸入并淡出（关闭后为直接显示，仍保持 3 秒）',
       thunderAnimHintOff: '默认关闭；大字直接出现、3 秒后消失，不做缩放与淡入淡出',
+      notifyRow: '工业风通知',
+      notifyOn: '开启通知',
+      notifyOff: '关闭通知',
+      notifyHintOn: '任务完成自动消失；提问/索权常驻直到处理完成；音效跟随「音频通知」开关',
+      notifyHintOff: '默认开启；右下角工业风卡片通知',
+      notifyNeed: '请先开启通知',
+      notifyDoneRow: '任务完成通知',
+      notifyDoneOn: '开启',
+      notifyDoneOff: '关闭',
+      notifyDoneHint: '回合结束时弹出回执卡片，6 秒后自动消失',
+      notifyQuestionRow: '提问通知',
+      notifyQuestionOn: '开启',
+      notifyQuestionOff: '关闭',
+      notifyQuestionHint: '助手提问时弹出常驻卡片，回答后自动消失',
+      notifyApproveRow: '索权通知',
+      notifyApproveOn: '开启',
+      notifyApproveOff: '关闭',
+      notifyApproveHint: '操作授权与方案审阅时弹出常驻卡片，处理完自动消失',
       thunderAnimHintReduced: '系统已开启「减少动态效果」，当前直接显示',
       /* 音频通知：播放发生在宿主进程（lib/audio.js），所以这里的每一行都在
          说明「什么时候响」而不是「怎么响」；试听按钮走宿主真实播放链路。 */
@@ -4238,6 +4503,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       groupBg: 'BACKGROUND',
       groupAnim: 'ANIMATION',
       groupFun: 'ENTERTAINMENT',
+      groupNotify: 'NOTIFY',
       themeRow: 'Endfield theme',
       themeOn: 'Turn on',
       themeOff: 'Turn off',
@@ -4283,6 +4549,24 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimOff: 'Turn off',
       thunderAnimHintOn: 'The word punches in from oversized and fades out (appears instantly when off, still held 3s)',
       thunderAnimHintOff: 'Off by default; the word appears instantly and leaves after 3s, with no scaling or fading',
+      notifyRow: 'Industrial notify',
+      notifyOn: 'Turn on',
+      notifyOff: 'Turn off',
+      notifyHintOn: 'Task-done auto-dismisses; question/approval stay until resolved; sound follows the audio switches',
+      notifyHintOff: 'On by default; industrial toast cards in the bottom-right corner',
+      notifyNeed: 'Turn notifications on first',
+      notifyDoneRow: 'Task done',
+      notifyDoneOn: 'Turn on',
+      notifyDoneOff: 'Turn off',
+      notifyDoneHint: 'A receipt card on turn end; auto-dismisses after 6s',
+      notifyQuestionRow: 'Question',
+      notifyQuestionOn: 'Turn on',
+      notifyQuestionOff: 'Turn off',
+      notifyQuestionHint: 'A sticky card when the assistant asks; clears when answered',
+      notifyApproveRow: 'Approval',
+      notifyApproveOn: 'Turn on',
+      notifyApproveOff: 'Turn off',
+      notifyApproveHint: 'A sticky card for approvals and plan reviews; clears when decided',
       thunderAnimHintReduced: 'Your system asks for reduced motion, so it appears instantly',
       groupAudio: 'AUDIO',
       audioRow: 'Audio notifications',
@@ -4413,6 +4697,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           const [audioDiag, setAudioDiag] = R.useState(isAudioDiagOn())
           const [hostState, setHostState] = R.useState(null)
           const [previewNote, setPreviewNote] = R.useState('')
+          const [notifyOn, setNotifyOn] = R.useState(isNotifyOn())
+          const [notifyDone, setNotifyDone] = R.useState(isNotifyDoneOn())
+          const [notifyQuestion, setNotifyQuestion] = R.useState(isNotifyQuestionOn())
+          const [notifyApprove, setNotifyApprove] = R.useState(isNotifyApproveOn())
           const refreshHostState = () => {
             if (typeof fetch !== 'function') return
             fetch(AUDIO_STATE_URL, { headers: { accept: 'application/json' } })
@@ -4456,6 +4744,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               setLoaderOn(isLoaderOn())
               setThunderOn(isThunderOn())
               setThunderAnim(isThunderAnimOn())
+              setNotifyOn(isNotifyOn())
+              setNotifyDone(isNotifyDoneOn())
+              setNotifyQuestion(isNotifyQuestionOn())
+              setNotifyApprove(isNotifyApproveOn())
               setPalette(readPalette())
               setGlass(readGlass())
               setMode(prefsGet(RADIUS_KEY) || 'square')
@@ -4584,6 +4876,36 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             prefsSet(WATERMARK_PERSIST_KEY, next ? '1' : '0')
             setWmPersist(next)
             syncWatermarkVisibility()
+          }
+          /* Notifications. The master re-arms both watchers (the attention poll
+             and the shared turn-edge subscription) so a switch flip is live
+             without a reload; the sub-switches only gate rendering, which
+             showNotify checks per fire. */
+          const toggleNotify = () => {
+            const next = !isNotifyOn()
+            prefsSet(NOTIFY_KEY, next ? '1' : '0')
+            setNotifyOn(next)
+            syncAudioAttentionWatch()
+            syncThunder()
+            if (!next) destroyNotify()
+          }
+          const toggleNotifyDone = () => {
+            const next = !isNotifyDoneOn()
+            prefsSet(NOTIFY_DONE_KEY, next ? '1' : '0')
+            setNotifyDone(next)
+            syncThunder()
+          }
+          const toggleNotifyQuestion = () => {
+            const next = !isNotifyQuestionOn()
+            prefsSet(NOTIFY_QUESTION_KEY, next ? '1' : '0')
+            setNotifyQuestion(next)
+            syncAudioAttentionWatch()
+          }
+          const toggleNotifyApprove = () => {
+            const next = !isNotifyApproveOn()
+            prefsSet(NOTIFY_APPROVE_KEY, next ? '1' : '0')
+            setNotifyApprove(next)
+            syncAudioAttentionWatch()
           }
           const toggleLoader = () => {
             const next = !isLoaderOn()
@@ -4924,12 +5246,59 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                 }, t(thunderAnim ? 'thunderAnimOff' : 'thunderAnimOn'))
               ]),
             ]),
-            /* --- 05 音频：两个生效槽位 + 两个预留槽位 ---
+            /* --- 05 通知：工业风卡片，三触发 --- */
+            R.createElement('div', { key: 'group-notify' }, [
+              groupTitle('05', 'groupNotify', false),
+              row('notify', false, [
+                R.createElement('span', { style: labelStyle },
+                  t('notifyRow') + t('sep') + stateOf(notifyOn),
+                  R.createElement('span', { style: hintStyle },
+                    t(notifyOn ? 'notifyHintOn' : 'notifyHintOff')
+                  )
+                ),
+                R.createElement('button', { type: 'button', onClick: toggleNotify, style: btnStyleFor(notifyOn) },
+                  t(notifyOn ? 'notifyOff' : 'notifyOn'))
+              ]),
+              row('notify-done', false, [
+                R.createElement('span', { style: labelStyle },
+                  t('notifyDoneRow') + t('sep') + stateOf(notifyDone),
+                  R.createElement('span', { style: hintStyle }, t('notifyDoneHint'))
+                ),
+                R.createElement('button', {
+                  type: 'button', onClick: toggleNotifyDone,
+                  style: btnStyleFor(notifyDone, !notifyOn), disabled: !notifyOn,
+                  title: notifyOn ? '' : t('notifyNeed'),
+                }, t(notifyDone ? 'notifyDoneOff' : 'notifyDoneOn'))
+              ]),
+              row('notify-question', false, [
+                R.createElement('span', { style: labelStyle },
+                  t('notifyQuestionRow') + t('sep') + stateOf(notifyQuestion),
+                  R.createElement('span', { style: hintStyle }, t('notifyQuestionHint'))
+                ),
+                R.createElement('button', {
+                  type: 'button', onClick: toggleNotifyQuestion,
+                  style: btnStyleFor(notifyQuestion, !notifyOn), disabled: !notifyOn,
+                  title: notifyOn ? '' : t('notifyNeed'),
+                }, t(notifyQuestion ? 'notifyQuestionOff' : 'notifyQuestionOn'))
+              ]),
+              row('notify-approve', true, [
+                R.createElement('span', { style: labelStyle },
+                  t('notifyApproveRow') + t('sep') + stateOf(notifyApprove),
+                  R.createElement('span', { style: hintStyle }, t('notifyApproveHint'))
+                ),
+                R.createElement('button', {
+                  type: 'button', onClick: toggleNotifyApprove,
+                  style: btnStyleFor(notifyApprove, !notifyOn), disabled: !notifyOn,
+                  title: notifyOn ? '' : t('notifyNeed'),
+                }, t(notifyApprove ? 'notifyApproveOff' : 'notifyApproveOn'))
+              ]),
+            ]),
+            /* --- 06 音频：两个生效槽位 + 两个预留槽位 ---
                Every row states WHEN it fires, because that is the whole contract
                of this feature; the two reserved rows say outright that they will
                not fire yet, so a switch that does nothing cannot read as broken. */
             R.createElement('div', { key: 'group-audio' }, [
-              groupTitle('05', 'groupAudio', false),
+              groupTitle('06', 'groupAudio', false),
               row('audio', false, [
                 R.createElement('span', { style: labelStyle },
                   t('audioRow') + t('sep') + stateOf(audioOn),
@@ -5107,6 +5476,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          them here too, or the callbacks keep firing against a dead run. */
       thunderStopWatch()
       destroyThunder()
+      // The notification stack owns DOM nodes and dismissal timers; both go here.
+      destroyNotify()
       // Same reason as the announcement watcher: a poll that outlives its fiber
       // keeps POSTing against a dead run.
       stopAudioAttentionWatch()

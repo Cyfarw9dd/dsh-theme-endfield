@@ -28,12 +28,15 @@
 | | 主题圆角 | 直角 | `radius` |
 | | 磨砂玻璃 | 关 | `glass` |
 | 02 背景 | 背景水印 | 开 | `watermark` |
-| | 背景水印 | 开 | `watermark` |
 | | 水印保持显示 | 关 | `watermarkPersist` |
 | 03 动画 | 启动加载动画 | 关 | `loader` |
 | 04 娱乐 | 雷霆大字 | 关 | `thunder` |
 | | 大字入场动画 | 关 | `thunderAnim` |
-| 05 音频 | 音频通知 | **关** | `audioEnabled` |
+| 05 通知 | 工业风通知 | 开 | `notify` |
+| | 任务完成通知 | 开 | `notifyDone` |
+| | 提问通知 | 开 | `notifyQuestion` |
+| | 索权通知 | 开 | `notifyApprove` |
+| 06 音频 | 音频通知 | **关** | `audioEnabled` |
 | | 启动加载动画音 | 开 | `audioBoot` |
 | | 任务开始音 | 开 | `audioTurnStart` |
 | | 任务结束音 | 开 | `audioTurnDone` |
@@ -123,7 +126,25 @@
 
 ---
 
-## 04 娱乐
+## 05 通知
+
+### 工业风通知（默认开启）
+
+右下角工业风卡片（纸底、墨框、信号色侧栏、全直角），三触发：
+
+| 触发 | 行为 | 存活 |
+| --- | --- | --- |
+| 任务完成 | 回执卡片（`role=status`） | 6 秒自动消失 |
+| 提问（ask_user_question） | 常驻卡片（`role=alert`） | 回答后自动消失，或手动 × |
+| 索权（授权/方案审阅） | 常驻卡片（`role=alert`） | 处理后自动消失，或手动 × |
+
+音效不重复实现：通知是同一事件的**视觉半边**，声音跟随既有「音频通知」开关（attention 槽位覆盖提问/索权，turn-done 槽位覆盖任务完成）。检测与音频 watcher 共用轮询；回合边缘复用雷霆的 sessions 订阅（回落沿触发任务完成），一份订阅两个消费者。
+
+存储字段：`notify`（主）/ `notifyDone` / `notifyQuestion` / `notifyApprove`，默认全开。
+
+---
+
+## 06 娱乐
 
 ### 雷霆大字（默认关闭）
 

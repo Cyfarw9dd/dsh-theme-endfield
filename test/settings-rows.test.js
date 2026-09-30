@@ -160,12 +160,12 @@ const buttons = nodes.filter((n) => n.type === 'button')
 /* The row set is the union of both lines of work: main's glass row plus this
    branch's 11 audio rows. The count is asserted below against the rendered tree
    as well, so a row that exists in the page but not in this list still fails. */
-const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim', 'audio', 'audio-boot', 'audio-start', 'audio-done', 'audio-volume', 'audio-attention', 'audio-fail', 'audio-source', 'audio-dir', 'audio-human', 'audio-diag']
+const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim', 'notify', 'notify-done', 'notify-question', 'notify-approve', 'audio', 'audio-boot', 'audio-start', 'audio-done', 'audio-volume', 'audio-attention', 'audio-fail', 'audio-source', 'audio-dir', 'audio-human', 'audio-diag']
 const rows = nodes.filter((n) => n.type === 'div' && n.props && ROW_KEYS.includes(n.props.key))
 const groups = (tree.children || []).filter((c) => c && c.type === 'div' && c.props && /^group-/.test(c.props.key))
 
-if (rows.length === 20) pass('panel has all 20 setting rows')
-else fail('expected 20 rows, found ' + rows.length)
+if (rows.length === 24) pass('panel has all 24 setting rows')
+else fail('expected 24 rows, found ' + rows.length)
 
 /* Count the rows the way the PAGE defines them — every direct child of a group
    container — so an unlisted new row shows up as a mismatch instead of vanishing. */
@@ -180,8 +180,8 @@ if (rowsInGroups.length === rows.length) {
     + rowsInGroups.map((r) => r.props.key).filter((k) => !ROW_KEYS.includes(k)).join(', '))
 }
 
-if (groups.length === 5) pass('rows are grouped into 5 sections (主题/背景/动画/娱乐/音频)')
-else fail('expected 5 group containers, found ' + groups.length)
+if (groups.length === 6) pass('rows are grouped into 6 sections (主题/背景/动画/娱乐/通知/音频)')
+else fail('expected 6 group containers, found ' + groups.length)
 
 const unkeyed = rows.filter((r) => !r.props || r.props.key === undefined)
 if (unkeyed.length === 0) pass('every row carries a React key')
@@ -194,7 +194,7 @@ else fail('duplicate row keys: ' + keys.join(', '))
 /* The group headers must be numbered editorial labels in the documented order,
    and the scheme-aware ink rule for them must exist in the stylesheet source. */
 const all = textOf(tree)
-for (const [label, title] of [['01 主题', 'THEME'], ['02 背景', 'BACKGROUND'], ['03 动画', 'ANIMATION'], ['04 娱乐', 'ENTERTAINMENT'], ['05 音频', 'AUDIO']]) {
+for (const [label, title] of [['01 主题', 'THEME'], ['02 背景', 'BACKGROUND'], ['03 动画', 'ANIMATION'], ['04 娱乐', 'ENTERTAINMENT'], ['05 通知', 'NOTIFY'], ['06 音频', 'AUDIO']]) {
   if (all.includes(label) && all.includes(title)) pass('group header present: ' + label + ' / ' + title)
   else fail('group header missing: ' + label + ' / ' + title)
 }

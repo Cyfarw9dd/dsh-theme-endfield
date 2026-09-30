@@ -208,11 +208,12 @@ const mod = loaded.factory(() => null)
 try { mod.apply(ctx) } catch (e) { fail('apply() threw: ' + e.message); process.exit(1) }
 pass('apply() completed with a sessions service present')
 
-/* --- 1. DEFAULT OFF: a real turn edge must announce NOTHING and, critically,
-       the feature must not even be subscribed (an off switch that still listens
-       is the cost this design explicitly refuses). --- */
-if (sessionA.subscriberCount === 0) pass('默认关闭时不订阅会话（关闭即零开销）')
-else fail('switched off, but the session already has ' + sessionA.subscriberCount + ' subscriber(s)')
+/* --- 1. DEFAULT OFF: a real turn edge must announce NOTHING. The session
+        subscription is now SHARED with the notify module (notifyDone defaults
+        ON), so one subscriber may legitimately exist - what must stay true is
+        that thunder itself stays silent. --- */
+if (sessionA.subscriberCount <= 1) pass('subscribed at most once (thunder+notify share the watch)')
+else fail('shared watch duplicated: ' + sessionA.subscriberCount + ' subscriber(s)')
 sessionA.set({ running: true })
 if (shownWord() === null) pass('默认关闭时任务开始不显示任何内容')
 else fail('switched off but announced: ' + shownWord())

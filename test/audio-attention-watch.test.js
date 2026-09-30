@@ -215,19 +215,22 @@ if (poll === undefined) {
     'a plain UI card that is not a confirmation box stays silent')
 }
 
-/* --- 4. switching the audio feature off stops the watcher --- */
+/* --- 4. switching audio off: the watcher stays armed for NOTIFICATIONS ---
+   The poll now serves two consumers (audio + notify). With notify on (the
+   default), turning audio off keeps the poll running but silences reporting;
+   retiring the poll entirely needs notifications off too. */
 {
-  const handles = polls.length
-  prefStore.setField('audioEnabled', '0')
-  check(polls.filter(Boolean).length === 0 || polls.length > handles,
-    'turning audio notifications off retires the poll')
-  const after = polls.filter(Boolean).length
   const before = requests.length
+  prefStore.setField('audioEnabled', '0')
   presentSelector = '[data-approval-key]'
   for (const fn of polls) if (fn) fn()
   check(requests.length === before, 'with audio notifications off nothing is reported')
+  const handles = polls.length
+  prefStore.setField('notify', '0')
+  check(polls.filter(Boolean).length === 0 || polls.length > handles,
+    'turning BOTH audio and notifications off retires the poll')
   prefStore.setField('audioEnabled', '1')
-  void after
+  prefStore.setField('notify', '1')
 }
 
 console.log(failures === 0 ? '\nall attention-watcher checks passed' : `\n${failures} failure(s)`);

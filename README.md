@@ -35,14 +35,20 @@ dsh plugin --profile web rm dsh-theme-endfield
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [docs/endfield-ui-research.md](docs/endfield-ui-research.md) | 官网 UI 设计语言调研：色彩频次、交互语法证据、徽标素材盘点 |
-| [docs/design-language.md](docs/design-language.md) | 色板、令牌映射与对比度规则 |
-| [docs/features.md](docs/features.md) | 功能行为、默认值、存储键与边界情况 |
-| [docs/engineering-notes.md](docs/engineering-notes.md) | 算法、层叠、动画和性能实现说明 |
-| [docs/testing.md](docs/testing.md) | 校验脚本与测试套件说明 |
-| [docs/contour-trail.md](docs/cookbook/contour-trail.md) | 鼠标轨迹的采样、衰减与验证 |
+| 文档 | 层 | 内容 |
+| --- | --- | --- |
+| [docs/AGENTS.md](docs/AGENTS.md) | 治理 | 文档分层规则与贡献流程 |
+| [docs/architecture.md](docs/architecture.md) | 主题 | 双半结构、样式表组织、验证链 |
+| [docs/glossary.md](docs/glossary.md) | 主题 | 术语与令牌速查 |
+| [docs/design-language.md](docs/design-language.md) | 主题 | 色板、令牌映射与对比度规则 |
+| [docs/endfield-ui-research.md](docs/endfield-ui-research.md) | 主题 | 官网 UI 设计语言调研：色彩频次、交互语法证据、徽标素材盘点 |
+| [docs/features.md](docs/features.md) | 主题 | 功能行为、默认值、存储键与边界情况 |
+| [docs/testing.md](docs/testing.md) | 主题 | 校验脚本与测试套件说明 |
+| [docs/engineering-notes.md](docs/engineering-notes.md) | 主题 | 工程深水笔记：实现决策与实测数据 |
+| [docs/development.md](docs/development.md) | 主题 | 开发与发布工作流 |
+| [docs/git.md](docs/git.md) | 主题 | Git 提交策略：仅用户明示时提交，Conventional Commits 规范 |
+| [docs/cookbook/](docs/cookbook/) | 手册 | 功能专题：[音频通知](docs/cookbook/audio-notifications.md) · [等高线轨迹](docs/cookbook/contour-trail.md) · [worker](docs/cookbook/contour-worker.md) · [扫描边界](docs/cookbook/contour-scan-bounds.md) · [磨砂玻璃](docs/cookbook/glass.md) |
+| [docs/notes/](docs/notes/) | 记录 | 一次性存档（PR 说明等） |
 
 ## 开发与验证
 

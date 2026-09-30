@@ -31,4 +31,5 @@
 2. 生成物（音效、等高线 worker、徽标掩码）只改源与脚本，`--check` 防漂移
 3. 素材来源政策：只从官方渠道下载；第三方来源需显式批准并在
    `scripts/build-*.js` 头注与 README「素材归属」双重登记
-4. 提交遵循 Conventional Commits；作者身份用仓库本地 git config
+4. **仅用户明示「提交」时才 commit**（不主动 push）；提交遵循 Conventional Commits，
+   细则见 [git.md](git.md)；作者身份用仓库本地 git config

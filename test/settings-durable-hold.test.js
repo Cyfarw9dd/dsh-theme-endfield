@@ -31,7 +31,7 @@ const ROOT = path.resolve(__dirname, '..')
 const src = fs.readFileSync(path.join(ROOT, 'client.js'), 'utf8')
 
 const FIELD_DEFAULTS = {
-  enabled: '1', palette: 'valley', radius: 'square', contour: '0',
+  enabled: '1', palette: 'wuling', radius: 'square', contour: '0',
   contourAnim: '1', contourFps: '24', contourSpeed: '2',
   contourScrollPause: '1', watermark: '1', watermarkPersist: '0',
   loader: '0', thunder: '0', thunderAnim: '0',
@@ -186,7 +186,7 @@ const radiusBtn = findBtn(/切换直角|切换圆角/)
 if (!radiusBtn) { fail('no radius toggle button rendered'); process.exit(1) }
 try { radiusBtn.props.onClick() } catch (e) { fail('radius toggle threw: ' + e.message) }
 
-const paletteRow = buttons.filter((b) => /切换武陵青|切换谷地黄/.test(textOf(b)))[0]
+const paletteRow = buttons.filter((b) => /切换武陵青|切换谷地黄|切换终末地灰/.test(textOf(b)))[0]
 if (!paletteRow) { fail('no palette toggle button rendered'); process.exit(1) }
 try { paletteRow.props.onClick() } catch (e) { fail('palette toggle threw: ' + e.message) }
 
@@ -204,13 +204,17 @@ scope2.serve()
 if (scope2.served === true) pass('served the namespace: snapshot flipped to ready')
 
 const writes = scope2.wireWrites
-const palReplayed = writes.some(([f, v]) => f === 'palette' && v === 'wuling')
+/* The toggle ran while the namespace was unserved, so it decided against the
+   client's own fallback default (终末地灰) and wrapped to valley; the served
+   document holds wuling, so a replayed write of valley both proves the replay
+   and differs from what the host already had. */
+const palReplayed = writes.some(([f, v]) => f === 'palette' && v === 'valley')
 const radReplayed = writes.some(([f, v]) => f === 'radius' && v === 'round')
-if (palReplayed) pass('held palette=wuling replayed once the namespace became ready')
-else fail('palette=wuling was never replayed; write list = ' + JSON.stringify(writes))
+if (palReplayed) pass('held palette=valley replayed once the namespace became ready')
+else fail('palette=valley was never replayed; write list = ' + JSON.stringify(writes))
 if (radReplayed) pass('held radius=round replayed once the namespace became ready')
 else fail('radius=round was never replayed; write list = ' + JSON.stringify(writes))
-if (scope2.wireValue('radius') === 'round' && scope2.wireValue('palette') === 'wuling') pass('host section now holds both held edits')
+if (scope2.wireValue('radius') === 'round' && scope2.wireValue('palette') === 'valley') pass('host section now holds both held edits')
 else fail('host section did not receive both edits: radius=' + scope2.wireValue('radius') + ' palette=' + scope2.wireValue('palette'))
 
 if (failures === 0) pass('all durable-hold checks passed')

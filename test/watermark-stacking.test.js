@@ -115,14 +115,18 @@ const mk = (alpha) => `<!doctype html><html><head><meta charset="utf-8"><style>
     line-height:32px}
   .composer{border:1px solid var(--dsw-alias-border-l1);
     background:var(--dsw-alias-bg-layer-1);padding:14px;font-size:14px;
-    color:var(--dsw-alias-label-secondary);position:relative;margin-top:120px}
+    color:var(--dsw-alias-label-secondary);position:relative;margin-top:24px}
   ._7KE1Ra_root{min-width:0;position:relative}
   /* the model-select dropdown: z-index 20, but scoped inside composerHero */
   ._7KE1Ra_menu{z-index:20;border:1px solid var(--dsw-alias-border-inverted);
-    background:var(--dsw-specific-menu);width:min(240px,100vw - 32px);
+    background:var(--dsw-specific-menu);width:min(120px,100vw - 32px);
     max-height:min(360px,100vh - 96px);
     display:flex;flex-direction:column;padding:4px;position:absolute;
-    bottom:calc(100% + 8px);right:0;overflow:hidden}
+    /* A SHORT menu straddling the mark's middle: it must overlap real ink, but
+       the mark is now a ~13vw centred stamp (not the old 50vw letter line), so
+       the band heuristic needs ink ABOVE and BELOW the menu — a menu taller than
+       the mark covers it entirely and the 'not erased' check goes vacuous. */
+    bottom:calc(100% + 118px);left:50%;right:auto;transform:translateX(-50%);overflow:hidden}
   ._7KE1Ra_group{padding:6px 10px;font-size:11px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--dsw-alias-label-secondary)}
   ._7KE1Ra_row{padding:7px 10px;font-size:13px;
@@ -139,15 +143,7 @@ const mk = (alpha) => `<!doctype html><html><head><meta charset="utf-8"><style>
           <div class="composer">Message DeepSeek Harness…
             <div class="_7KE1Ra_root"><div class="_7KE1Ra_menu">
               <div class="_7KE1Ra_group">DeepSeek</div>
-              <div class="_7KE1Ra_row">DeepSeek-V4-Flash</div>
               <div class="_7KE1Ra_row">DeepSeek-V4-Pro</div>
-              <div class="_7KE1Ra_group">agentrouter</div>
-              <div class="_7KE1Ra_row">gpt-5.6-sol</div>
-              <div class="_7KE1Ra_group">agentrouter</div>
-              <div class="_7KE1Ra_row">claude-opus-4-8</div>
-              <div class="_7KE1Ra_row">claude-opus-5</div>
-              <div class="_7KE1Ra_group">xiaomi</div>
-              <div class="_7KE1Ra_row">MiMo-V2-Flash</div>
             </div></div>
           </div>
         </div>
@@ -378,7 +374,7 @@ if (!g.mounted) fail('watermark never mounted -- the mock does not reproduce the
 else pass('watermark mounted in ' + g.mode + ' mode')
 
 // The comparison window must be the real popover, found in the pixels.
-if (!c.box || c.fillPx < 20000) {
+if (!c.box || c.fillPx < 5000) {
   fail('could not locate the dropdown fill in the render (' + c.fillPx + ' px)'
     + '\n      -> the assertion window is unknown; do not trust this run')
 } else {

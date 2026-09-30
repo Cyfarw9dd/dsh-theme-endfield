@@ -621,10 +621,10 @@ async function main() {
     if (stub.writes.length !== 0) fail('read-only boot wrote to the transport: ' + JSON.stringify(stub.writes))
 
     // Boot render: the section is still in flight, so the panel shows defaults.
-    const before = findButton(panelButtons(client), /切换武陵|切换谷地|Switch palette/)
+    const before = findButton(panelButtons(client), /切换武陵|切换谷地|切换终末地灰|Switch palette/)
     if (!before) fail('no palette toggle rendered (late-section read case)')
-    else if (!/切换武陵/.test(textOf(before))) {
-      fail('precondition: panel should start on the DEFAULT palette, label=' + JSON.stringify(textOf(before)))
+    else if (!/切换谷地黄/.test(textOf(before))) {
+      fail('precondition: panel should start on the DEFAULT palette (终末地灰 -> offers 谷地黄), label=' + JSON.stringify(textOf(before)))
     } else {
       pass('precondition: panel starts on the schema default while the section is in flight')
     }
@@ -646,9 +646,11 @@ async function main() {
         + JSON.stringify(paletteSlot) + ' (this is the reported reset bug)')
     }
 
-    const after = findButton(panelButtons(client), /切换武陵|切换谷地|Switch palette/)
+    const after = findButton(panelButtons(client), /切换武陵|切换谷地|切换终末地灰|Switch palette/)
     const afterLabel = after ? textOf(after) : ''
-    if (/切换谷地/.test(afterLabel)) {
+    // The 3-way cycle is gray -> valley -> wuling -> gray, so from the served
+    // wuling the button must offer the wrap-around back to 终末地灰.
+    if (/切换终末地灰/.test(afterLabel)) {
       pass('panel re-synced onto the late-served palette (wuling), not the default')
     } else {
       fail('panel did NOT re-sync after the section settled — it still offers '
@@ -706,9 +708,9 @@ async function main() {
     await drain()
 
     // Only now does the settings page mount (the user opens 设置).
-    const toggle = findButton(panelButtons(client), /切换武陵|切换谷地|Switch palette/)
+    const toggle = findButton(panelButtons(client), /切换武陵|切换谷地|切换终末地灰|Switch palette/)
     if (!toggle) fail('no palette toggle rendered (post-settle mount case)')
-    else if (/切换谷地/.test(textOf(toggle))) {
+    else if (/切换终末地灰/.test(textOf(toggle))) {
       pass('panel mounting after the section settled shows the stored palette, not the default')
     } else {
       fail('panel mounted after the section settled but still shows the default: '
@@ -753,13 +755,13 @@ async function main() {
     const client = bootClient({ configForms: stub.service })
     const buttons = panelButtons(client)
 
-    const toggle = findButton(buttons, /切换武陵|切换谷地|Switch palette/)
+    const toggle = findButton(buttons, /切换武陵|切换谷地|切换终末地灰|Switch palette/)
     if (!toggle) {
       fail('no palette toggle rendered (stale-state case)')
     } else {
       const before = textOf(toggle)
-      // The panel was rendered during 'loading', so it shows the default (谷地/valley).
-      if (/切换武陵/.test(before)) pass('precondition: panel shows the schema default palette while the section is in flight')
+      // The panel was rendered during 'loading', so it shows the default (终末地灰).
+      if (/切换谷地黄/.test(before)) pass('precondition: panel shows the schema default palette while the section is in flight')
       else pass('precondition: panel rendered during loading (shows ' + JSON.stringify(before) + ')')
 
       // Now the Host serves the stored value. No re-sync pass has run for the
@@ -771,18 +773,19 @@ async function main() {
       toggle.props.onClick()
       await drain()
 
-      // The stored value was wuling, so a store-derived toggle MUST write valley —
-      // i.e. flip away from what is actually stored. A state-derived toggle that
-      // wrongly believed it was already on valley would write wuling, re-asserting
-      // the old value and making the click a no-op after a refresh.
+      // The stored value was wuling, so a store-derived toggle MUST write gray
+      // (the 3-way cycle wraps wuling -> gray) — i.e. flip away from what is
+      // actually stored. A state-derived toggle that wrongly believed it was
+      // still on the default would write valley, re-asserting a bright value and
+      // making the click a no-op after a refresh.
       const w = stub.writes
       if (w.length === 0) {
         fail('a palette click against a settled section wrote nothing')
-      } else if (w[0].field === 'palette' && w[0].value === 'valley') {
-        pass('palette toggle decided from the STORE (stored wuling -> wrote valley)')
+      } else if (w[0].field === 'palette' && w[0].value === 'gray') {
+        pass('palette toggle decided from the STORE (stored wuling -> wrote gray)')
       } else {
         fail('palette toggle decided from stale React state: wrote '
-          + JSON.stringify(w[0]) + ', expected {field:palette, value:valley} — this is the '
+          + JSON.stringify(w[0]) + ', expected {field:palette, value:gray} — this is the '
           + '"change it, refresh, it reverted" defect')
       }
     }

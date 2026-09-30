@@ -17,11 +17,14 @@ const ROOT = path.resolve(__dirname, '..')
    dir that is hard to find afterwards. */
 const OUT = path.join(ROOT, '.kagent', 'shots')
 const chrome = [
+  process.env.CHROME_PATH,
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-].find((p) => fs.existsSync(p))
-if (!chrome) { console.error('no chrome'); process.exit(1) }
+  '/usr/bin/chromium-browser',
+  '/usr/bin/chromium',
+].filter(Boolean).find((p) => fs.existsSync(p))
+if (!chrome) { console.error('no chrome (set CHROME_PATH)'); process.exit(1) }
 
 /* Mock of the real conversation page. Class names and the opaque bg-base fills
    are copied from the installed @deepseek-ai bundles so the screenshot exercises
@@ -30,7 +33,7 @@ if (!chrome) { console.error('no chrome'); process.exit(1) }
    putting the class on <body>. Nothing else differs between the two renders,
    which is the point — if a surface does not change colour, it is not reading
    the palette variables. */
-const mk = (dark, wuling) => `<!doctype html><html><head><meta charset="utf-8"><style>
+const mk = (dark, palette, watermark) => `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body,#root{height:100%;margin:0}
   :root{
     --dsw-alias-bg-base:${dark ? '#101110' : '#e8e8e2'};
@@ -135,7 +138,7 @@ const mk = (dark, wuling) => `<!doctype html><html><head><meta charset="utf-8"><
           <table><thead><tr><th>role</th><th>谷地黄</th><th>武陵青</th></tr></thead>
           <tbody><tr><td>solid fill + ink</td><td>16.50:1</td><td>6.62:1</td></tr>
           <tr><td>dark icon ink</td><td>15.26:1</td><td>6.12:1</td></tr></tbody></table>
-          <div class="card">palette ${wuling ? '武陵青 #14d0d0' : '谷地黄 #fff500'} · scheme ${dark ? 'dark' : 'light'}</div>
+          <div class="card">palette ${palette === 'wuling' ? '武陵青 #14d0d0' : palette === 'gray' ? '终末地灰 #d9d9d9/#6a6a6a' : '谷地黄 #fff500'} · scheme ${dark ? 'dark' : 'light'}${watermark ? ' · watermark' : ''}</div>
         </div>
       </div></div>
       <div class="wSkVaW_composerSeat"><div class="composer">Message DeepSeek Harness…</div></div>
@@ -149,7 +152,7 @@ const mk = (dark, wuling) => `<!doctype html><html><head><meta charset="utf-8"><
      the localStorage store, so the LS.setItem calls this page used to make were
      silently ignored — every shot rendered the default palette with no contour. */
   const __prefs=(()=>{
-    const sec={enabled:'1',palette:${wuling ? "'wuling'" : "'valley'"},radius:'square',contour:'1',contourAnim:'1',contourFps:'24',contourSpeed:'2',contourScrollPause:'1',watermark:'0',watermarkPersist:'0',loader:'0',thunder:'0',thunderAnim:'0'}
+    const sec={enabled:'1',palette:${JSON.stringify(palette)},radius:'square',contour:'1',contourAnim:'1',contourFps:'24',contourSpeed:'2',contourScrollPause:'1',watermark:${watermark ? "'1'" : "'0'"},watermarkPersist:${watermark ? "'1'" : "'0'"},loader:'0',thunder:'0',thunderAnim:'0'}
     const ls=[]
     return { binder:{ bind:()=>({
       getSnapshot:()=>({status:'ready',value:sec,writable:true,mode:'host'}),
@@ -178,19 +181,25 @@ const mk = (dark, wuling) => `<!doctype html><html><head><meta charset="utf-8"><
 
 fs.mkdirSync(OUT, { recursive: true })
 fs.copyFileSync(path.join(ROOT, 'client.js'), path.join(OUT, 'client.js'))
-for (const wuling of [false, true]) {
-  for (const dark of [false, true]) {
-    const name = 'shot-' + (wuling ? 'wuling' : 'valley') + '-' + (dark ? 'dark' : 'light')
-    const page = path.join(OUT, name + '.html')
-    fs.writeFileSync(page, mk(dark, wuling))
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
-    execFileSync(chrome, [
-      '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-      '--virtual-time-budget=4000', '--window-size=1440,900',
-      '--user-data-dir=' + tmp,
-      '--screenshot=' + path.join(OUT, name + '.png'),
-      'file:///' + page.replace(/\\/g, '/'),
-    ], { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] })
-    console.log('wrote ' + path.join(OUT, name + '.png'))
-  }
+/* Three palettes x two schemes, plus one watermark-on shot of the default
+   palette so the official-emblem lockup (emblem + ENDFIELD letters) lands in a
+   real render that a human can open next to the assertions. */
+const shots = []
+for (const palette of ['valley', 'wuling', 'gray']) {
+  for (const dark of [false, true]) shots.push({ palette, dark, watermark: false })
+}
+shots.push({ palette: 'gray', dark: false, watermark: true })
+for (const { palette, dark, watermark } of shots) {
+  const name = 'shot-' + palette + '-' + (dark ? 'dark' : 'light') + (watermark ? '-wm' : '')
+  const page = path.join(OUT, name + '.html')
+  fs.writeFileSync(page, mk(dark, palette, watermark))
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shot-'))
+  execFileSync(chrome, [
+    '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+    '--virtual-time-budget=4000', '--window-size=1440,900',
+    '--user-data-dir=' + tmp,
+    '--screenshot=' + path.join(OUT, name + '.png'),
+    'file:///' + page.replace(/\\/g, '/'),
+  ], { timeout: 120000, stdio: ['ignore', 'ignore', 'ignore'] })
+  console.log('wrote ' + path.join(OUT, name + '.png'))
 }

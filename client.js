@@ -126,7 +126,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     const PREFS_NS = 'dsh-theme-endfield'
     const PREFS_FIELD_DEFAULTS = {
       enabled: '1',
-      palette: 'valley',
+      palette: 'gray',
       radius: 'square',
       glass: 'off',
       contour: '0',
@@ -1154,7 +1154,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       else document.body.classList.remove('theme-endfield-round')
     }
 
-    /* ---------- accent palette: 谷地黄 (default) / 武陵青 ----------
+    /* ---------- accent palette: 终末地灰 (default) / 谷地黄 / 武陵青 ----------
        The palette is ONE class on <body>; the stylesheet defines both variable
        sets, so switching is a class flip with no restyling work here. Because the
        app applies its theme tokens as inline body styles and this theme's token
@@ -1170,19 +1170,31 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
        by JS — hence syncPalette() redraws it, and the observer below catches a flip
        made in another tab or by the browser restoring state. */
     const PALETTE_KEY = 'dsh-theme-endfield-palette'
-    const PALETTE_CLASS = 'theme-endfield-wuling'
-    const readPalette = () => (prefsGet(PALETTE_KEY) === 'wuling' ? 'wuling' : 'valley')
+    /* 终末地灰 (gray) is the DEFAULT, so an unset field and any unrecognised value
+       both mean gray. Only the exact strings 'valley' / 'wuling' select a bright
+       palette, which keeps a corrupt stored value from silently changing the
+       shipped look. valley and wuling carry their own body class; gray's class
+       exists too (its block overrides the base body block) so every non-default
+       state is observable from the DOM. */
+    const PALETTE_CLASSES = { gray: 'theme-endfield-gray', wuling: 'theme-endfield-wuling' }
+    const readPalette = () => {
+      const stored = prefsGet(PALETTE_KEY)
+      return stored === 'valley' || stored === 'wuling' ? stored : 'gray'
+    }
     /* Read from the DOM, not from storage: the canvas must match what is actually
        on screen. While the theme is switched off the class is absent, so the sheet
        keeps its default palette instead of following an ignored preference. */
-    const isWulingPalette = () => typeof document !== 'undefined'
+    const isPalette = (name) => typeof document !== 'undefined'
       && document.body !== null
-      && document.body.classList.contains(PALETTE_CLASS)
+      && document.body.classList.contains(PALETTE_CLASSES[name])
     const syncPaletteClass = () => {
       if (typeof document === 'undefined' || document.body === null) return
-      // The class only applies while the theme owns the page; unmount() drops it.
-      if (isEnabled() && readPalette() === 'wuling') document.body.classList.add(PALETTE_CLASS)
-      else document.body.classList.remove(PALETTE_CLASS)
+      // A class only applies while the theme owns the page; unmount() drops it.
+      const active = isEnabled() ? readPalette() : null
+      for (const [name, cls] of Object.entries(PALETTE_CLASSES)) {
+        if (name === active) document.body.classList.add(cls)
+        else document.body.classList.remove(cls)
+      }
     }
 
     /* ---------- background ENDFIELD watermark (settings-toggleable) ----------
@@ -1276,7 +1288,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       const cy = r.top + r.height / 2
       const cx = r.left + r.width / 2
       const vw = (typeof window !== 'undefined' && window.innerWidth) || (typeof document !== 'undefined' ? document.documentElement.clientWidth : 0)
-      const top = (cy - 55) + 'px'
+      // Half the logo box: 13vw wide (240px cap) x square aspect / 2 (see the
+      // ::after sizing and the height calc in styleWatermark).
+      const half = vw * 0.13 * 0.51
+      const top = (cy - half) + 'px'
       const tx = 'translateX(' + (cx - vw / 2) + 'px)'
       // Only write when the value actually changed, so a stable layout costs nothing.
       if (watermarkEl.style.top !== top) watermarkEl.style.top = top
@@ -1303,6 +1318,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       s.color = 'var(--dsw-alias-label-primary)'
       s.textTransform = 'uppercase'
       s.userSelect = 'none'
+      /* Single-child mark: the official logo paints as the ::after mask. */
       /* The theme's own face, via its own variable. It used to read
          --dsw-font-family directly, which now points at the APP's stack (the
          theme no longer overrides that token) — so reading it here would silently
@@ -1314,14 +1330,20 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          a scheme flip simply re-resolves the variable — no observer, no repaint
          logic here. An inline numeric opacity would also outrank the stylesheet,
          which is exactly what made this value unthemeable before. */
-      s.opacity = 'var(--edge-wm-alpha)'
+      /* Opacity now lives on the ::before (letters) and ::after (emblem) rules in
+         the stylesheet instead of on the element, for the same themeability
+         reason as before (CSS variables, scheme-dependent values, no repaint on
+         flip) plus one new one: the official emblem mask is a soft blur that
+         needs a slightly HIGHER alpha than the letters to read as part of the
+         same mark, and one element-level opacity cannot express that. */
       if (mode === 'hero') {
         s.position = 'fixed'
         s.left = '0'
         s.right = '0'
         s.top = ''
         s.bottom = ''
-        s.height = '110px'
+        /* Logo-only box: 13vw wide (240px cap) x the square viewBox. */
+        s.height = 'calc(min(13vw, 240px) * 1.02)'
         /* z-index 0, NOT 1 — this is the fix for the wordmark painting on top of
            the app's own popovers, and the cause was a z-index TIE:
              the hero composer wrapper ('*_composerHero') is position:relative +
@@ -2373,6 +2395,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          谷地黄 light #beaf006b  (0.42)  1.291:1
          武陵青 dark  #14d0d045  (0.27)  1.755:1  (+1.2%)
          武陵青 light #14d0d07a  (0.48)  1.289:1  (-0.2%)
+         终末地灰 dark #d9d9d938  (0.22)  1.735:1  (+0.05%)
+         终末地灰 light #66666634  (0.20)  1.296:1  (+0.3%)
        Both cyan alphas came DOWN from the first version (0.32 / 0.30 at the old
        darker accent): a brighter stroke composites stronger, so holding the same
        on-screen strength means less of it. Light-mode cyan still needs no darkened
@@ -2380,15 +2404,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
        below are what the test greps for, so renaming them breaks the check loudly
        instead of silently. */
     const contourStroke = () => {
-      const cyan = isWulingPalette()
+      const gray = isPalette('gray')
+      const cyan = isPalette('wuling')
       if (isDarkScheme()) {
+        // EDGE_STROKE_DARK_GRAY: #d9d9d938
         // EDGE_STROKE_DARK_CYAN: #14d0d045
         // EDGE_STROKE_DARK_YELLOW: #fff50033
-        return cyan ? '#14d0d045' : '#fff50033'
+        return gray ? '#d9d9d938' : (cyan ? '#14d0d045' : '#fff50033')
       }
+      // EDGE_STROKE_LIGHT_GRAY: #66666634
       // EDGE_STROKE_LIGHT_CYAN: #14d0d07a
       // EDGE_STROKE_LIGHT_YELLOW: #beaf006b
-      return cyan ? '#14d0d07a' : '#beaf006b'
+      return gray ? '#66666634' : (cyan ? '#14d0d07a' : '#beaf006b')
     }
 
     const contourDrawLines = () => {
@@ -3801,6 +3828,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body {
         --edge-accent: #fff500;
         --edge-accent-rgb: 255, 245, 0;
+        /* Text paired with the accent as a SOLID FILL. The bright palettes carry
+           ink-coloured text on their accents; 终末地灰's dark-scheme fill (#626262)
+           needs white instead, so the pairing travels as its own token. */
+        --edge-accent-ink: #101110;
         /* Hover/pressed step of the accent, still carrying ink-coloured text:
            谷地黄 13.60:1 · 武陵青 5.31:1. */
         --edge-accent-deep: #e8e000;
@@ -3847,6 +3878,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          teal. This is the brightest step that still looks like 武陵青 in both
          schemes. */
       body.theme-endfield-wuling {
+        --edge-accent-ink: #101110;
         --edge-accent: #14d0d0;
         /* Same colour, channel-list form, for the ~30 rgba() washes. Derived from
            the hex above and kept beside it so the two cannot drift. */
@@ -3881,6 +3913,60 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
            measured 6.0. */
         --edge-glow-light: 0.08;
         --edge-glow-dark: 0.04;
+      }
+      /* ---------- 终末地灰 (Endfield industrial gray) ----------
+         The official site's own interaction language, measured from its shipped
+         CSS (endfield.hypergryph.com bundles on web.hycdn.cn): hover and selection
+         surfaces are a GRAY SCALE — dark button hover #484848, list hover #626262,
+         light hover #f0f0f0 / #d9d9d9 — while yellow stays a rare signal. This
+         palette makes the theme follow that grammar by default.
+
+         WHY ACCENT AND STATUS SPLIT HERE. No mid-gray is AA in BOTH directions
+         on near-black: white text on the fill needs luminance <= 0.183 while
+         gray-as-text-on-ink needs >= 0.200 — the intervals do not overlap. The
+         palette therefore uses the roles the architecture already provides:
+           --edge-accent / -deep   FILLS, paired with --edge-accent-ink text
+           --edge-status-dark/-mid 'accent as text' roles in dark mode
+         The bright palettes keep status-dark == accent, so for them the split
+         changes nothing visually.
+
+         Values are MEASURED (WCAG, test/palette-contrast.test.js):
+           light fill #d9d9d9 + ink   13.41:1 · hover #cccccc + ink 11.78:1
+           dark  fill #6a6a6a + white  5.41:1 · hover #424242 + white 10.04:1
+           dark  status #d9d9d9        13.41 / 12.40:1 (base / layer-1)
+           dark  status-mid #b3b3b3     9.03 /  8.35:1
+           light status #666666         4.67 /  5.11:1
+           light status-mid #4a4a4a     7.20 /  7.89:1
+           dark  accent as icon ink     3.49 / 3.28:1 (>= 3 floor, both surfaces) */
+      body.theme-endfield-gray {
+        --edge-accent-ink: #101110;
+        --edge-accent: #d9d9d9;
+        /* Neutral wash base shared by both schemes: on cream a gray wash reads as
+           soft shading, on ink as a soft lift — the same 'composited contrast'
+           doctrine the contour strokes follow (tuned per surface elsewhere). */
+        --edge-accent-rgb: 126, 126, 126;
+        --edge-accent-deep: #cccccc;
+        /* The one slot the accent must carry as a FILL on cream: a light gray
+           would dissolve into the paper, so it dips to the official #666666. */
+        --edge-accent-onpaper: #666666;
+        --edge-status-light: #666666;
+        --edge-status-light-mid: #4a4a4a;
+        --edge-status-dark: #d9d9d9;
+        --edge-status-dark-mid: #b3b3b3;
+        --edge-glow-light: 0.08;
+        --edge-glow-dark: 0.04;
+      }
+      /* Dark scheme flips the FILL role only: an official-family mid gray
+         (#6a6a6a, between the site's #666 and #7e7e7e) under WHITE ink, hover
+         deepens to official #424242. #6a6a6a is the darkest gray that still
+         clears the 3:1 NON-TEXT floor on BOTH dark surfaces (3.49:1 on bg-base,
+         3.28:1 on layer-1) — the caret, focus ring and scrollbar hover read the
+         accent directly. Text roles stay on the light grays in both schemes. */
+      body.theme-endfield-gray[data-ds-dark-theme] {
+        --edge-accent-ink: #ffffff;
+        --edge-accent: #6a6a6a;
+        --edge-accent-deep: #424242;
+        --edge-accent-onpaper: #6a6a6a;
       }
       /* Token-derived aliases. These MUST be on body, not :root — see above. */
       body {
@@ -4006,19 +4092,55 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          Floor is ~1.06:1, below which the mark reads as absent. */
       body {
         --edge-wm-alpha: 0.13;
+        /* The emblem mask is NORMALISED to full strength by the build (the official
+           PNG's own alpha peaks at ~40%, which under this opacity read as nothing),
+           so the emblem needs only a small lift over the letters to sit in the same
+           presence band. */
+        --edge-wm-emblem-alpha: 0.16;
       }
       body[data-ds-dark-theme] {
         --edge-wm-alpha: 0.085;
+        --edge-wm-emblem-alpha: 0.105;
       }
-      /* Translation-proof glyphs: the wordmark is drawn from the CSS 'content'
-         property, not a DOM text node, so page translators (which walk text nodes)
-         have nothing to rewrite — the brand name cannot be turned into "终末地" or
-         similar. The element's own text stays empty; ::before carries the letters. */
-      [data-endfield-watermark]::before {
-        content: 'ENDFIELD';
+      /* The watermark is the Endfield Industries LOGO ALONE as a VECTOR mask
+         (Yue-plus/endfield_icons' vectorization of the official Hypergryph
+         mark; see scripts/build-emblem.js for provenance and the minimize
+         pass). No DOM text, no CSS glyphs — translators have nothing to
+         rewrite, and being vector it is crisp at every zoom and pixel ratio
+         (the previous pipeline was a raster mask capped at its 755px source).
+         DEFAULT mask mode (alpha) is deliberate: the paths' own alpha channel
+         IS the shape, so the default black fill paints the mark with
+         currentColor and both colour schemes stay automatic. The viewBox is
+         square (512x512), hence the 1/1 aspect. */
+      [data-endfield-watermark]::after {
+        content: '';
         display: block;
-        white-space: nowrap;
+        width: 13vw;
+        max-width: 240px;
+        aspect-ratio: 1 / 1;
+        background: currentColor;
+        opacity: var(--edge-wm-emblem-alpha, var(--edge-wm-alpha));
+        -webkit-mask-image: var(--edge-emblem);
+        mask-image: var(--edge-emblem);
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
       }
+      /* Without mask support the logo cannot paint at all; the watermark
+         degrades to nothing rather than to a wrong-looking mark. */
+      @supports not ((mask-image: none) or (-webkit-mask-image: none)) {
+        [data-endfield-watermark]::after { content: none; }
+      }
+      /* EMBLEM_MASK_BEGIN (generated by scripts/build-emblem.js — do not edit by hand) */
+  /* Vector emblem mask (Yue-plus/endfield_icons vectorization of the official
+     Hypergryph mark; see scripts/build-emblem.js for provenance). Minimized
+     SVG 22153 bytes / 29KB base64. Alpha mask:
+     the paths' own alpha is the shape. Regenerate: node scripts/build-emblem.js */
+  body { --edge-emblem: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Zz48cGF0aCBkPSJNMTA0LjUsMjM5LjJ2NDAuN0g4My4yVjIwM2gyMS43bDI5LjIsNDAuMWwwLjQtMC4xVjIwM2gxLjZjMTEuNiwwLDIzLjItMC4xLDM0LjgsMGMxMS42LDAuMSwyMS41LDQuMSwyOS41LDEyLjUgYzYsNi4yLDkuMSwxMy44LDkuOSwyMi40cy0wLjQsMTUuMS00LjIsMjJjLTUuMywxMC4xLTEzLjksMTYtMjQuOSwxOC43Yy0zLjUsMC44LTcsMS4zLTEwLjYsMS4zYy0xMS43LDAuMS0yMy41LDAuMS0zNS4yLDAuMUgxMzQgbC0yOS4yLTQxTDEwNC41LDIzOS4yIE0xNTYuNSwyNjAuM2M1LjktMC4yLDExLjYsMC40LDE3LjQtMC42YzkuMS0xLjYsMTQuMi03LDE1LTE2LjJjMC42LTYuNy0xLjMtMTIuNS02LjktMTYuNyBjLTMtMi4zLTYuNy0zLjctMTAuNS0zLjljLTQuNy0wLjMtOS4zLTAuMS0xMy45LTAuMmwtMSwwLjJMMTU2LjUsMjYwLjN6Ii8+PHBhdGggZD0iTTM2NC40LDI4MHYtNzYuOWgyMS4ydjU3LjFoMzAuNlYyMDNoMS44YzExLjQsMCwyMi44LTAuMSwzNC4xLDBjMTEuNCwwLjEsMjIuMiw0LjMsMzAuMiwxMy4yYzYsNi43LDksMTQuNiw5LjQsMjMuNSBjMC40LDYuNi0wLjksMTMuMy0zLjcsMTkuM2MtNS4zLDEwLjUtMTQuMSwxNi44LTI1LjQsMTkuN2MtMy41LDAuOS03LDEuMy0xMC42LDEuM2MtMjguNywwLjEtNTcuNSwwLjEtODYuMiwwLjFoLTEuNSBNNDM3LjksMjYwLjUgaDguN2MzLDAsNi0wLjMsOC45LTAuN2M3LjEtMS40LDEyLjQtNS4yLDE0LjItMTIuNmMwLjUtMi4yLDAuNy00LjQsMC41LTYuN2MtMC4zLTcuMi0zLjgtMTIuNC0xMC4zLTE1LjVjLTIuNC0xLjItNS4xLTEuOS03LjktMS45IGMtNC4zLTAuMS04LjUtMC4xLTEyLjgtMC4xbC0xLjMsMC4yVjI2MC41eiIvPjxwYXRoIGQ9Ik00MiwyMjIuOGMwLDAuNy0wLjEsMS4zLTAuMSwxLjl2Ny44aDI2LjJ2MTcuOWgtMjZ2OS45aDM2LjdWMjgwSDIwLjZ2LTc2LjloNTcuNXYxOS43SDQyeiIvPjxwb2x5Z29uIHBvaW50cz0iMzAxLjcsMjc5LjkgMzAxLjcsMjAzIDM1OS4zLDIwMyAzNTkuMywyMjIuNyAzMjMuMywyMjIuNyAzMjMuMywyMzIuNCAzNDkuMiwyMzIuNCAzNDkuMiwyNTAuMyAzMjMuMywyNTAuMyAzMjMuMywyNjAuMyAzNjAsMjYwLjMgMzYwLDI3OS45ICIvPjxwb2x5Z29uIHBvaW50cz0iMjcxLjIsMjIyLjggMjM2LjIsMjIyLjggMjM2LjIsMjM0IDI2My4xLDIzNCAyNjMuMSwyNTMuOSAyMzYuMSwyNTMuOSAyMzYuMSwyODAgMjE0LjgsMjgwIDIxNC44LDIwMy4xIDI3MS4yLDIwMy4xICIvPjxwYXRoIGQ9Ik00NDYuMywxMDQuNGwtMS43LDNsLTEtMC40Yy0xNS41LTkuMy0zMS45LTE2LjgtNDguNC0yNC4yYy05LjYtNC40LTE5LjQtOC4zLTI5LjUtMTEuNmMtNS0xLjYtOS44LTEuNi0xNC4zLDEuNCBjLTAuNywwLjQtMS4zLDAuOS0xLjksMS41Yy01LjYsNC42LTguNSwxMS0xMS4xLDE3LjVjLTMuMiw3LjgtNS40LDE2LjEtNi41LDI0LjVjLTAuMywyLjItMC41LDQuNC0wLjgsNi41IGMtMC43LDYuNCwxLjksMTEuNCw3LjYsMTQuNWM1LjQsMywxMS4yLDUuMSwxNy4yLDYuMmM4LjYsMS44LDE3LjEsMy41LDI1LjcsNS40YzYuOSwxLjYsMTMuNSw0LjcsMTkuMSw5YzMuNCwyLjUsNi43LDUuMiwxMC4xLDcuOSBjLTAuNSwwLjgtMC45LDEuNi0xLjQsMi40Yy0yLjEtMS4zLTQuMS0yLjQtNi0zLjZjLTQuOS0zLjMtMTAuMi02LTE1LjctNy45Yy02LjItMi4xLTEyLjYtMy4zLTE5LjEtMy42IGMtOS41LTAuNS0xOC44LTIuMS0yNy45LTQuOGwtMTEuNi0zLjVjLTUuOS0xLjgtMTEuMi00LjktMTYuMi04LjVjLTIuNi0xLjktMy43LTQuNS0zLjctNy42czEtNi42LDItOS44YzEuOS01LjksMy43LTExLjYsNi42LTE3IGMwLjMtMC43LDAuNi0xLjMsMC44LTEuOWMwLjctMi4zLDIuMS00LjMsMy45LTUuOWMzLjMtMywzLjYtNi44LDEuNC0xMS40YzEuNy04LjgsNC4zLTE3LjQsNy45LTI1LjdIMzY1bDEuOSwxLjQgYzguNSw2LjcsMTcuMiwxMy4xLDI2LjYsMTguOGM0LjEsMi40LDguMyw0LjYsMTIuNiw2LjVjMTMuNCw2LjEsMjYuNCwxMy4xLDM5LjMsMjAuMUw0NDYuMywxMDQuNCIvPjxwYXRoIGQ9Ik0yNDAuNyw0MDcuNWMtNi44LTExLjctMTMuNS0yMy4zLTIwLjEtMzQuOGMxLjQtMTAuMi0xLTE5LjUtNS42LTI4LjRjLTMuNy03LjItOC4yLTEzLjktMTIuNy0yMC44bC0xMC44LTE2LjNsLTAuOS0xLjUgYzEuMS0wLjQsMzEuNy0wLjcsMzQuNC0wLjJjNiw2LjIsMTguOCwyOC42LDIwLjMsMzUuN2MtMi43LDEuNy0zLjEsMy0yLjIsNi4yYzIuMiw2LjcsNC4zLDEzLjQsNi41LDIwYzAuNSwxLjYsMC43LDMuMiwwLjYsNC45IGMtMC42LDcuMi0xLjYsMTQuMy0zLjksMjEuMWMtMS42LDQuNS0zLjQsOC45LTUuMiwxMy4zQzI0MS4xLDQwNi45LDI0MC45LDQwNy4yLDI0MC43LDQwNy41Ii8+PHBhdGggZD0iTTQ0My4xLDEwOS45bC0xLjksMy4zbC0yLTEuMWwtMjEuOC0xMi4yYy02LjUtMy42LTEzLjctNS42LTIxLjEtNi42Yy04LjgtMS4xLTE3LjgsMC0yNi4xLDMuM2MtNS4zLDIuMS0xMC4xLDUuNC0xNCw5LjYgYy0yLDItMy42LDQuNC00LjcsN2MtMi4yLDUuMi0xLjQsMTAsMi4yLDE0LjNjMy42LDQuMyw3LjYsNi4zLDEyLjUsNy43YzUuNCwxLjYsMTEsMi43LDE2LjYsMy4yYzguNywwLjksMTYsNC45LDIxLjcsMTEuNSBjMywzLjYsNiw3LjMsOS4xLDExYy0wLjQsMC43LTAuOCwxLjQtMS4zLDIuM2wtMS41LTFsLTctNS42Yy02LjctNS40LTE0LjQtOC41LTIyLjYtMTAuNmMtNS40LTEuNC0xMS0yLjEtMTYuNS0zLjMgcy05LjUtMi4zLTE0LjItMy42Yy0yLjMtMC42LTQuNS0xLjUtNi44LTIuMmMtMi42LTAuOS00LjktMi40LTYuOC00LjRjLTEuNS0xLjYtMi40LTMuNi0yLjctNS43Yy0wLjgtNi41LDAuMy0xMi44LDIuMi0xOC45IGMxLjktNi4yLDMuOS0xMi44LDYtMTkuMWMxLjgtNS40LDUuMi0xMC4yLDkuOC0xMy42YzMuMS0yLjUsNy4xLTMuMywxMC45LTIuMmM3LjcsMi4yLDE1LjEsNC45LDIyLjMsOC4zYzEzLjIsNiwyNi41LDEyLDM5LjUsMTguMyBjNiwyLjksMTEuNyw2LjUsMTcuNiw5LjhDNDQyLjcsMTA5LjUsNDQyLjksMTA5LjcsNDQzLjEsMTA5LjkiLz48cGF0aCBkPSJNMjA4LjcsMTk2Yy02LjUsMC0xMi44LTAuMi0xOS4yLDAuMWMtMy45LDAuMy03LjgtMC45LTEwLjgtMy4zYy0zLjgtMi43LTcuOC01LjItMTItNy4zYy0xMC4zLTUuNS0xOS4yLTEzLjQtMjUuOC0yMy4xIGMtNC43LTYuNy05LjYtMTMuMS0xNC41LTE5LjdzLTkuNy0xNC41LTEyLjUtMjNjLTIuNi03LjQtNi4zLTE0LjMtMTEuMS0yMC41Yy00LjItNS44LTguOC0xMS4zLTEzLjEtMTcgYy01LjktNy45LTExLjgtMTYtMTcuNy0yMy45bC0wLjgtMS4zaDQuNmwwLjQsMC40YzIuOSwzLjYsNi4zLDYuNSw5LjYsOS42YzYuNSw2LjEsMTEuNywxMy4xLDE2LjUsMjAuNiBjNC43LDcuNSw4LjcsMTcuMiwxMi4xLDI2LjNjMS40LDMuOSwyLjksNy44LDQuNSwxMS42YzIuNCw1LjksNi41LDEwLjcsMTAuOCwxNS40YzUuMyw1LjgsMTEuNCwxMC44LDE3LjIsMTYgYzcuMyw2LjUsMTQuNywxMi44LDIyLDE5LjFjMywyLjYsNi40LDQuNSwxMC40LDVjNCwwLjUsNS4yLTAuOSw1LjQtNC40YzAuMS0zLTAuMS02LTAuNy04LjljLTEtNS0xLjktMTAtMi43LTE1LjEgYy0wLjctMy45LTAuMi03LjksMC40LTExLjZjMi4xLTEzLjUsNC41LTI2LjksOC44LTQwYzAuOC0yLjQsMS42LTQuOCwyLjUtNy4zYzAtMC4xLDAuMS0wLjIsMC4xLTAuMmw1LjYsMy4xIGMtMC4xLDAuNS0wLjIsMC45LTAuNCwxLjNjLTQuMSwxMi43LTcuNCwyNS41LTEwLjEsMzguNmMtMS43LDcuNy0xLjQsMTUuNywwLjcsMjMuM2MyLjEsNi45LDYuMiwxMi4yLDExLjksMTYuNSBjMy45LDIuOCw4LDUuMSwxMi40LDdjOC41LDMuOCwxNyw3LjQsMjUuNSwxMS4xbDEuNywxbC0wLjEsMC40bC0xLjMsMC4xaC0xMS42Yy0xLTAuMS0xLjktMC4zLTIuNy0wLjdjLTMuMS0xLjQtNi40LTIuMS05LjgtMi4xIEMyMTIuNSwxOTMuMiwyMTAuMywxOTMuNywyMDguNywxOTYiLz48cGF0aCBkPSJNNDAxLjcsMTgxLjdsLTguMiwxNC4zbC0yLjMtMC4zbC0xMi43LTEuOGwtMTAuOC0xLjFsLTExLjgtMS4zbC02LjgtMC41bC04LjUtMC43Yy04LjYtMC43LTE3LjEtMS44LTI1LjUtMy4zIGMtOC45LTEuNi0xNy40LTQuNC0yNS45LTcuNmwtMTEuNS00LjVMMjc2LDE3NHYtNi40bDEuOCwwLjVjNywyLjIsMTQuMSw0LjQsMjEuMSw2LjdjMy4yLDEsNi40LDEsOS42LDAuOGwxMy4zLTAuNmwxNi44LTEuMiBjOS42LTAuNywxOS4yLTAuNywyOC44LDBjMTEuNSwxLDIyLjMsNC44LDMzLjQsNy40TDQwMS43LDE4MS43Ii8+PHJlY3QgeD0iMjc1IiB5PSIyMDMuMSIgd2lkdGg9IjIxLjIiIGhlaWdodD0iNzYuOSIvPjxwYXRoIGQ9Ik0yNjkuMiwzNDMuM2wxLjItMC4yYzAtMi4yLTAuMS00LjMsMC4xLTYuNWMwLjEtMi4yLDEtNi4yLDMuNC04LjVjMC42LTAuNywxLjEtMS41LDEuNS0yLjNjMC44LTEuNiwwLjQtMi45LTEuMS0zLjkgYy0xLjEtMC42LTIuMi0xLjEtMy4zLTEuNWwtMTAuMi0zLjJsLTMuNC01LjlsMC4yLTAuNGwxMi43LDQuM2MxLjItMy4yLDAuOC02LjYsMS44LTEwLjFjMC41LDAuMywwLjksMC42LDEuMywxIGM2LjcsOS42LDExLjUsMjAuMiwxMy4yLDMyYzAuNiwzLjMsMC45LDYuNywwLjcsMTBjLTAuMywzLjktMC40LDcuNy0xLjEsMTEuNmMtMi4xLDExLjEtNS4xLDIxLjktOSwzMi41IGMtMy4zLDktNi44LDE3LjctMTEuOCwyNS45Yy0yLjksNC42LTUuNSw5LjQtOC4yLDE0LjFsLTEsMS44Yy0xLjctMy0zLjMtNS43LTQuOS04LjVjMC4zLTAuOCwwLjYtMS42LDEtMi40IGM0LjMtMTAuMiw4LjUtMjAuNSwxMS44LTMxLjJjMi4zLTcuOCw0LjEtMTUuOCw1LjItMjMuOWMwLjYtMy44LDAuNy03LjYsMS4xLTExLjRjMC4xLTAuNiwwLjItMS4zLDAuNC0xLjkgYzAuNC0xLjgsMC41LTMuNS0wLjQtNS4xYy0wLjItMC4xLTAuMy0wLjMtMC4zLTAuNUwyNjkuMiwzNDMuMyIvPjxwYXRoIGQ9Ik00MDguMywxNzAuM2wtMSwxLjVsLTEuNS0wLjVsLTEyLjgtNS41Yy05LjQtNC4zLTE5LjctNi40LTMwLTYuMmMtOC4xLDAuMS0xNi4yLTAuMS0yNC4zLTAuOWMtMi43LTAuMy01LjQtMC45LTgtMS42IGMtNy0yLjEtMTQtNC4yLTIxLTYuNHMtMTMuMS01LjYtMTkuMS05LjZjLTAuNy0wLjUtMS40LTEtMi4xLTEuNmMtNS00LjItNi42LTkuNy00LjUtMTZjMS0yLjgsMi4zLTUuNiwzLjUtOC4zIGMwLjMtMC41LDAuNy0xLDEuMS0xLjNjMy44LTQuMiw4LjMtNy43LDEzLjQtMTAuM2M0LjQtMi4yLDguOS00LDEzLjQtNS45bDEuNS0wLjRjLTAuMiwwLjYtMC40LDEuMi0wLjYsMS44IGMtMS42LDMuNi0zLjMsNy4xLTQuNywxMC44Yy0yLjEsNS4yLTMuNywxMC42LTQuOCwxNi4yYy0wLjYsMi45LDAuNCw1LjUsMS43LDhjMS4zLDIuNCwzLjEsNC40LDUuMyw1LjljNC4zLDMsOC45LDUuMywxMy45LDYuOSBjMTEsNCwyMi40LDYuNiwzNC4xLDhjMywwLjQsNi4yLDAuNCw5LjMsMC43YzkuNCwxLDE4LjUsMy40LDI2LjcsOC4zTDQwOC4zLDE3MC4zIi8+PHBhdGggZD0iTTQzNS44LDEyMi42bC0yLjgsNC45bC0zLjQtMS4zbC05LjUtM2MtNS4yLTEuNi05LjYsMC44LTExLjEsNi4yYy0wLjgsMi41LTAuNCw1LjIsMS4xLDcuM2MxLDEuMywyLjEsMi42LDMsMy45bDYuOCw5LjMgYy0xLDEuOS0yLDMuNi0zLjEsNS41bC0xLjMtMS4zYy0yLjctMy4xLTUuMy02LjMtOC4xLTkuM2MtNS45LTYuNC0xMi44LTEwLjktMjEuNS0xMi41Yy0zLTAuNS02LTAuNy05LjEtMS4xIGMtNS4xLTAuNi05LjktMi40LTE0LjUtNC43bC0xLjctMS4xYy0zLjYtMi43LTQuMi02LTEuNy05LjZjMi45LTQuMyw2LjktNy43LDExLjYtOS43YzExLjQtNC43LDIyLjktNC42LDM0LjQtMC4xIGM0LjIsMS43LDguMywzLjcsMTIuMiw1LjljNS42LDMsMTEsNi4zLDE2LjUsOS41TDQzNS44LDEyMi42IE0zNzguOSwxMDYuOWwtMi40LDAuN2MtNC45LDEtOS4zLDMuMi0xMy42LDUuOSBjLTAuOSwwLjYtMS41LDEuNC0xLjgsMi40Yy0wLjUsMi40LTAuNCw0LjcsMS42LDYuNWMwLjcsMC42LDEuMiwxLjMsMS45LDEuOWMzLjIsMi43LDYuNyw0LjcsMTEsNC4yYzIuMS0wLjMsNC4xLTAuOCw2LTEuNiBjNC4yLTEuMyw1LjMtNi42LDQuMi05LjVzLTEuOC00LjItMi41LTYuNUMzODIuNywxMDguOSwzODEsMTA3LjMsMzc4LjksMTA2LjkiLz48cGF0aCBkPSJNMTI4LjUsMTk1LjhsLTAuOC0xYy0xMS4xLTE1LjEtMjMuMy0yOS41LTM0LjktNDQuMmMtMS0xLjItMS44LTIuNS0yLjYtMy45Yy0xNy0yOS4zLTM0LTU4LjYtNTAuOS04OC4xbC0wLjktMS42IGMwLjctMC41LDEuMi0wLjMsMS42LDAuM2M4LjEsMTEuMiwxNy4zLDIxLjUsMjYuNywzMS41YzguNyw5LjEsMTUuNywxOS43LDIwLjgsMzEuM2M1LjksMTMuNiwxMy4xLDI2LjQsMjEuNywzOC40IGM0LjksNi45LDkuNSwxNC4xLDE0LjUsMjAuOWMzLjksNS4zLDguMiwxMC4yLDEyLjQsMTUuMWwwLjgsMS4xSDEyOC41eiIvPjxwYXRoIGQ9Ik00NDMuMywxNTdoLTNsMTYuOC0yOS4yYzUuNi05LjYsMTEuMi0xOS4zLDE2LjgtMjlsMTYuNy0yOC45bDE3LTI5LjRoLTkuOGw0LjQtNy45aC0zMTBjLTAuMS0wLjktMC4xLTEuNi0wLjEtMi4yIGMxLjMtMC42LDMxMi40LTAuNywzMTQuNS0wLjFjLTEuNCwyLjQtMi43LDQuOC00LjIsNy41TDUxMiwzOEM0ODguOSw3Ny45LDQ2Ni4xLDExNy40LDQ0My4zLDE1NyIvPjxwYXRoIGQ9Ik0yODAuNCwzOTFjMC4xLTAuNCwwLjItMC45LDAuNC0xLjNjNC4yLTExLjcsNy4yLTIzLjgsOC43LTM2LjFjMC42LTQuNCwwLjItOS0wLjMtMTMuNGMtMS4zLTEyLTUuNi0yMy42LTEyLjUtMzMuNSBsLTAuMy0wLjZjLTAuMS0wLjEsMC0wLjIsMC0wLjRoMjIuNmMzLjUsNC4zLDYsOS40LDcuMywxNC44YzEuNyw3LjQsMS4yLDE0LjgtMC40LDIyLjJjLTAuMiwxLjMtMC41LDIuNS0wLjgsMy44IGMtMC45LDMuNy0yLjMsNy4yLTQuMiwxMC41Yy02LjUsMTEtMTIuOCwyMi0xOS4xLDMzbC0wLjksMS40TDI4MC40LDM5MSIvPjxwYXRoIGQ9Ik0xODguNCw1Ni45aDguOWMtMC4zLDAuNy0wLjYsMS4zLTEsMS45Yy00LjksOC41LTkuNCwxNy4zLTEzLjQsMjYuM2MtMy43LDguNC02LDE3LjMtNi44LDI2LjRjLTAuNSw0LjgtMC40LDkuOC0wLjcsMTQuNyBjLTAuMyw2LjktMS43LDEzLjgtNC4yLDIwLjNsLTAuNywxLjZjLTIuNCw0LjgtNi42LDctMTEuOSw2LjFjLTcuNi0xLjMtMTMuNy01LTE4LjYtMTAuN2MtMy42LTQuMi02LjctOC44LTkuMy0xMy43bC0yMC4yLTM4LjMgYy01LjktMTEuMi0xMi4zLTIyLjEtMTkuMi0zMi45Yy0wLjQtMC41LTAuNy0xLjEtMS0xLjdsMS0wLjJIOTRsMS4xLDEuOWMxMC42LDE4LjMsMjEuMSwzNi43LDMwLjgsNTUuNWMxLjMsMi40LDIuMiw1LDMuNSw3LjMgYzEuMywyLjQsMy45LDcsNi4xLDEwLjNjNCw2LDEwLjMsMTAuMSwxNy40LDExLjNjNC43LDAuOCw4LjgtMC44LDEyLTQuMmM0LjItNC42LDYuMi0xMC4yLDYuOC0xNi40YzAuNC00LjEsMS4xLTguMiwxLjYtMTIuMiBjMC4zLTIuOCwwLjctNS42LDAuNy04LjVjMC4yLTUuNywxLjYtMTEuMywyLjktMTYuOGMxLjMtNS42LDMuOC0xMS45LDYuNS0xNy41YzEuNS0zLDIuOC02LDQuMi05TDE4OC40LDU2LjkiLz48cGF0aCBkPSJNOTcsNTYuOGg2LjVsMC45LDIuMWMzLjQsMTAsNy44LDE5LjcsMTIuMywyOS4zczEwLjgsMTguOCwxNy4zLDI3LjVjMy4yLDQuMiw2LjUsOC4yLDkuOCwxMi4zYzIuMSwyLjYsNSw0LjIsOC4zLDQuNyBjNi4xLDAuOCwxNC43LTQuOCwxMy44LTEzYy0wLjQtNC41LTEuMy05LTEuNy0xMy41Yy0wLjYtNi0wLjUtMTEuOSwwLjItMTcuOWMxLjMtMTAuNyw1LjYtMjAuNCw5LjktMzBjMC4yLTAuNSwwLjQtMC45LDAuNy0xLjMgaDkuOWMtMC4yLDAuNi0wLjQsMS4xLTAuNiwxLjZjLTIuMiw1LTQuMyw5LjktNi40LDE0LjhjLTMuOSw5LjQtNiwxOS40LTYuMiwyOS42YzAsMS4yLTAuNSwyLjMtMC43LDMuNWwtMC45LDkuOSBjLTAuNSw0LjMtMSw4LjctMi42LDEyLjhjLTAuNywyLTEuNyw0LTIuOSw1LjhjLTMuMyw1LTcuNSw2LjctMTMuMyw1LjFjLTIuNC0wLjctNC42LTEuNi02LjgtMi43Yy0xLjktMC44LTMuMS0yLjQtNC4zLTMuOSBjLTYuMy04LjQtMTEuMS0xNy43LTE2LTI2LjljLTguNi0xNi4xLTE3LjUtMzIuMS0yNi40LTQ3LjlDOTcuNiw1OC4xLDk3LjQsNTcuNiw5Nyw1Ni44Ii8+PHBhdGggZD0iTTE5NS4zLDgwLjljLTIuNCwwLjktMywxLjYtMi45LDQuN2MwLDIuMy0wLjQsNC42LTEuMyw2LjdjLTQuOCwxMi43LTguMywyNS45LTEwLjMsMzkuNGMtMC41LDMuNS0xLjIsNi45LTEuNiwxMC4zIGMtMC44LDYuMy0wLjUsMTIuNywwLjgsMTguOWMwLjYsMy4yLDEuNiw2LjIsMi4yLDkuM2MwLjMsMiwwLjQsNC4xLDAuMiw2LjFjLTAuMSwxLjctMS4xLDIuNC0yLjcsMi4xYy0xLjYtMC4zLTMuMi0wLjgtNC43LTEuNiBjLTIuMi0xLjMtNC4yLTIuNy02LjItNC4zYy03LTYtMTMuOS0xMi4yLTIwLjktMTguM2wtMC43LTAuN2wwLjEtMC40bDEuOSwwLjZjMi43LDEuNCw1LjYsMi40LDguNiwyLjljNy41LDEuMSwxMi45LTEuOCwxNS44LTguOCBjMi40LTUuOCwzLjgtMTIsNC4yLTE4LjNjMC41LTYuNiwwLjctMTMuMiwxLjMtMTkuOGMwLjktOS4zLDMuNS0xOC40LDcuNi0yNi44YzQuMS04LjUsOC42LTE2LjcsMTMtMjUuMWwwLjctMWg4LjIgQzIwNC4yLDY0LjksMTk5LjgsNzIuNywxOTUuMyw4MC45Ii8+PHBhdGggZD0iTTE0Ny44LDE5NS45aC03bC0xMC4yLTExLjZjLTE0LjItMTYuMi0yNS40LTM0LjMtMzQuOS01My42Yy03LjYtMTUuNS0xNi0zMC41LTI3LjItNDMuN2MtNS4zLTYuMi0xMS0xMi4yLTE2LjMtMTguNSBjLTMtMy4zLTUuNi03LTguMy0xMC42bC0wLjYtMWg4LjlsMC45LDEuMmM2LjYsMTAuNywxNC4xLDIwLjcsMjIuNCwzMC4yYzEuNCwxLjUsMi42LDMuMSwzLjcsNC44YzguNCwxMy4zLDE2LjYsMjYuNiwyNSwzOS45IGM2LjgsMTAuOSwxMy43LDIxLjgsMjAuNiwzMi42YzIuOCw0LjMsNiw4LjMsOS4xLDEyLjNjNC4yLDUuNSw4LjUsMTAuOCwxMi43LDE2LjJDMTQ3LDE5NC42LDE0Ny4zLDE5NS4yLDE0Ny44LDE5NS45Ii8+PHBhdGggZD0iTTQ1Ny44LDg0LjVsLTUuOC0zLjNjLTExLjQtNi41LTIzLjQtMTEuNi0zNS41LTE2LjRjLTQuOC0xLjktOS40LTQuNC0xNC02LjZjLTAuNi0wLjMtMS4yLTAuNi0xLjctMSBjMS4yLTAuNSw1Ny45LTAuOCw2NC41LTAuNGw1LjcsNUw0NTcuOCw4NC41Ii8+PHBhdGggZD0iTTI4My4xLDE1NC40bDEtMS42YzEuMi0yLjIsMC45LTQuMi0xLjItNS42Yy0xLjMtMC45LTIuNy0xLjYtNC4yLTIuMWwtMTYuNC01Yy0xLTAuMy0xLjgtMC45LTIuMy0xLjggYy0xLjMtMS45LTIuMS00LjEtMi41LTYuNGwyMC45LDYuMmMwLjctMy4yLDEuMy02LjMsMS45LTkuNGgwLjRjMC4xLDAuMywwLjIsMC43LDAuMiwxYy0wLjEsMy45LDEuNSw3LDQuMSw5LjggYzMuMiwzLjMsNi44LDYuMSwxMC44LDguMmM3LjMsNC4yLDE1LjIsNi45LDIzLjQsOWM2LjUsMS42LDEzLDMuMSwxOS41LDQuNWMyLjQsMC41LDUsMC40LDcuNCwwLjdjMS40LDAsMi44LDAuMiw0LjIsMC40IGMxOS44LTIuMiwzOC4xLDIuNyw1NS42LDEyLjJjLTAuMywwLjQtMC41LDAuOC0wLjcsMS4ybC04LjgtMi45Yy02LjEtMS44LTEyLjEtMy44LTE4LjMtNS4zYy00LjctMS4yLTkuNS0xLjgtMTQuNC0xLjkgYy0xLjgtMC4xLTMuNi0wLjQtNS40LTAuNGMtMS42LDAtMy4yLDAtNC43LDAuMmwtNi40LDAuNWMtMS4xLDAuMS0yLjMsMC4zLTMuNCwwLjZoLTcuMWMtMTAuOSwwLjItMjEuNy0xLjUtMzItNSBjLTYuNS0yLjQtMTMuMi00LjMtMTkuOC02LjVsLTEuNy0wLjciLz48cGF0aCBkPSJNMjYyLjgsNTYuOWg3LjZjLTMsOC43LTcuOSwxNi0xMy44LDIzLjFoMy4xYzYtNi44LDEwLjQtMTQuNywxMy45LTIzLjFoMTYuM2MtMS41LDguNi00LjcsMTYuOC05LjMsMjQuMWgtMTMuNyBjLTAuOCw0LjMtMS42LDguNS0yLjQsMTIuOGgtMTAuNWMtMC43LTQuMi0xLjYtOC41LTIuMy0xMi44aC00LjVDMjUyLjksNzIuOSwyNTkuNiw2NiwyNjIuOCw1Ni45Ii8+PHBhdGggZD0iTTI1Ni4zLDQ2Mi42bC01LjcsOS40Yy0zMi4xLTU1LjYtNjQtMTEwLjktOTYuMS0xNjYuNWwyLjQtMC44YzcuOSwxMy41LDE1LjcsMjcsMjMuNCw0MC40bDIzLjQsNDAuNWwyMy4zLDQwLjRsMjMuNiw0MC44IGw1LjYtOS4zYzEuOCwzLDMuNSw1LjcsNS4zLDguOGwzMS44LTU0LjlsMi4xLDEuN2wtMzMuOCw1OC40TDI1Ni4zLDQ2Mi42Ii8+PHBhdGggZD0iTTE2Mi43LDE5NS45aC0xMS42bC0xLjUtMS45Yy03LjQtOS45LTE1LjEtMTkuNS0yMi4yLTI5LjZjLTUuOS04LjMtMTEuMy0xNy0xNi43LTI1LjZjLTguNS0xMy42LTE2LjctMjcuNC0yNS4zLTQwLjkgYy0zLjgtNS45LTguMy0xMS40LTEyLjUtMTdjLTUuNi03LjMtMTEuNi0xNC40LTE2LjUtMjIuM2wtMS4xLTEuOWg1LjhjMC4zLDAuNSwwLjcsMSwxLDEuNmM1LjgsOS41LDExLjQsMTkuMSwxOC4xLDI4IGMzLjcsNSw3LjgsOS43LDEyLjIsMTQuMWMzLjIsMy4zLDUuOSw3LjIsNy45LDExLjRjMy4zLDYuNyw2LjMsMTMuNSw5LjksMjBjNy4yLDEyLjgsMTUuMiwyNSwyNC45LDM2LjFjMy42LDQuMiw3LjMsOC40LDExLjIsMTIuMyBjMy45LDMuOSw5LjMsOC44LDE0LDEzLjFsMi40LDJMMTYyLjcsMTk1LjkiLz48cGF0aCBkPSJNNjQuMiw1Ni44aDMuM2MwLjQsMC42LDAuOSwxLjEsMS4zLDEuN2M2LjMsOC41LDEyLjUsMTcuMSwxOC45LDI1LjdjMyw0LjEsNi41LDcuOSw5LjcsMTEuOWM0LjUsNS41LDguMywxMS41LDExLjQsMTggYzAuOSwxLjgsMS42LDMuNywyLjMsNS42YzIuNCw3LjUsNi4xLDE0LjYsMTAuOCwyMWM2LjgsOS4xLDEzLjQsMTguMywyMC4zLDI3LjNjNC45LDYuNSwxMC45LDEyLDE3LjgsMTYuMmwxNi44LDEwLjUgYzAuNSwwLjMsMC45LDAuNywxLjEsMS4yaC0xMC43bC0yLjUtMi4yYy04LjYtNy4yLTE2LjgtMTUuMS0yNC4zLTIzLjVjLTEyLjgtMTQuNC0yMy42LTMwLjQtMzIuMS00Ny43Yy0xLjgtMy43LTMuNi03LjMtNS4zLTExIGMtMi4xLTQuOC01LTkuMi04LjYtMTIuOWMtMTAuOC0xMC44LTE5LjUtMjMtMjYuOS0zNi4zQzY2LjUsNjAuNSw2NS40LDU4LjgsNjQuMiw1Ni44Ii8+PHBhdGggZD0iTTIzNi4zLDE4NS4xbDMuNiw2LjZsLTEtMC4xYy04LjItMy41LTE2LjUtNi44LTI0LjYtMTAuNWMtNi44LTIuOS0xMi45LTcuNC0xNy44LTEzLjFjLTQuNC00LjktNi43LTExLjQtNi41LTE4IGMwLTIuMi0wLjItNC41LDAtNi44YzAuMi0yLjIsMC44LTUuMywxLjMtOGMyLjUtMTIuMyw1LjctMjQuNCw5LjYtMzYuM2MwLjItMC42LDAuNC0xLjEsMC43LTEuOWw0LjcsMS44Yy0wLjEsMC42LTAuMywxLTAuNCwxLjUgYy00LjEsMTIuMi03LjQsMjQuNy05LjksMzcuNGMtMi43LDEzLjYsMS45LDI0LjMsMTIuNiwzMi43YzQuNSwzLjQsOS40LDUuOSwxNC41LDguM0wyMzYuMywxODUuMSIvPjxwYXRoIGQ9Ik0xMDYuNCw1Ni45aDIuNGMwLjIsMC42LDAuNiwxLjMsMC44LDEuOWM1LjUsMTQuNiwxMywyOC40LDIyLjQsNDAuOWMzLjEsNC4xLDYuNiw3LjksOS45LDExLjZjMS4zLDEuNiwzLjEsMi42LDUuMSwzLjEgYzQuNywxLjEsMTAuNi0xLjcsMTIuOC02YzAuNC0xLDAuOS0xLjksMS40LTIuOGgwLjNjMC4xLDEuMSwwLjMsMi4yLDAuNSwzLjNjMC43LDMuOCwxLjYsNy41LDEuNSwxMS40Yy0wLjEsNi4yLTQuOSw5LjMtOS42LDkuOCBjLTMuNiwwLjMtNi42LTEuNy04LjgtNC41cy01LjktNy4zLTguNi0xMS4xYy05LjEtMTIuNS0xNy40LTI1LjQtMjMuMy0zOS44Yy0yLjItNS42LTQuNC0xMS4xLTYuNS0xNi43IEMxMDYuNiw1Ny41LDEwNi41LDU3LjIsMTA2LjQsNTYuOSIvPjxwYXRoIGQ9Ik00MDMuNiwxNzcuOWMwLDAuMiwwLDAuNC0wLjEsMC41Yy0wLjEsMC4zLTAuMywwLjUtMC40LDAuN2wtMS42LTAuM2wtMTQuOS0zLjhjLTUuMy0xLjMtMTAuNi0yLjQtMTYtMy42IGMtMS45LTAuMy0zLjktMC40LTUuOS0wLjRjLTMuMS0wLjItNi4yLTAuNS05LjMtMC42Yy0zLjEtMC4xLTQuMiwwLjItNi4yLDAuM2wtMS45LDAuMmwtMjEuNywxLjNsLTE1LjEsMS4zYy00LjgsMC4zLTkuNS0wLjQtMTQtMiBsLTE4LjgtNi40bC0xLjUtMC42Yy0wLjEtMi43LDEuOC02LDQuNi04LjFsMS45LDAuNmMxMC42LDMuMywyMS4xLDYuOCwzMS44LDkuOWM2LjYsMS45LDEzLjUsMi4zLDIwLjMsMmwxOS42LTAuOCBjMS0wLjEsMi0wLjIsMy0wLjRsMS42LTAuMWMyLjcsMC4xLDUuNCwwLjIsOC4xLDAuNmM2LDEsMTIuMSwxLjgsMTcuOSwzLjZsMTcuNyw1LjZMNDAzLjYsMTc3LjkiLz48cGF0aCBkPSJNMTU4LDU2LjloNC41Yy0wLjIsMC43LTAuNCwxLjMtMC42LDEuOGMtMy42LDkuOS01LDIwLjQtNC4xLDMwLjljMC4xLDIuMywwLjIsNC41LDAuNCw2LjhjMC4xLDEuMSwwLjIsMi4xLDAuNSwzLjIgYzEuMSw0LjItMS4zLDkuNS01LjIsMTEuMmMtMC45LDAuNS0xLjgsMC44LTIuOCwxLjFjLTIuNCwwLjUtNC44LTAuMy02LjUtMi4xQzEzMyw5OC40LDEyMy43LDg1LDExNy4xLDcwLjMgYy0xLjctMy45LTMuMy03LjktNC45LTExLjljLTAuMS0wLjQtMC4yLTAuOS0wLjQtMS41aDIuM2wwLjcsMS4yYzIuMiw0LjUsNC40LDkuMSw2LjgsMTMuNGMzLjksNy4xLDguOCwxMy43LDE0LjUsMTkuNSBjMS40LDEuMywyLjksMi41LDQuNSwzLjZjNC43LDMuNSwxMC41LDEuMSwxMy4yLTEuOWMyLjctMywyLjktNS43LDMuMS04LjljMC4xLTIuNCwwLTQuNy0wLjMtN2MtMC43LTYuNC0wLjMtMTIuOSwxLjItMTkuMiBDMTU3LjgsNTcuNCwxNTcuOSw1Ny4xLDE1OCw1Ni45Ii8+PHBhdGggZD0iTTI0NS4xLDE2OC41YzIuOSwwLjcsNS44LDEuNCw4LjcsMi4ybDIwLjYsNi4xYzAuNywwLjEsMS40LDAuMiwyLjEsMC4yYzAuMS0wLjEsMC4xLTAuMywwLjEtMC40bDE4LjYsNyBjNS45LDIuMiwxMS43LDQuNSwxOCw1LjdsNC41LDAuNmwxNS4yLDJsMS4zLDAuMWMzLjEsMC4yLDYuMiwwLjIsOS4zLDAuOHM3LjEsMC43LDEwLjcsMS4xbDE1LDEuNmwwLjcsMC4xIGMtMC4xLDAuMS0wLjEsMC4yLTAuMSwwLjNoLTU5LjdjLTAuOSwwLTEuOC0wLjItMi42LTAuNWMtMTMuMy01LjQtMjYuNi0xMC44LTM5LjgtMTYuNGMtNi42LTIuOC0xMy4yLTUuOC0xOS43LTguOCBjLTEtMC40LTEuOS0xLTIuOC0xLjRDMjQ0LDE2OC41LDI0NSwxNjguNiwyNDUuMSwxNjguNSIvPjxwYXRoIGQ9Ik0wLDM3LjloOS43bC00LjItNy42YzEuMi0wLjUsMjMuNi0wLjYsMjUuNi0wLjFjMC4xLDAuNiwwLjIsMS4zLDAuNCwyLjJIOS43YzEuNiwyLjcsMi44LDUuMSw0LjQsNy44IGMtMy4zLDAuMi02LjMsMC4xLTkuNiwwLjNjMjcuOCw0OC4yLDU1LjYsOTYuNCw4My40LDE0NC40Yy0yLjIsMC42LTIuOSwwLjMtMy45LTEuNGMtMy4xLTUuMy02LjItMTAuNi05LjItMTZMMSwzOS44IEMwLjcsMzkuNCwwLjUsMzguOCwwLDM3LjkiLz48cGF0aCBkPSJNMjM1LjEsMTc1LjdjLTEuOSwzLjItMS45LDMuMi0xLjIsNS4zbC0xLjMtMC40Yy0yLjgtMS4zLTUuNi0yLjQtOC40LTMuN2MtNy40LTMuNC0xNC4xLTguMS0xOS43LTEzLjkgYy00LjUtNC43LTYuMi0xMC41LTYuNS0xN2MtMC4xLTUuNCwwLjYtMTAuNywyLjItMTUuOWw4LTI4bDAuNy0xLjlsNC43LDIuMmMtMC4zLDAuOC0wLjQsMS42LTAuNywyLjJjLTMuNCw4LjgtNS44LDE3LjktOC4yLDI2LjkgYy0xLjQsNS4xLTEuNSwxMC41LTAuNCwxNS43YzEuNCw2LjEsNC43LDExLjYsOS40LDE1LjdjMy45LDMuNiw4LjQsNi42LDEzLjMsOC44bDYuOCwzLjNMMjM1LjEsMTc1LjciLz48cGF0aCBkPSJNMzk3LjQsMTQwLjVjLTAuOC0wLjMtMS42LTAuNi0yLjMtMWMtNC4yLTIuMi04LjgtMy4xLTEzLjQtMy43Yy02LTAuOC0xMS45LTIuMS0xNy42LTRjLTMuNC0xLjEtNi40LTMuMi04LjgtNS45IGMtMi4yLTIuNS0zLTYtMi05LjNjMS40LTQuNyw0LjItOC44LDguMS0xMS43YzguOS03LDE5LjEtOS41LDMwLjMtOS4yYzUuOSwwLjIsMTEuNiwwLjgsMTcsMy4yYzMuMywxLjQsNi41LDIuNyw5LjYsNC41IGM2LjgsMy44LDEzLjcsNy43LDIwLjQsMTEuNmMwLjQsMC4yLDAuNywwLjQsMSwwLjdsLTIuNyw0LjdsLTEuNi0wLjlsLTE2LjMtOS42Yy02LjItMy42LTEyLjYtNi44LTE5LjctOC4zIGMtMy4zLTAuOC02LjctMS40LTEwLjItMS42Yy0zLjMtMC4xLTYuNiwwLjItOS44LDAuOGMtNy4xLDEuMS0xMy42LDMuOS0xOC45LDguOGMtMiwxLjgtMy43LDQtNC45LDYuNWMtMS44LDMuNi0xLjMsNywxLjUsOS45IGMxLjQsMS4zLDMsMi40LDQuNywzLjNjNC45LDIuNCwxMC4zLDMuNSwxNS43LDQuNWM1LjMsMSw5LjEsMS43LDEzLjYsMi45YzEuOSwwLjQsMy42LDEuNSw1LjQsMi40YzAuNCwwLjMsMC44LDAuNiwxLjIsMSBMMzk3LjQsMTQwLjUiLz48cGF0aCBkPSJNMjM5LjMsMTcyLjVsLTIsMS41Yy0yLjctMS4zLTUuNC0yLjQtNy45LTRjLTQuNC0yLjUtOC42LTUuMi0xMi43LTguMWMtNS44LTQuMS05LjUtMTAuNC0xMC4yLTE3LjQgYy0wLjYtNC42LTAuMi05LjMsMS4yLTEzLjhjMi41LTguNyw1LjMtMTcuMiw4LTI1LjhjMC4xLTAuMywwLjMtMC43LDAuNC0xbDQuMiwyLjdjLTAuMiwwLjYtMC40LDEuMi0wLjYsMS43IGMtMy4xLDcuNy01LjUsMTUuNi03LjMsMjMuN2MtMS44LDguNCwwLjUsMTUuOCw1LjksMjIuMmM0LDQuNyw4LjksOC41LDE0LjQsMTEuNGM3LDMuOCwxNC4yLDcuMywyMS4zLDEwLjhsMS41LDAuOCBjMCwwLjEtMC4xLDAuMi0wLjEsMC40TDIzOS4zLDE3Mi41Ii8+PHBhdGggZD0iTTE1Mi40LDU2LjloMi43Yy0wLjEsMC43LTAuMiwxLjUtMC4zLDIuMmMtMS4xLDQuMi0wLjcsOC42LTAuOCwxMi45YzAsMi4yLTAuMSw0LjMtMC4xLDYuNHMwLjIsMiwwLjMsMyBjMC4xLDAuNywwLjEsMS4zLDAuMSwyYy0wLjEsMS4xLTAuMywyLjItMC40LDMuM2MtMC41LDMuNi0zLDUuNS02LDYuN3MtNS4xLDAuMS03LjEtMS45cy00LjUtNC42LTYuNy03IGMtNy4xLTcuOC0xMi43LTE3LTE2LjMtMjYuOWMtMC4xLTAuMi0wLjEtMC40LTAuMi0wLjhsMi42LTAuMWwxLDEuNmMyLjQsNC4zLDUuMSw4LjUsOC42LDEyLjFjMiwyLjEsNC4xLDQsNi41LDUuNyBjNC43LDMuMywxMiwzLjEsMTUuMS00LjZjMC44LTIuNCwxLjItNSwxLjItNy42QzE1Mi41LDYxLjYsMTUyLjQsNTkuMywxNTIuNCw1Ni45Ii8+PHBhdGggZD0iTTIxNy43LDM2Ny43bC0zNS45LTYyLjJoNS45YzAuNCwwLjQsMC43LDAuOSwxLDEuM2M3LjMsMTEuNiwxNC43LDIzLjEsMjEuOSwzNC42YzMuMiw1LDUuOCwxMC41LDYuOSwxNi4zIGMwLjYsMywwLjUsNiwwLjcsOS4xYzAsMC4zLTAuMSwwLjUtMC4xLDAuN0wyMTcuNywzNjcuNyIvPjxwYXRoIGQ9Ik0zMjksNTYuOWMtNC4zLDcuOC01LjQsMTYuMi03LjMsMjQuM2gtMTYuNWMyLjgtOC4xLDMuOC0xNi4yLDUuNC0yNC4zTDMyOSw1Ni45eiIvPjxwYXRoIGQ9Ik0yNjYuOSwzNjNjMC4xLDAuOCwwLjEsMS43LDAsMi41Yy0wLjgsNS43LTEuOCwxMS40LTMuMSwxNi45Yy0zLjMsMTMuNS04LjIsMjYuMy0xMy43LDM5bC0wLjcsMS4ybC03LTEyLjIgYzUuMi0xMC4yLDguNC0yMS4xLDEwLjUtMzIuM2MxLjksNS4zLDIuOCwxMC45LDQuNSwxNi4zaDEuN2MwLjQtMi4xLDAuOC00LjIsMS4zLTYuMmMxLjMtNi41LDIuNy0xMy4xLDQuMi0xOS43IGMwLjUtMS45LDEuMi0zLjgsMS45LTUuNkwyNjYuOSwzNjN6Ii8+PHBhdGggZD0iTTI4My44LDgwLjljNC43LTcuNiw3LjMtMTUuNiw5LTI0aDE1Yy0xLjIsOC4yLTIuMiwxNi4zLTUuNCwyNEgyODMuOHoiLz48cGF0aCBkPSJNMjM5LjIsMTY1LjlsLTQuNi0yLjZjLTQuOC0yLjctOS42LTUuNy0xMy41LTkuNmMtMy45LTMuOS02LjYtOS4zLTYuNS0xNS41YzAtNC40LDAuNy04LjgsMi4yLTEzYzEuNy00LjgsMy4zLTkuNiw1LTE0LjQgYzAuMy0wLjgsMC42LTEuNiwxLTIuNGwzLjgsMy4zbC0wLjcsMS45Yy0xLjksNC44LTMuOCw5LjYtNC43LDE0LjhjLTAuNywzLjgtMC43LDcuNi0wLjEsMTEuNGMwLjUsMi44LDEuNyw1LjQsMy42LDcuNiBjMy4zLDQuMSw3LjEsNy43LDExLjQsMTAuOGMwLjUsMC4zLDAuOSwwLjcsMS4yLDEuM0MyMzcuOSwxNjEuNSwyMzguNSwxNjMuNiwyMzkuMiwxNjUuOSIvPjxwYXRoIGQ9Ik0zNzAuNCw1Ni45aDYuN2MxLjksMS41LDMuOSwzLjIsNS45LDQuOGM3LjgsNi4yLDE1LjksMTEuNywyNC45LDE2YzExLjQsNS4zLDIyLjksMTAuOCwzNC4yLDE2LjJjMi4yLDEsNC4yLDIuMyw2LjIsMy40IGwxLjUsMWwtMi4yLDMuOGwtMC45LTAuM2wtNDEtMjEuNGMtOC40LTQuMi0xNi4zLTkuMS0yMy44LTE0LjdsLTEwLjMtNy41bC0xLjMtMUMzNzAuNCw1Ny4xLDM3MC40LDU2LjksMzcwLjQsNTYuOSIvPjxwYXRoIGQ9Ik0xNDQuNiw1Ni45aDUuNWMwLjEsMC42LDAuMSwxLjIsMC4xLDEuOGMtMC4zLDMuNi0wLjYsNy4zLTEuMSwxMWMtMC42LDMuMy0zLjMsNS43LTYuNiw2Yy0xLjIsMC4xLTIuMy0wLjEtMy4zLTAuNyBjLTEuNC0wLjktMi43LTEuOS0zLjktM2MtNC4yLTMuNy03LjktOC0xMC44LTEyLjhsLTEuMy0yLjRjMS40LDAuMSwyLjgsMC4xLDQuMiwwYzEuOS0wLjIsMy43LDAuMyw1LjIsMS41IGMxLjMsMS4xLDIuOCwxLjcsNC41LDEuOWMyLjYsMC40LDQuOSwwLDYuNy0yLjFMMTQ0LjYsNTYuOSIvPjxwYXRoIGQ9Ik0zODEuNCw1Ni44aDQuMmw1LjksNC4zYzcuNyw1LjQsMTYsOS45LDI0LjcsMTMuNGM5LjksNC4xLDE5LjksOC40LDI5LjMsMTMuN2w2LjEsMy42bDEuNCwxYy0wLjcsMS4yLTEuMywyLjItMS45LDMuNCBsLTAuOS0wLjRjLTEzLjQtNy44LTI3LjUtMTQuNS00MS43LTIwLjdjLTUuOS0yLjYtMTEuNS01LjktMTYuNy05LjhjLTMuMS0yLjQtNi40LTQuNy05LjYtN2wtMS0wLjkgQzM4MS4zLDU3LDM4MS40LDU2LjksMzgxLjQsNTYuOCIvPjxwYXRoIGQ9Ik00NTYuNCw4Ni45bC0xLjgsMy4xbC0wLjgtMC4zYy0xMi40LTcuMi0yNS4zLTEzLjQtMzguNy0xOC41Yy04LjQtMy40LTE2LjMtNy45LTIzLjYtMTMuNGMtMC4zLTAuMi0wLjYtMC40LTAuOC0wLjcgYzIuMi0wLjIsNC4yLTAuNyw2LjEsMC42YzguMiw1LjMsMTcuMSw5LjIsMjYuMywxMi41YzExLjQsNCwyMi4yLDkuNCwzMi4zLDE2TDQ1Ni40LDg2LjkiLz48cGF0aCBkPSJNNDMxLjcsMTI5LjdjLTMuNSw1LjktNi44LDExLjctMTAuMiwxNy43bC0xLTEuMmMtMi4zLTMtNC41LTYuMS02LjktOWMtMS43LTIuMS0yLjQtNC43LTEuOS03LjNjMC4yLTIuNCwyLjItNC4yLDQuNS00LjIgYzEuNS0wLjEsMy4xLDAuMSw0LjYsMC40YzMuMiwwLjksNi4zLDIsOS41LDNMNDMxLjcsMTI5LjciLz48cGF0aCBkPSJNMjI4LjQsMTEzLjhsMywzLjVjLTAuNiwyLTEuMiw0LTIsNS45Yy0xLjksNC4yLTEuMyw4LjQtMC4xLDEyLjdjMC4xLDAuNiwwLjQsMS4yLDAuNiwxLjlsLTAuNiwxbDQuOCw4IGMxLjUsMi42LDMuMiw1LjEsMy4xLDguM2MtMC4yLDAuMS0wLjMsMC4xLTAuNCwwLjFjLTMuNi0yLjYtNy01LjMtOS44LTguOWMtMy41LTQuNC01LTEwLTQuMi0xNS42IEMyMjMuNywxMjQuOCwyMjYsMTE5LjUsMjI4LjQsMTEzLjgiLz48cGF0aCBkPSJNMzA3LjcsMzQzLjZjMy42LTEzLjQsMy0yNi4zLTUuNy0zOC4xaDUuMmM1LjIsNS45LDguNiwxMywxMS4yLDIwLjZMMzA4LDM0My44TDMwNy43LDM0My42Ii8+PHBhdGggZD0iTTI1NC4zLDEzMC45YzAuOSwyLjUsMS42LDQuOSwyLjUsNy40bC0xLjYtMC40Yy01LTEuMy0xMC4yLTIuNS0xNS4zLTMuOWMtMS43LTAuNS0zLjYtMC4yLTUsMC44bC0yLjQsMS41IGMtMi40LTQuNS0xLjktMTEuNCwwLjgtMTYuMmwxLjIsMS43YzEuNCwyLjQsMy43LDQuMSw2LjQsNC45QzI0NS40LDEyOCwyNDkuOCwxMjkuNiwyNTQuMywxMzAuOSIvPjxwYXRoIGQ9Ik0yMjguNywzMDUuNGgxNC41YzMuMSwxLjMsNS43LDIuNCw4LjQsMy4zYzEsMC4zLDEuOSwxLDIuNCwxLjljMSwxLjgsMi4xLDMuNSwzLDUuMmwtMC4yLDAuM2wtMi40LTAuNmwtOC40LTIgYy0xLjctMC42LTMuNy0wLjMtNS4yLDAuN2wtMi42LDEuNGMxLjQsMy43LDMuNiw3LjEsNC4yLDExLjFMMjI4LjcsMzA1LjQiLz48cGF0aCBkPSJNMjU5LjUsNTYuOWMtMC43LDQuNS05LjQsMTcuNy0xNS44LDI0aC03LjFjMC40LTAuNywwLjYtMS4yLDAuOS0xLjZjMS45LTIuNSwzLjYtNSw1LjUtNy41YzMuMy00LjQsNi4zLTkuMSw4LjgtMTMuOSBsMC42LTFMMjU5LjUsNTYuOXoiLz48cGF0aCBkPSJNMjQyLDU2LjloN2MtNCw4LjktMTAuMiwxNi4yLTE1LjcsMjRoLTYuN2MwLjQtMC43LDAuNi0xLjIsMC45LTEuNmMxLjktMywzLjgtNi4xLDUuNy05LjFDMjM2LjEsNjUuOCwyMzksNjEuNCwyNDIsNTYuOSIgLz48cGF0aCBkPSJNMjMxLjQsNTYuOGg3LjVjLTAuMywwLjYtMC42LDEuMi0xLDEuOEwyMjguMyw3M2MtMS43LDIuNi0zLjIsNS4zLTQuOSw3LjloLTYuM0MyMjEuMSw3Mi41LDIyNS45LDY0LjQsMjMxLjQsNTYuOCIvPjxwYXRoIGQ9Ik0yMjAuOCw1Ni44aDcuNmMtNS4yLDgtMTAuNCwxNS43LTE0LjIsMjQuMUgyMDhDMjExLjMsNzIuMywyMTYsNjQuNSwyMjAuOCw1Ni44Ii8+PHBhdGggZD0iTTIxMS45LDU2LjloNi4yYy00LjksOC05LjcsMTUuNy0xMy4zLDI0aC02LjRDMjAyLjMsNzIuNCwyMDcuMSw2NC43LDIxMS45LDU2LjkiLz48cGF0aCBkPSJNMzUxLjUsMzExLjNsMi4yLDAuOGMtOS43LDE3LTE5LjQsMzMuNy0yOS4yLDUwLjdsLTEuNS0xLjlDMzIzLjIsMzU5LjQsMzUwLjMsMzEyLjUsMzUxLjUsMzExLjMiLz48cGF0aCBkPSJNMTYxLjEsOTUuMmMtMi42LTEzLjItMC4xLTI1LjgsNC4zLTM4LjRoNi44Yy0wLjQsMC45LTAuNiwxLjUtMC45LDIuMWMtMy41LDcuNC02LjYsMTQuOS04LjMsMjNjLTAuOSwzLjktMS40LDgtMS40LDEyIGMwLDAuNCwwLDAuOS0wLjEsMS4zSDE2MS4xIi8+PHBhdGggZD0iTTEwMi45LDI4Ni4xaDMuNmw1LjgsNy4zaDAuMnYtNy4xaDMuNnYxMy4xaC0zLjZsLTUuNi03LjFsLTAuNCwwLjF2N2gtMy42VjI4Ni4xeiIvPjxwYXRoIGQ9Ik0xMDEsMTY0LjljOC44LDkuNywxNi4xLDIwLjUsMjQuMSwzMC42Yy0wLjEsMC4xLTAuMSwwLjMtMC4xLDAuNGgtNi40bC0xNy45LTMwLjlMMTAxLDE2NC45Ii8+PHBhdGggZD0iTTI0OC41LDM0MS43Yy0wLjgtMS45LTEuNi0zLjktMi40LTUuOWwwLjEtMC40bDIwLDYuNWMwLjIsMi4xLDAuNCw0LjIsMC43LDYuNUwyNDguNSwzNDEuNyIvPjxwYXRoIGQ9Ik0xNDguNiwyOTkuM1YyODZjMi40LDAuMSw0LjktMC40LDcuMywwLjRjMi45LDEuMSw0LjcsNCw0LjQsNy4xYy0wLjMsMy0yLjYsNS40LTUuNiw1LjggQzE1Mi43LDI5OS40LDE1MC42LDI5OS40LDE0OC42LDI5OS4zIE0xNTIuMywyOTYuMWMxLjYsMC4zLDIuOS0wLjEsMy42LTEuNmMwLjctMS4yLDAuNy0yLjctMC4xLTMuOWMtMC43LTEuMi0yLjItMS44LTMuNi0xLjMgTDE1Mi4zLDI5Ni4xeiIvPjxwYXRoIGQ9Ik0zMjMuNCwyOTQuMWMxLjMsMS43LDIuNSwzLjMsMy45LDUuM2gtNC41bC0yLjctNGgtMC4zdjMuOWgtMy43di0xMy4xYzIuNCwwLDQuNy0wLjEsNywwLjFjMi4zLDAuMiwyLjUsMS42LDIuNywzLjIgYzAuMiwxLjYtMC4xLDMuMi0xLjcsNC4yTDMyMy40LDI5NC4xIE0zMjAsMjg5djIuN2MxLjMsMC4zLDIuMS0wLjEsMi4zLTEuM0MzMjIuNSwyODkuMSwzMjEuMywyODguNywzMjAsMjg5Ii8+PHBhdGggZD0iTTEzNC43LDE0Mi40Yy0wLjktMC42LTEuNy0xLjMtMi40LTIuMWMtMi43LTMuMi01LjMtNi40LTcuOS05LjZjLTIuNS0zLjMtNC41LTguNS01LjktMTMuMWMtMC45LTMuMS0yLjEtNi4yLTMtOS4zIGMtMC4yLTAuNi0wLjMtMS4xLTAuMy0xLjdsMC40LTAuMmM2LjUsMTEuOSwxMywyMy43LDE5LjUsMzUuNUwxMzQuNywxNDIuNCIvPjxwYXRoIGQ9Ik0xOTEuOSwyODYuMWgzLjZjMC4xLDAuNiwwLjEsMS4xLDAuMSwxLjd2Ni4yYzAuMSwxLjYsMC44LDIuNSwyLjIsMi41czIuMS0wLjksMi4yLTIuNGMwLjEtMS42LDAtNCwwLjEtNS45IGMwLTAuNywwLTEuMywwLjEtMmgzLjVjMC4xLDAuNiwwLjEsMS4xLDAuMSwxLjd2Ni4xYzAsMi4zLTAuOSw0LjItMyw1LjJjLTIuMiwxLjItNSwwLjktNy0wLjZjLTAuNi0wLjUtMS4xLTEuMi0xLjMtMS45IEMxOTEuNiwyOTMuMSwxOTIuMSwyODkuNiwxOTEuOSwyODYuMSIvPjxwYXRoIGQ9Ik0zMjQuNSwzMTUuNGwtNC4yLDcuMkgzMjBjLTIuMi02LTUuNS0xMS42LTkuMi0xNy4xaDcuNkwzMjQuNSwzMTUuNCIvPjxwYXRoIGQ9Ik05NS40LDMyLjRjMC4yLTAuOSwwLjMtMS41LDAuNC0yYzEuNi0wLjcsMzMuNy0wLjcsMzUuMywwYy0wLjIsMC43LTAuMywxLjMtMC40LDJIOTUuNHoiLz48cGF0aCBkPSJNMjQ0LjgsMjg2LjljLTAuNCwwLjktMC45LDEuNy0xLjMsMi42Yy0xLjMtMC4zLTIuNy0xLjYtMy45LDAuNGwxLjQsMWwxLjUsMC41YzIsMC43LDIuOCwxLjgsMi45LDMuNiBjMC4xLDEuOS0xLDMuNy0yLjgsNC41Yy0yLjQsMC45LTUuMiwwLjQtNy4xLTEuM2wxLjMtMi41YzMuOCwxLjUsMy45LDEuNSw0LjgtMC4zYy0wLjQtMC4zLTAuOS0wLjYtMS4zLTAuOWwtMS4zLTAuNCBjLTIuMy0wLjgtMy4xLTEuOS0zLTMuOGMwLTIuMSwxLjQtMy44LDMuNC00LjNDMjQxLjIsMjg1LjQsMjQzLjIsMjg1LjgsMjQ0LjgsMjg2LjkiLz48cGF0aCBkPSJNNDQxLjEsMjg5LjVjLTIuOC0xLTMuMS0xLTMuNiwwLjdjMC43LDAuMywxLjQsMC42LDIuMSwwLjljMi43LDAuOSwzLjYsMi4xLDMuNCw0LjNjLTAuMiwyLjItMS42LDMuOC00LDQuMiBjLTIuMSwwLjQtNC4yLTAuMi01LjktMS41bDEuNC0yLjdjMy42LDEuNiw0LjUsMS42LDQuNi0wLjZsLTIuNi0xYy0yLjMtMC44LTMtMS44LTIuOC00LjJjMC4xLTIsMS43LTMuNiwzLjYtMy45IGMxLjgtMC4zLDMuNywwLjIsNS4yLDEuMkw0NDEuMSwyODkuNSIvPjxwYXRoIGQ9Ik0xMDAuMSw3OS4zYy0wLjQtMC40LTAuNy0wLjgtMS0xLjNjLTIuNC0zLTQuNy02LjEtNy4yLTkuMWMtMS4yLTEuMy0yLjUtMi42LTMuOC0zLjlsLTcuOC03LjNsLTAuNi0wLjlIODcgYzUuNiw2LjcsOS4zLDE0LjUsMTMuNywyMkwxMDAuMSw3OS4zIi8+PHBhdGggZD0iTTM5NC4zLDI5OS4zdi0xMy4yaDcuNnYyLjhsLTMuOSwwLjN2MS44bDMuNiwwLjF2Mi45bC0zLjYsMC4ydjEuOWgzLjl2My4xSDM5NC4zeiIvPjxwYXRoIGQ9Ik0yODEuNCwxOTMuNWMtMC43LTIuNC0xLjMtNC4zLTItNi41bDIxLjksOC42Yy0wLjEsMC4xLTAuMSwwLjItMC4xLDAuM2gtMTIuNmMtMC45LTAuMS0xLjktMC4zLTIuNy0wLjYgQzI4NC4yLDE5NC43LDI4Mi43LDE5NCwyODEuNCwxOTMuNSIvPjxwYXRoIGQ9Ik00OS43LDI5MS4ydjIuNEgyMC40YzAtMC4zLTAuMS0wLjctMC4xLTF2LTEuNEg0OS43eiIvPjxwYXRoIGQ9Ik00NTguNywyOTMuNHYtMi4yaDI5LjRjMCwwLjcsMC4xLDEuNCwwLjEsMi4xQzQ4Ni45LDI5My44LDQ2MC41LDI5My44LDQ1OC43LDI5My40Ii8+PHBhdGggZD0iTTI1MS40LDQ3NC40YzEuNi0yLjYsMy01LDQuNy03LjhsNC42LDcuN2wtNC42LDcuOEwyNTEuNCw0NzQuNCIvPjxwYXRoIGQ9Ik0yNzguNiwyODkuM2wtMi42LTAuNHYtMi45aDkuMXYyLjlsLTIuNywwLjR2MTBoLTMuOFYyODkuM3oiLz48cGF0aCBkPSJNMTUzLjksMzIuNGwtMC40LTIuMmMwLjYtMC4yLDEuMy0wLjMsMS45LTAuM0gxNzZsMS43LDAuMnYyLjJIMTUzLjl6Ii8+PHJlY3QgeD0iMzU4LjQiIHk9IjI4Ni4xIiB3aWR0aD0iMy40IiBoZWlnaHQ9IjEzLjMiLz48cmVjdCB4PSI2Ni45IiB5PSIyODYuMSIgd2lkdGg9IjMuNSIgaGVpZ2h0PSIxMy4yIi8+PHBhdGggZD0iTTMzMC4yLDMwNS41bC00LjIsNy40bC00LjQtNy40SDMzMC4yeiIvPjxwYXRoIGQ9Ik00NzMuNyw1Ni45bC0xLjYsMi43bC0yLjktMi40bDAuMi0wLjRINDczLjd6Ii8+PHBhdGggZD0iTTEzOS43LDU3LjFoLTN2LTAuMmgyLjlDMTM5LjYsNTcsMTM5LjYsNTcsMTM5LjcsNTcuMSIvPjxwYXRoIGQ9Ik0yMTQuNSwxOTUuNmgyLjN2MC4yaC0yLjNWMTk1LjYiLz48cGF0aCBkPSJNMjc3LjgsMTk1LjVjMC4xLTAuMSwwLjMtMC4yLDAuNC0wLjFjMC4xLDAuMSwwLjQsMC4xLDAuNywwLjRsLTAuNywwLjJsLTAuNS0wLjFWMTk1LjUiLz48cGF0aCBkPSJNMzc1LjEsMTI2Yy0yLjcsMC01LjMtMS03LjQtMi43Yy0xLjEtMC45LTIuMi0xLjktMy4xLTNjLTEuMy0xLjQtMS4zLTMuNiwwLjEtNC45YzAuMy0wLjMsMC42LTAuNSwwLjktMC42IGMzLjYtMS45LDcuMy0zLjYsMTEtNS4zYzEuOS0wLjksNC43LDEsNC43LDMuMWMwLjEsMS40LDAuNSwyLjgsMS4zLDQuMWMwLjQsMC44LDAuNywxLjYsMC45LDIuNGMwLjYsMi0wLjIsNC4xLTIuMSw1IEMzNzkuNSwxMjUuMywzNzcuNCwxMjYsMzc1LjEsMTI2Ii8+PC9nPjwvc3ZnPg=="); }
+  /* EMBLEM_MASK_END */
       /* ================= contour background sheet =================
          The layer is a child of the app frame. Every rule here is gated on the
          frame actually CONTAINING the layer, so with the feature off none of it
@@ -4095,12 +4217,26 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-endfield-glass='strong'] { --edge-glass-alpha: .9; --edge-glass-blur: 22px; }
       body[data-endfield-glass='subtle'][data-ds-dark-theme] { --edge-glass-alpha: .64; }
       body[data-endfield-glass='strong'][data-ds-dark-theme] { --edge-glass-alpha: .88; }
-      body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+      /* Blur is COMPOSER-ONLY. The docked right panel used to share the
+         backdrop-filter, and because it spans half the screen the frost read as
+         'the whole right side is smeared' — content behind it lost all crispness
+         for no local benefit. The panel keeps the material LOOK (fill + sheen +
+         edge) at a near-opaque alpha with NO blur, so its own text stays sharp
+         and whatever shows through is tinted, not smeared. */
+      body[data-endfield-glass] [data-composer-card] {
         background-color: rgb(var(--edge-glass-fill) / var(--edge-glass-alpha)) !important;
         background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
           radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 10%, transparent), transparent 75%) !important;
         -webkit-backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
         backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
+        --dsw-elevation-stroke-color: var(--edge-glass-edge);
+      }
+      body[data-endfield-glass] [data-sidebar-right-panel='push'] {
+        background-color: rgb(var(--edge-glass-fill) / calc(var(--edge-glass-alpha) + 0.15)) !important;
+        background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
+          radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 8%, transparent), transparent 75%) !important;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
         --dsw-elevation-stroke-color: var(--edge-glass-edge);
       }
       body[data-endfield-glass] [data-slot='sidebar'] > div {
@@ -4109,19 +4245,38 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         box-shadow: inset -1px 0 0 var(--edge-glass-edge);
       }
       @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-        body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+        body[data-endfield-glass] [data-composer-card] {
           background-color: rgb(var(--edge-glass-fill) / .96) !important;
         }
       }
       @media (prefers-reduced-transparency: reduce) {
-        body[data-endfield-glass] :is([data-composer-card], [data-sidebar-right-panel='push']) {
+        body[data-endfield-glass] [data-composer-card] {
           background-color: rgb(var(--edge-glass-fill)) !important;
           -webkit-backdrop-filter: none; backdrop-filter: none;
         }
       }
+      /* ---------- selection + caret: the official interaction GRAYS ----------
+         Measured from the official site's own CSS: hover and selection surfaces
+         are a gray scale there (#d9d9d9/#f0f0f0 light, #484848/#626262 dark)
+         while the accent stays a rare SIGNAL. Text selection is the most
+         repeated interaction in this UI, so it follows the official grammar in
+         EVERY palette — a yellow selection reads as a highlighter and was
+         reported as exactly that. These tokens are scheme-only: no palette
+         class ever overrides them. Pairs stay AA:
+           light #d9d9d9 + ink 13.41:1 · dark #6a6a6a + white 5.41:1 */
+      body {
+        --edge-select-fill: #d9d9d9;
+        --edge-select-ink: #101110;
+        --edge-caret: #666666;
+      }
+      body[data-ds-dark-theme] {
+        --edge-select-fill: #6a6a6a;
+        --edge-select-ink: #ffffff;
+        --edge-caret: #d9d9d9;
+      }
       ::selection {
-        color: #000;
-        background: var(--edge-signal, var(--edge-accent));
+        color: var(--edge-select-ink, #000);
+        background: var(--edge-select-fill, #d9d9d9);
       }
       /* Square corners (default): zero EVERY classed element, then restore circles/pills below.
          body.theme-endfield-round disables all of this and restores app-native rounding. */
@@ -4212,7 +4367,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         --dsw-alias-button-info-hover: var(--edge-accent);
         --dsw-alias-state-business-primary: var(--edge-accent);
         --dsw-alias-state-business-tertiary: rgba(var(--edge-accent-rgb), 0.22);
-        --dsw-alias-brand-primary-new-colorprimary-new-color: var(--edge-accent);
+        --dsw-alias-brand-primary-new-colorprimary-new-color: var(--edge-status-dark, var(--edge-accent));
         --dsw-alias-label-primary-bluish: #f5f5f0;
         --dsw-specific-bubble: #181a18;
         --dsw-specific-bubble-highlight: #242624;
@@ -4261,8 +4416,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         --dsw-specific-sidebar-nav-item-active: rgba(var(--edge-accent-rgb), 0.20);
         --dsw-specific-sidebar-nav-item-hover: rgba(var(--edge-accent-rgb), 0.16);
       }
+      /* The caret follows the same scheme-gray rule as selection (see the
+         selection block above): light #666666 on paper, dark #d9d9d9 on ink —
+         always visible (4.67:1 / 13.41:1), never the accent (yellow on cream
+         was 1.07:1, i.e. invisible). */
       input, textarea, [contenteditable='true'] {
-        caret-color: var(--edge-accent);
+        caret-color: var(--edge-caret, #666666);
       }
       :focus-visible {
         outline: 2px solid var(--edge-accent) !important;
@@ -4274,8 +4433,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       a:hover {
         text-decoration-color: var(--edge-accent);
       }
+      /* Reads the STATUS token, not the accent: 终末地灰's dark fill gray is
+         AA under white text but too dim as text itself (3.04:1); the bright
+         palettes define status-dark == accent, so only gray changes. */
       body[data-ds-dark-theme] a:hover {
-        color: var(--edge-accent);
+        color: var(--edge-status-dark, var(--edge-accent));
       }
       ::-webkit-scrollbar {
         width: 10px;
@@ -4324,7 +4486,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       [class$='_sidebarCol'] [class*='_sessionRow'][class*='_selected'] *,
       [class$='_sidebarCol'] [class*='_searchResultRow']:hover *,
       [class$='_sidebarCol'] [class*='_searchResultRow'][class*='_selected'] * {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       /* ---------- Light mode: workspace folder / icon buttons ink ---------- */
       body:not([data-ds-dark-theme]) [class$='_sidebarCol'] [class*='_folder'],
@@ -4333,7 +4495,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body:not([data-ds-dark-theme]) [class$='_sidebarCol'] [class*='_iconButton'],
       body:not([data-ds-dark-theme]) [class$='_sidebarCol'] [class*='_searchButton'],
       body:not([data-ds-dark-theme]) [class$='_sidebarCol'] [class*='_clearButton'] {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
       }
       /* ---------- Dark mode: solid signal-yellow inversions ---------- */
       body[data-ds-dark-theme] [class$='_sidebarCol'] [class*='_projectRow']:hover,
@@ -4357,12 +4519,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-ds-dark-theme] [class$='_iconButton'],
       body[data-ds-dark-theme] [data-cordis-switch],
       body[data-ds-dark-theme] [class*='actionButton' i]:not([data-cordis-approve]):not([data-cordis-approve-plugin]):not([data-cordis-decline]) {
-        color: var(--edge-accent) !important;
+        color: var(--edge-status-dark, var(--edge-accent)) !important;
       }
       body[data-ds-dark-theme] [class$='_iconButton']:hover:not(:disabled),
       body[data-ds-dark-theme] [data-cordis-switch]:hover:not(:disabled),
       body[data-ds-dark-theme] [class*='actionButton' i]:not([data-cordis-approve]):not([data-cordis-approve-plugin]):not([data-cordis-decline]):hover:not(:disabled) {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
       }
       /* ---------- Cordis approval buttons (allow once / allow plugin / decline) ---------- */
@@ -4377,7 +4539,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       [data-cordis-approve-plugin] svg,
       [data-cordis-approve] svg path,
       [data-cordis-approve-plugin] svg path {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
         fill: currentColor !important;
       }
       [data-cordis-approve],
@@ -4424,10 +4586,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         color: var(--dsw-alias-label-primary) !important;
         background: color-mix(in srgb, var(--edge-accent) 15%, var(--dsw-alias-bg-base)) !important;
       }
-      /* Text selection keeps the full accent, visibly distinct from row hover. */
+      /* Row hover keeps the accent tint; ::selection is scheme-gray in every
+         palette (see the selection block), so the two stay distinct by texture. */
       /* ---------- New session button (sidebar) ---------- */
       [class$='_newSession'] {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
         border-color: var(--edge-accent) !important;
       }
@@ -4436,29 +4599,29 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       [class$='_newSession']:hover,
       [class$='_newSession']:focus-visible {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent-deep) !important;
         border-color: var(--edge-accent-deep) !important;
       }
       [class$='_newSession'] svg {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       [class$='_newSessionLabel'] {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       /* ---------- Badge hover: signal-yellow inversion (reference .kpi:hover) ---------- */
       [class*='badge' i]:hover,
       [class*='badge' i]:hover *,
       [class*='badge' i][data-active],
       [class*='badge' i][data-active] * {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       /* ---------- Cordis action buttons (run/stop) ---------- */
       /* Approval chips excluded again: they already own a solid fill, and this blanket
          hover would repaint the decline chip yellow and re-tint the approve glyphs. */
       [data-cordis-switch]:hover:not(:disabled),
       [class*='actionButton' i]:not([data-cordis-approve]):not([data-cordis-approve-plugin]):not([data-cordis-decline]):hover:not(:disabled) {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
       }
       body:not(.theme-endfield-round) [data-cordis-switch],
@@ -4469,7 +4632,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       [class$='_trigger']:hover:not(:disabled),
       [class$='_trigger'][aria-expanded='true'],
       [class$='_trigger']:focus-visible {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
       }
       /* ---------- Agent-preset header chip: accent fill, stock geometry ---------- */
@@ -4503,7 +4666,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          schedule module declares no _label local at all, so the scope still does
          exactly what it exists for. */
       [class$='_centerCol'] [class$='_header'] [class$='_headerActions'] [class*='_label']:has(> svg) {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
         padding: 0 12px !important;
       }
@@ -4513,7 +4676,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       [class$='_centerCol'] [class$='_header'] [class$='_headerActions'] [class*='_label']:has(> svg) svg,
       [class$='_centerCol'] [class$='_header'] [class$='_headerActions'] [class*='_label']:has(> svg) [class*='_icon'] {
         opacity: 1 !important;
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       /* DELIBERATELY NOT STRETCHED. This rule used to carry flex:1 1 auto and
          max-width:none, and an earlier attempt of this fix also flattened the slot
@@ -4622,7 +4785,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* Hero preview badge: solid signal-yellow + black (reference accent chip).
          '_previewBadge' is unique to the hero shell (HeroShell on 0.1.2-rc.1). */
       [class*='_previewBadge'] {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
         background: var(--edge-accent) !important;
         border-color: var(--edge-accent) !important;
       }
@@ -4667,7 +4830,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       /* Brand wordmark HARNESS chip: signal-yellow box + black letters (both modes) */
       body {
-        --dsw-alias-label-primary-inverted: #101110;
+        --dsw-alias-label-primary-inverted: var(--edge-accent-ink, #101110);
       }
       [class*='brand'] svg rect,
       [class$='_newSession'] svg rect {
@@ -4684,11 +4847,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       body[data-ds-dark-theme] [class$='_compactionButton']:hover *,
       body[data-ds-dark-theme] [class$='_compactionButton']:focus-visible * {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       body[data-ds-dark-theme] [class$='_compactionButton']:hover [class$='_compactionSep'],
       body[data-ds-dark-theme] [class$='_compactionButton']:focus-visible [class$='_compactionSep'] {
-        background: #000 !important;
+        background: var(--edge-accent-ink, #000) !important;
       }
       /* ================= composer add (+) button hover inversion ================= */
       /* Dark: + icon signal yellow at rest; on hover solid yellow bg + black icon.
@@ -4732,11 +4895,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          Verified by test/hover-check.js against real hovered pixels in both
          palettes and both schemes. */
       body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add'] {
-        color: var(--edge-accent) !important;
+        color: var(--edge-status-dark, var(--edge-accent)) !important;
       }
       body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']:hover:not(:disabled),
       body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']:focus-visible {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
       }
       /* ================= composer primary send/stop button ================= */
@@ -4745,10 +4908,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          wrapper on the empty state) and to <button>: '_primary' as a bare suffix is
          too generic to trust with a colour flip anywhere else. */
       body[data-ds-dark-theme] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary'] {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
       }
       body[data-ds-dark-theme] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']:hover:not(:disabled) {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
         background: var(--edge-accent-deep) !important;
       }
       /* ================= light-mode white-on-dark buttons keep white icon ================= */
@@ -4830,8 +4993,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       :is([class$='_composerSeat'], [class$='_composerHero']) [class*='_arrow'].HOVERPROBE:not(:disabled),
       :is([class$='_composerSeat'], [class$='_composerHero']) [class*='_arrow'].HOVERPROBE:not(:disabled) svg,
       :is([class$='_composerSeat'], [class$='_composerHero']) [class*='_arrow'].HOVERPROBE:not(:disabled) svg path {
-        /* Ink on accent: 16.50:1 on 谷地黄, 6.62:1 on 武陵青 — both AA. */
-        color: #101110 !important;
+        /* Accent-ink on accent: 16.50:1 on 谷地黄, 6.62:1 on 武陵青, white on
+           终末地灰's #626262 6.10:1 — all AA through --edge-accent-ink. */
+        color: var(--edge-accent-ink, #101110) !important;
         fill: currentColor !important;
       }
       /* ---------- light mode: the danger (移除) button needs a darker red ----------
@@ -4851,12 +5015,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* The translucent yellow wash makes white text look muddy olive; the reference
          inverts to black-on-signal-yellow, so selected rows get the full inversion. */
       body[data-ds-dark-theme] [class*='selected' i]:not([class*='unselected' i]) {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
         background: var(--edge-accent) !important;
         border-color: var(--edge-accent) !important;
       }
       body[data-ds-dark-theme] [class*='selected' i]:not([class*='unselected' i]) *:not(svg):not(path) {
-        color: #000 !important;
+        color: var(--edge-accent-ink, #000) !important;
       }
       /* ================= ask_user_question option chips ================= */
       /* Two contrast collisions in the question card (@deepseek-ai/dsh-client-ui-user-questions),
@@ -4872,13 +5036,13 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             dark. Pin the pair explicitly instead of retuning either token, because
             both are consumed as real background fills elsewhere. */
       :is([role='radio'], [role='checkbox']) [class*='badge' i] {
-        color: #101110 !important;
+        color: var(--edge-accent-ink, #101110) !important;
         background: var(--edge-accent) !important;
       }
       /* On a selected row the row itself is already solid signal yellow, so the chip
          inverts to keep its edge instead of dissolving into the row. */
       body[data-ds-dark-theme] [class*='selected' i]:not([class*='unselected' i]) [class*='badge' i] {
-        color: var(--edge-accent) !important;
+        color: var(--edge-status-dark, var(--edge-accent)) !important;
         background: #101110 !important;
       }
       /* 2) The option number ("1", "2", ...). The blanket dark inversion above
@@ -4889,8 +5053,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             row. Wash the chip rather than filling it, so the digit reads on yellow
             and the chip still looks like a chip. */
       body[data-ds-dark-theme] [class*='selected' i]:not([class*='unselected' i]) [class*='number' i] {
-        color: #101110 !important;
-        background: rgba(16, 17, 16, 0.16) !important;
+        color: var(--edge-accent-ink, #101110) !important;
+        background: color-mix(in srgb, var(--edge-accent-ink, #101110) 14%, transparent) !important;
       }
       /* ---------- Turn-status label ("Deep diving...") ----------
          Owner: @deepseek-ai/dsh-client-ui-conversation, class Md3f7G_turnStatus.
@@ -5045,7 +5209,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       [data-endfield-loader-pct] {
         display: block;
         margin-top: 7px;
-        color: var(--edge-accent);
+        color: var(--edge-status-dark, var(--edge-accent));
         font-size: 39px;
         font-weight: 700;
         line-height: 1;
@@ -5411,11 +5575,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       // Guarded like every other body touch: an unload race must not throw here.
       if (typeof document !== 'undefined' && document.body !== null) {
         document.body.classList.remove('theme-endfield-round')
-        /* The palette class must go with the stylesheet that gives it meaning:
-           left behind it would be a class nothing defines, and it would make
-           isWulingPalette() report a palette the page is no longer using. The
-           stored preference is untouched, so re-enabling restores it. */
-        document.body.classList.remove(PALETTE_CLASS)
+        /* The palette classes must go with the stylesheet that gives them
+           meaning: left behind each would be a class nothing defines, and it
+           would make isPalette() report a palette the page is no longer using.
+           The stored preference is untouched, so re-enabling restores it. */
+        for (const cls of Object.values(PALETTE_CLASSES)) document.body.classList.remove(cls)
         document.body.removeAttribute?.('data-endfield-glass')
       }
       // The plate is styled by the theme stylesheet just torn down — an orphaned
@@ -5434,7 +5598,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* The watermark must go with the stylesheet too, and it cannot wait for
          syncWatermarkVisibility(): with the sheet torn down its
          `opacity: var(--edge-wm-alpha)` computes invalid and falls back to 1,
-         so an orphaned mark sits on the page as a fully opaque 9.5vw ENDFIELD.
+         so an orphaned mark sits on the page as a fully opaque logo stamp.
          This path also runs when the switch is turned off from ANOTHER window
          (reconcileFromPrefs -> unmount), where nothing else removes the node —
          the local toggle path only looked covered because toggleTheme happened
@@ -5540,11 +5704,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       themeOn: '开启主题',
       themeOff: '关闭主题',
       paletteRow: '主题配色',
+      paletteGray: '终末地灰',
       paletteValley: '谷地黄',
       paletteWuling: '武陵青',
+      paletteToGray: '切换终末地灰',
       paletteToValley: '切换谷地黄',
       paletteToWuling: '切换武陵青',
-      paletteHintValley: '默认信号黄 #fff500（终末地官网强调色）',
+      paletteHintGray: '官网工业灰：悬停/选中用灰阶（亮 #d9d9d9 · 暗 #6a6a6a），默认',
+      paletteHintValley: '信号黄 #fff500（终末地官网强调色）',
       paletteHintWuling: '青碧色强调 #14d0d0，用于按钮、悬停、选中行与等高线',
       radiusRow: '主题圆角',
       radiusRound: '圆角',
@@ -5685,11 +5852,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       themeOn: 'Turn on',
       themeOff: 'Turn off',
       paletteRow: 'Accent palette',
+      paletteGray: 'Endfield Gray',
       paletteValley: 'Valley Yellow',
       paletteWuling: 'Wuling Cyan',
+      paletteToGray: 'Use Endfield Gray',
       paletteToValley: 'Use Valley Yellow',
       paletteToWuling: 'Use Wuling Cyan',
-      paletteHintValley: 'Default signal yellow #fff500 (the Endfield site accent)',
+      paletteHintGray: 'Official industrial gray for hover/selection (light #d9d9d9, dark #6a6a6a); default',
+      paletteHintValley: 'Signal yellow #fff500 (the Endfield site accent)',
       paletteHintWuling: 'Teal-cyan accent #14d0d0 for buttons, hover, selected rows and contours',
       radiusRow: 'Corners',
       radiusRound: 'Rounded',
@@ -6068,7 +6238,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
              The redraw is called directly rather than left to the MutationObserver
              so the sheet changes in the same frame as the rest of the UI. */
           const togglePalette = () => {
-            const next = readPalette() === 'wuling' ? 'valley' : 'wuling'
+            const order = ['gray', 'valley', 'wuling']
+            const next = order[(order.indexOf(readPalette()) + 1) % order.length]
             prefsSet(PALETTE_KEY, next)
             setPalette(next)
             syncPaletteClass()
@@ -6327,9 +6498,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               ]),
               row('palette', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('paletteRow') + t('sep') + t(palette === 'wuling' ? 'paletteWuling' : 'paletteValley'),
+                  t('paletteRow') + t('sep') + t('palette' + (palette === 'gray' ? 'Gray' : palette === 'wuling' ? 'Wuling' : 'Valley')),
                   R.createElement('span', { style: hintStyle },
-                    t(palette === 'wuling' ? 'paletteHintWuling' : 'paletteHintValley')
+                    t('paletteHint' + (palette === 'gray' ? 'Gray' : palette === 'wuling' ? 'Wuling' : 'Valley'))
                   )
                 ),
                 // A colour switch should show the colour it offers, not only name it.
@@ -6352,7 +6523,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     type: 'button',
                     onClick: togglePalette,
                     style: btnStyleFor(true),
-                  }, t(palette === 'wuling' ? 'paletteToValley' : 'paletteToWuling'))
+                  }, t('paletteTo' + (palette === 'gray' ? 'Valley' : palette === 'valley' ? 'Wuling' : 'Gray')))
                 )
               ]),
               row('glass', false, [

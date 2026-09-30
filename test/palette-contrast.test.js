@@ -61,8 +61,10 @@ const varIn = (block, name) => {
   return m ? m[1].trim() : null
 }
 
-const YELLOW_SEL = 'body'          // the default palette lives on plain body
+const YELLOW_VALLEY_SEL = 'body'   // 谷地黄 lives on plain body (the CSS base block)
 const CYAN_SEL = 'body.theme-endfield-wuling'
+const GRAY_SEL = 'body.theme-endfield-gray'
+const GRAY_DARK_SEL = 'body.theme-endfield-gray[data-ds-dark-theme]'
 
 /* The default-palette block is the one that DEFINES --edge-accent (plain `body {`
    appears many times in this stylesheet, so find the right occurrence). */
@@ -78,15 +80,21 @@ const defaultBlock = (() => {
   }
 })()
 const cyanBlock = blockOf('      ' + CYAN_SEL)
+const grayBlock = blockOf('      ' + GRAY_SEL)
+const grayDarkBlock = blockOf('      ' + GRAY_DARK_SEL)
 
 if (defaultBlock === null) { fail('no body block defines --edge-accent (谷地黄 palette missing)'); }
 if (cyanBlock === null) { fail('no ' + CYAN_SEL + ' block found (武陵青 palette missing)'); }
+if (grayBlock === null) { fail('no ' + GRAY_SEL + ' block found (终末地灰 palette missing)'); }
+if (grayDarkBlock === null) { fail('no ' + GRAY_DARK_SEL + ' block found (终末地灰 dark flip missing)'); }
 if (failures) { console.error('\n' + failures + ' palette check(s) failed'); process.exit(1) }
 
 const palettes = {
   '谷地黄': defaultBlock,
   '武陵青': cyanBlock,
 }
+/* 终末地灰 pairs its fills with --edge-accent-ink rather than fixed ink, and the
+   pairing flips per scheme, so it gets its own sections further down. */
 
 /* ---------- 1. accent used as a SOLID FILL under ink text ----------
    Rows, badges, the new-session button, approval chips and ::selection all paint
@@ -271,6 +279,89 @@ if (ac !== null) {
   const [r, g, b] = hex(ac)
   if (g === b && r < g * 0.5) pass('武陵青 仍在青碧色轴上（R 低、G=B）：' + [r, g, b].join(', '))
   else fail('武陵青 ' + ac + ' has drifted off the teal axis (expect low R, G == B)')
+}
+
+/* ---------- 8. 终末地灰: fills pair with --edge-accent-ink per scheme ----------
+   The bright palettes carry ink text on their accents, so section 1 tests them
+   with fixed INK. The gray palette's dark fill needs WHITE, which is why the
+   pairing travels as --edge-accent-ink; both schemes' pairings must clear AA. */
+{
+  for (const [label, block] of [['终末地灰·亮', grayBlock], ['终末地灰·暗', grayDarkBlock]]) {
+    const ink = varIn(block, '--edge-accent-ink')
+    const accent = varIn(block, '--edge-accent')
+    const deep = varIn(block, '--edge-accent-deep')
+    if (ink === null || accent === null || deep === null) {
+      fail(label + ': accent/accent-ink/deep must all be defined'); continue
+    }
+    const r = ratio(hex(ink), hex(accent))
+    if (r >= 4.5) pass(label + ' 实心强调底 + accent-ink 字：' + r.toFixed(2) + ':1 (AA)')
+    else fail(label + ' accent-ink on accent is only ' + r.toFixed(2) + ':1')
+    const rd = ratio(hex(ink), hex(deep))
+    if (rd >= 4.5) pass(label + ' 悬停加深底 + accent-ink 字：' + rd.toFixed(2) + ':1 (AA)')
+    else fail(label + ' accent-ink on accent-deep is only ' + rd.toFixed(2) + ':1')
+  }
+  /* The gradient stops are declared once on the gray base block; still AA. */
+  for (const [v, bgs, label] of gradientRoles) {
+    const val = varIn(grayBlock, v)
+    if (val === null) { fail('终末地灰: ' + v + ' is not defined'); continue }
+    let worst = Infinity, worstBg = ''
+    for (const [bgName, bg] of Object.entries(bgs)) {
+      const r = ratio(hex(val), bg)
+      if (r < worst) { worst = r; worstBg = bgName }
+    }
+    if (worst >= 4.5) pass('终末地灰 回合状态 ' + label + ' ' + val + '：最差 ' + worst.toFixed(2) + ':1 vs ' + worstBg + ' (AA)')
+    else fail('终末地灰 turn-status ' + label + ' is ' + worst.toFixed(2) + ':1 vs ' + worstBg)
+  }
+  /* Icon floor: the dark accent is the caret / focus-ring / scrollbar ink. */
+  const gAccent = varIn(grayDarkBlock, '--edge-accent')
+  if (gAccent !== null) {
+    let worst = Infinity
+    for (const bg of Object.values(DARK_BGS)) worst = Math.min(worst, ratio(hex(gAccent), bg))
+    if (worst >= 3) pass('终末地灰 暗色图标/焦点环强调色：' + worst.toFixed(2) + ':1 (>=3 非文本下限)')
+    else fail('终末地灰 accent-as-ink in dark mode is only ' + worst.toFixed(2) + ':1')
+  }
+}
+
+/* ---------- 9. 终末地灰 contour strokes: same parity rule ---------- */
+{
+  for (const [k, tag] of [['终末地灰 dark', 'EDGE_STROKE_DARK_GRAY'], ['终末地灰 light', 'EDGE_STROKE_LIGHT_GRAY']]) {
+    const s = strokeOf(tagged(tag))
+    if (s === null) { fail('contour stroke not found for ' + k); continue }
+    const bg = k.endsWith('dark') ? DARK_BGS['bg-base'] : LIGHT_BGS['bg-base']
+    const c = ratio(over(s.rgb, bg, s.a), bg)
+    const y = strokeContrast[k.endsWith('dark') ? '谷地黄 dark' : '谷地黄 light']
+    const drift = Math.abs(c - y) / y
+    if (drift <= 0.20) pass(k + ' 等高线描边强度 ' + c.toFixed(3) + ':1（与谷地黄相差 ' + (drift * 100).toFixed(1) + '%）')
+    else fail(k + ' contour strength ' + c.toFixed(3) + ':1 drifts ' + (drift * 100).toFixed(1) + '% from 谷地黄')
+    if (c >= 1.06) pass(k + ' 等高线在感知下限之上')
+    else fail(k + ' contour stroke is below the 1.06:1 perceptual floor')
+  }
+}
+
+/* ---------- 10. 终末地灰 hero glow: the one-sided budget, per-scheme accent ---------- */
+{
+  /* The glow alphas live on the gray BASE block: the dark override only flips
+     the fill roles, and the cascade still resolves glow from the base. */
+  for (const [mode, accent] of [['light', varIn(grayBlock, '--edge-accent')], ['dark', varIn(grayDarkBlock, '--edge-accent')]]) {
+    if (accent === null) { fail('终末地灰: no accent for the ' + mode + ' glow check'); continue }
+    const a = glowAlpha(grayBlock, '--edge-glow-' + mode)
+    if (a === null) { fail('终末地灰: --edge-glow-' + mode + ' is not defined'); continue }
+    const bg = mode === 'light' ? LIGHT_BGS['bg-base'] : DARK_BGS['bg-base']
+    const mine = Math.abs(yShift(hex(accent), bg, a))
+    const blue = Math.abs(yShift(BLUE, bg, 0.08))
+    if (mine <= blue + 2) pass('终末地灰 hero 光晕 ' + mode + ' α=' + a + '：|ΔY| ' + mine.toFixed(2) + ' <= ' + (blue + 2).toFixed(2))
+    else fail('终末地灰 hero glow ' + mode + ' |ΔY| ' + mine.toFixed(2) + ' exceeds the blue budget')
+  }
+}
+
+/* ---------- 11. three palettes must actually differ ---------- */
+{
+  const accents = [varIn(palettes['谷地黄'], '--edge-accent'), varIn(palettes['武陵青'], '--edge-accent'), varIn(grayBlock, '--edge-accent')]
+  if (new Set(accents.map((v) => v && v.toLowerCase())).size === 3) pass('三套配色的强调色各不相同：' + accents.join(' / '))
+  else fail('palette accents collide: ' + accents.join(' / '))
+  for (const v of accents) {
+    if (v !== null && !/^#[0-9a-f]{6}$/i.test(v)) fail('accent should be a 6-digit hex value, got ' + v)
+  }
 }
 
 console.log('')

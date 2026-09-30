@@ -125,7 +125,7 @@ function makePage(chip) {
 <script>
   document.body.setAttribute('data-ds-dark-theme','')
   ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-  var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'0', contour:'0', watermark:'0', thunder:'0' })
+  var __prefs = __endfieldSettingsScope({ enabled:'1', palette:'valley', loader:'0', contour:'0', watermark:'0', thunder:'0' })
   var mod = window.__MOD__.factory(function () { return null })
   window.__dispose__ = mod.apply({
     get: function (n) {
@@ -187,8 +187,12 @@ let failures = 0
 const ok = (s) => console.log('ok    ' + s)
 const fail = (s) => { console.error('FAIL  ' + s); failures++ }
 
-/* #fff500 -> the browser reports rgb(255, 245, 0). */
+/* #fff500 -> the browser reports rgb(255, 245, 0). The ink pairs with the
+   accent through --edge-accent-ink, which resolves to #101110 in the default
+   palette (rgb(16, 17, 16)) — see the ::selection rule for why the pair is a
+   token rather than a literal black. */
 const ACCENT_RGB = 'rgb(255, 245, 0)'
+const ACCENT_INK_RGB = 'rgb(16, 17, 16)'
 const STOCK_RGB = 'rgb(200, 200, 200)'
 
 const a = run('a', true)
@@ -196,8 +200,8 @@ console.log('      A: ' + JSON.stringify(a))
 if (a.chipBg === ACCENT_RGB) ok('A: the preset chip is filled with the theme accent (' + a.chipBg + ')')
 else fail('A: the preset chip is NOT themed — background is ' + a.chipBg + ', expected ' + ACCENT_RGB
   + '. The chip sits inside the slot\'s class-less wrapper; a selector without that level matches nothing.')
-if (a.chipInk === 'rgb(0, 0, 0)') ok('A: the chip ink is black over the accent')
-else fail('A: chip ink is ' + a.chipInk + ', expected rgb(0, 0, 0)')
+if (a.chipInk === ACCENT_INK_RGB) ok('A: the chip ink is accent-ink over the accent')
+else fail('A: chip ink is ' + a.chipInk + ', expected ' + ACCENT_INK_RGB)
 if (a.chipMaxWidth === '180px') ok('A: the stock 180px cap is kept, so a long preset name cannot widen the chip into a bar')
 else fail('A: chip max-width is ' + a.chipMaxWidth + ', expected the stock 180px cap')
 if (a.chipRadius === '0px') ok('A: square radius mode squares the chip')

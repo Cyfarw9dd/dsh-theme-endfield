@@ -49,7 +49,7 @@
 
 const FIELD_DEFAULTS = {
   enabled: '1',
-  palette: 'valley',
+  palette: 'gray',
   radius: 'square',
   glass: 'off',
   contour: '0',

@@ -194,7 +194,7 @@ if (openIdx < 0) {
        that way and measured EMPTY in a real browser, silently disabling the themed
        scrollbar. Anything reading a token must therefore be declared on body. */
     const paletteVars = [
-      '--edge-accent', '--edge-accent-rgb', '--edge-accent-deep', '--edge-accent-onpaper',
+      '--edge-accent', '--edge-accent-ink', '--edge-accent-rgb', '--edge-accent-deep', '--edge-accent-onpaper',
       '--edge-status-light', '--edge-status-light-mid', '--edge-status-dark',
       '--edge-status-dark-mid', '--edge-glow-light', '--edge-glow-dark',
     ]
@@ -202,11 +202,29 @@ if (openIdx < 0) {
     if (missing.length === 0) pass(`all ${paletteVars.length} palette variables are defined in live CSS`)
     else fail(`palette variable(s) never DEFINED in live CSS: ${missing.join(', ')}`)
 
-    // The 武陵青 palette must exist as an override block, or the switch is inert.
-    if (/body\.theme-endfield-wuling\s*\{/.test(stripped)) {
-      pass('武陵青 palette block (body.theme-endfield-wuling) is present')
+    // Non-default palettes must exist as override blocks, or their switches are inert.
+    for (const cls of ['theme-endfield-wuling', 'theme-endfield-gray']) {
+      if (new RegExp('body\\.' + cls + '\\s*\\{').test(stripped)) {
+        pass('palette block (body.' + cls + ') is present')
+      } else {
+        fail('no body.' + cls + ' block — that palette switch would do nothing')
+      }
+    }
+    // The gray palette's dark-scheme fill flip must exist too: without it dark
+    // mode keeps the light #d9d9d9 fill and every ink-on-accent pair breaks.
+    if (/body\.theme-endfield-gray\[data-ds-dark-theme\]\s*\{/.test(stripped)) {
+      pass('终末地灰 dark-scheme override block is present')
     } else {
-      fail('no body.theme-endfield-wuling block — the palette switch would do nothing')
+      fail('no body.theme-endfield-gray[data-ds-dark-theme] block — dark fills would stay light-gray')
+    }
+    // The embedded emblem mask must be a real SVG data URI INSIDE a body{} rule:
+    // a bare top-level declaration is invalid CSS whose error recovery eats the
+    // next rule's selector (this exact bug shipped once — the contour layer
+    // lost position:absolute and pushed the page down).
+    if (/body\s*\{\s*--edge-emblem:\s*url\("data:image\/svg\+xml;base64,[A-Za-z0-9+/=]{100,}"\)\s*;\s*\}/.test(stripped)) {
+      pass('emblem mask SVG data URI is embedded inside a body rule (see scripts/build-emblem.js)')
+    } else {
+      fail('--edge-emblem must be declared as: body { --edge-emblem: url("data:image/svg+xml;base64,...") } — run node scripts/build-emblem.js')
     }
 
     /* --- 7. the app's font TOKENS must not be redeclared anywhere ---

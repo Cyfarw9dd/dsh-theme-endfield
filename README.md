@@ -2,7 +2,7 @@
 
 参考《明日方舟：终末地》官网风格的 DSH Web 主题插件。
 
-奶油纸底、墨黑文字、信号黄/武陵青强调色、全直角工业编辑风。Client 侧（`client.js`）通过主题令牌和样式覆盖界面；Host 侧（`index.js`）负责设置持久化与可选的音频通知（派生系统播放器子进程），均不修改应用代码。
+奶油纸底、墨黑文字、终末地灰（默认）/谷地黄/武陵青三套强调色、全直角工业编辑风。Client 侧（`client.js`）通过主题令牌和样式覆盖界面；Host 侧（`index.js`）负责设置持久化与可选的音频通知（派生系统播放器子进程），均不修改应用代码。
 
 ## 安装
 
@@ -20,11 +20,11 @@ dsh plugin --profile web rm dsh-theme-endfield
 
 在 **设置 › 终末地主题设置** 中调整：
 
-- 主题总开关、谷地黄/武陵青配色、直角/圆角模式；
+- 主题总开关、终末地灰/谷地黄/武陵青三态配色（默认终末地灰：官网灰阶交互语法）、直角/圆角模式；
 - 等高线背景、动态开关、`24 / 60 / 120 FPS`；
 - 等高线速度 `1x / 2x / 4x`；
 - 可选鼠标轨迹：鼠标附近的等高线局部变形并逐渐恢复，默认关闭；
-- 背景水印及持续显示；
+- 背景水印（官方高清工业徽标：阈值重建的清晰倒三角标）及持续显示；
 - 启动加载动画；
 - 雷霆大字及入场动画；
 - 可选音频通知：启动音、任务开始/结束音、需要回应时提示，音量与自定义音效目录可调（默认关闭，详见 [docs/audio-notifications.md](docs/audio-notifications.md)）。
@@ -60,6 +60,8 @@ client.js          Client 侧主题实现
 index.js           Host 侧：导出 volatile Config，声明设置命名空间
 lib/               音频通知：槽位定义、WAV 合成与播放运行时
 sounds/            生成的通知音（npm run sound:build 重新生成）
+assets/            水印徽标矢量源（endfield-industries.svg，Yue-plus/endfield_icons 重制，来源见 scripts/build-emblem.js）
+scripts/           构建脚本：音效合成、等高线 worker、徽标矢量嵌入
 cordis.patch.yml   Bundle 注入配置
 check.js           样式表静态校验
 selftest.js        校验器自检
@@ -72,7 +74,7 @@ docs/              设计、功能、工程与测试文档
 本插件是**非官方同人作品**，与鹰角网络（Hypergryph）不存在任何隶属、赞助或背书关系。
 
 - 《明日方舟：终末地》（Arknights: Endfield）的游戏名称、标识、商标、官网视觉与设计语言及相关美术素材，版权归**鹰角网络（上海鹰角网络科技有限公司，Hypergryph Network Technology）**所有。
-- 本仓库中的**部分素材**（如 `assets/` 下的界面截图，以及主题中还原的 `ENDFIELD` 字标、信号黄配色与工业编辑风版式）源自或参考上述作品及其官网，仅用于**学习、展示与非商业用途**；其权利仍归鹰角网络所有，**不在本项目的 MIT 许可证覆盖范围内**。
+- 本仓库中的**部分素材**（如 `assets/` 下的界面截图，水印徽标矢量源 [endfield-industries.svg](assets/endfield-industries.svg)（[Yue-plus/endfield_icons](https://github.com/Yue-plus/endfield_icons) 对官方标识的矢量重制，采用已经本仓库所有者批准），以及主题中还原的 `ENDFIELD` 字标、信号黄配色与工业编辑风版式）源自或参考上述作品及其官网，仅用于**学习、展示与非商业用途**；其权利仍归鹰角网络所有，**不在本项目的 MIT 许可证覆盖范围内**。
 - 本项目的原创代码（`client.js`、`index.js`、`src/`、`scripts/`、`test/` 等）以 MIT 许可证发布。
 - 若权利方认为本仓库中的任何素材使用不当，请通过 Issue 联系，我们会立即删除或替换相关内容。
 

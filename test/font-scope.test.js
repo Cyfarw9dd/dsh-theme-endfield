@@ -170,6 +170,13 @@ ${BROWSER_SETTINGS_SCOPE_SNIPPET}
       plateFeatures: plate ? getComputedStyle(plate).fontFeatureSettings : null,
       markFont: mark ? getComputedStyle(mark).fontFamily : null,
       markFeatures: mark ? getComputedStyle(mark).fontFeatureSettings : null,
+      /* The lockup's emblem half: the ::after carries the official mask. Its
+         computed style proves the mask URI resolved (a var() that computed to
+         empty would report mask-image: none) and that the box has the official
+         755:656 aspect rather than collapsing. */
+      markEmblemMask: mark ? getComputedStyle(mark, '::after').maskImage : null,
+      markEmblemWidth: mark ? getComputedStyle(mark, '::after').width : null,
+      markEmblemRatio: mark ? getComputedStyle(mark, '::after').aspectRatio : null,
     }
     document.title = 'FONTSCOPE ' + JSON.stringify(out)
   })
@@ -255,6 +262,28 @@ if (["\"tnum\"", "\"ss01\""].every((f) => String(r.markFeatures || '').includes(
   pass('the watermark carries tnum + ss01 itself')
 } else {
   fail('the watermark lost its text features: ' + r.markFeatures)
+}
+/* --- 4. the lockup's emblem half actually resolves ---
+   The ::after paints the official emblem through a mask that reads the
+   --edge-emblem data URI. If that variable ever failed to resolve (the :root
+   mistake, a broken build, a dropped body{} wrapper) mask-image computes to
+   none and the emblem silently vanishes while the letters keep rendering —
+   exactly the kind of quiet loss this suite exists to catch. */
+if (r.markMounted) {
+  const mask = String(r.markEmblemMask || '')
+  if (mask.includes('data:image/svg+xml;base64')) {
+    pass('the emblem ::after resolved the SVG mask data URI')
+  } else {
+    fail('the emblem mask did not resolve to the embedded SVG data URI: ' + mask.slice(0, 80))
+  }
+  if (String(r.markEmblemRatio || '').replace(/\s/g, '') === '1/1') {
+    pass('the emblem keeps the square viewBox aspect ratio')
+  } else {
+    fail('the emblem aspect-ratio is ' + r.markEmblemRatio + ', expected 1 / 1')
+  }
+  const wpx = parseFloat(r.markEmblemWidth)
+  if (wpx > 40) pass('the emblem box has real width (' + r.markEmblemWidth + ')')
+  else fail('the emblem box collapsed: ' + r.markEmblemWidth)
 }
 
 console.log('')

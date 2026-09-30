@@ -70,7 +70,7 @@ const CONTOUR_KEEP_RING=CONTOUR_MIN_RING_BOX*1.5
 const contourSeed=0x5eed4242
 ${fns}
 const isDarkScheme=()=>false
-const isWulingPalette=()=>false
+const isPalette=()=>false
 ${grab('contourStroke')}
 let REC=[]
 const contourLineCv={ getContext:()=>({

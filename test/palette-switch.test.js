@@ -112,7 +112,7 @@ const ctx={
   get:(n)=> n==='theme' ? {overrideTokens:(_s,t)=>{applyTokens(t); return ()=>{ for(const n of appliedTokens) document.body.style.removeProperty(n); appliedTokens=[] }}} : (n==='settingsScope' ? __prefs.binder : undefined),
   effect:(f)=>{window.__dispose__=f()},
 }
-// palette is intentionally NOT seeded, so it resolves to its default 谷地黄.
+// palette is intentionally NOT seeded, so it resolves to its default 终末地灰.
 mod.apply(ctx)
 
 const cs=()=>getComputedStyle(document.body)
@@ -126,12 +126,14 @@ const canvasHash=()=>{
   return n===0?{n:0}:{n,r:Math.round(r/n),g:Math.round(g/n),b:Math.round(b/n)}
 }
 
-/* ---- 1. default palette is 谷地黄 ---- */
-R('默认配色为谷地黄（未设置存储键）', v('--edge-accent').toLowerCase()==='#fff500', v('--edge-accent'))
+/* ---- 1. default palette is 终末地灰 ---- */
+R('默认配色为终末地灰（未设置存储键）', v('--edge-accent').toLowerCase()==='#d9d9d9', v('--edge-accent'))
+R('默认带 gray class', document.body.classList.contains('theme-endfield-gray'))
 R('默认不带 wuling class', !document.body.classList.contains('theme-endfield-wuling'))
+R('默认 accent-ink 为墨色', v('--edge-accent-ink').toLowerCase()==='#101110', v('--edge-accent-ink'))
 
 /* ---- 2. the palette variables actually RESOLVE (the :root bug) ---- */
-for(const n of ['--edge-accent','--edge-accent-rgb','--edge-accent-deep','--edge-status-light',
+for(const n of ['--edge-accent','--edge-accent-ink','--edge-accent-rgb','--edge-accent-deep','--edge-status-light',
                 '--edge-status-dark','--edge-glow-light','--edge-glow-dark',
                 '--edge-line','--edge-paper','--edge-soft','--edge-signal']){
   R('变量已解析（非空）: '+n, v(n)!=='', JSON.stringify(v(n)))
@@ -152,8 +154,10 @@ R('等高线画布已上色', yellowCanvas && yellowCanvas.n>0, JSON.stringify(y
 __prefs.setField('palette','wuling')
 /* Call the public-ish path the settings row uses. The row lives in a React tree
    this harness does not render, so the class flip is performed the same way the
-   handler does and the canvas redraw is left to the theme's MutationObserver —
-   which is itself part of what is being tested. */
+   handler does (drop every other palette class, add the target) and the canvas
+   redraw is left to the theme's MutationObserver — which is itself part of what
+   is being tested. */
+document.body.classList.remove('theme-endfield-gray')
 document.body.classList.add('theme-endfield-wuling')
 
 // Give the MutationObserver a turn to run before sampling.

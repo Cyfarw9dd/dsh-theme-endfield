@@ -74,7 +74,7 @@ const SHOTS = path.join(ROOT, '.kagent', 'shots')
 let failures = 0
 const results = {}
 
-for (const name of ['shot-valley-light', 'shot-valley-dark', 'shot-wuling-light', 'shot-wuling-dark']) {
+for (const name of ['shot-valley-light', 'shot-valley-dark', 'shot-wuling-light', 'shot-wuling-dark', 'shot-gray-light', 'shot-gray-dark']) {
   const file = path.join(SHOTS, name + '.png')
   if (!fs.existsSync(file)) { console.error('FAIL  missing ' + name + '.png (run node test/shoot.js)'); failures++; continue }
   const img = decodePng(file)
@@ -83,7 +83,7 @@ for (const name of ['shot-valley-light', 'shot-valley-dark', 'shot-wuling-light'
     tally[classify(img.data[i], img.data[i + 1], img.data[i + 2])]++
   }
   const total = img.w * img.h
-  results[name] = tally
+  results[name] = { ...tally, total }
   const pct = (n) => (n / total * 100).toFixed(2) + '%'
   console.log(name.padEnd(20) + ' yellow ' + pct(tally.yellow).padStart(7)
     + '   cyan ' + pct(tally.cyan).padStart(7)
@@ -98,6 +98,7 @@ const check = (label, ok, detail) => {
 for (const scheme of ['light', 'dark']) {
   const v = results['shot-valley-' + scheme]
   const w = results['shot-wuling-' + scheme]
+  const g = results['shot-gray-' + scheme]
   if (!v || !w) continue
   // 谷地黄 must be dominated by yellow accent pixels, and carry essentially no cyan.
   check(scheme + ' 谷地黄 以黄色强调为主', v.yellow > w.yellow * 3 && v.yellow > 3000,
@@ -105,6 +106,21 @@ for (const scheme of ['light', 'dark']) {
   // 武陵青 must be dominated by cyan, and lose the yellow.
   check(scheme + ' 武陵青 以青色强调为主', w.cyan > v.cyan * 3 && w.cyan > 3000,
     'wuling cyan=' + w.cyan + ' valley cyan=' + v.cyan)
+  if (g) {
+    /* 终末地灰's accent is a NEUTRAL gray, so hue classification cannot see it —
+       that is the point. The classifier still reports a few thousand 'yellow'/
+       'cyan' pixels in EVERY shot (semantic colours like the warn/error chips plus
+       warm anti-aliased edges, none of which follow the palette), so the bar is
+       the OTHER palette's baseline — valley's own yellow floor and wuling's own
+       cyan floor — not zero. Gray must sit near those floors while the palette-
+       OWNED surfaces flipped to neutral (which is why neutral climbs to ~98.6%). */
+    check(scheme + ' 终末地灰 无残留黄面', g.yellow < w.yellow * 1.5,
+      'gray yellow=' + g.yellow + ' (non-yellow baseline wuling=' + w.yellow + ')')
+    check(scheme + ' 终末地灰 无残留青面', g.cyan < v.cyan * 1.5,
+      'gray cyan=' + g.cyan + ' (non-cyan baseline valley=' + v.cyan + ')')
+    check(scheme + ' 终末地灰 保持中性纸墨主体', g.neutral / g.total > 0.8,
+      'neutral=' + (g.neutral / g.total * 100).toFixed(1) + '%')
+  }
 }
 
 console.log('')

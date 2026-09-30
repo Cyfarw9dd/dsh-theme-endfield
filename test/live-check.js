@@ -62,9 +62,9 @@ const fail = (m) => { console.error('FAIL  ' + m); failures++ }
     else fail('live bundle is missing ' + label + ' (' + needle + ')')
   }
 
-  /* Default must be yellow: only the exact string 'wuling' may select cyan. */
-  if (/=== 'wuling' \? 'wuling' : 'valley'/.test(served)) pass('live: default palette falls back to 谷地黄')
-  else fail('live bundle does not default to 谷地黄')
+  /* Default must be gray: only the exact strings 'valley'/'wuling' select a bright palette. */
+  if (/stored === 'valley' \|\| stored === 'wuling' \? stored : 'gray'/.test(served)) pass('live: default palette falls back to 终末地灰')
+  else fail('live bundle does not default to 终末地灰')
 
   console.log('')
   if (failures) { console.error(failures + ' live check(s) failed'); process.exit(1) }

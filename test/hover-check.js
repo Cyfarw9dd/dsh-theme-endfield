@@ -233,8 +233,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     window.__setScheme__=(s)=>{ scheme=s
       if(s==='dark') document.body.setAttribute('data-ds-dark-theme',''); else document.body.removeAttribute('data-ds-dark-theme')
       if(last) applyTokens(last) }
-    window.__setPalette__=(p)=>{ if(p==='wuling') document.body.classList.add('theme-endfield-wuling')
-      else document.body.classList.remove('theme-endfield-wuling') }
+    window.__setPalette__=(p)=>{ document.body.classList.toggle('theme-endfield-wuling', p==='wuling')
+      document.body.classList.toggle('theme-endfield-gray', p==='gray') }
+    window.__statusdark__=()=>getComputedStyle(document.body).getPropertyValue('--edge-status-dark').trim()
     localStorage.setItem('dsh-theme-endfield-enabled','1')
     localStorage.setItem('dsh-theme-endfield-loader','0')
     localStorage.setItem('dsh-theme-endfield-contour','0')
@@ -350,8 +351,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
       else fail(label + '  [' + detail + ']  <- 悬停时文字与底色对比不足')
     }
 
-    for (const palette of ['valley', 'wuling']) {
-      const paletteLabel = palette === 'wuling' ? '武陵青' : '谷地黄'
+    for (const palette of ['valley', 'wuling', 'gray']) {
+      const paletteLabel = palette === 'wuling' ? '武陵青' : (palette === 'gray' ? '终末地灰' : '谷地黄')
       for (const scheme of ['light', 'dark']) {
         await evaluate("window.__setPalette__('" + palette + "')")
         await evaluate("window.__setScheme__('" + scheme + "')")
@@ -389,8 +390,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
         const rest = JSON.parse(await evaluate('JSON.stringify(window.__style__("composerAdd"))'))
         const restColor = rest.rgb
         if (scheme === 'dark') {
-          if (near(restColor, accent, 4)) pass(tag + ' · 输入区 + 常态仍为强调色墨  [color=' + rest.color + ']')
-          else fail(tag + ' · 输入区 + 常态应为强调色墨  [color=' + rest.color + ' vs accent=' + rgbText(accent) + ']')
+          /* The rest ink reads --edge-status-dark, which EQUALS the accent for the
+             bright palettes but is deliberately lighter for 终末地灰 (the dark fill
+             gray is AA under white text yet too dim as text itself). */
+          const restTarget = palette === 'gray'
+            ? hexRgb(await evaluate('window.__statusdark__()')) : accent
+          if (near(restColor, restTarget, 4)) pass(tag + ' · 输入区 + 常态仍为强调色墨  [color=' + rest.color + ']')
+          else fail(tag + ' · 输入区 + 常态应为强调色墨  [color=' + rest.color + ' vs ' + rgbText(restTarget) + ']')
         } else {
           if (near(restColor, accent, 4)) fail(tag + ' · 输入区 + 常态不应被暗色规则上色  [color=' + rest.color + ']')
           else pass(tag + ' · 输入区 + 常态未被暗色规则上色  [color=' + rest.color + ']')

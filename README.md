@@ -37,6 +37,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 
 | 文档 | 内容 |
 | --- | --- |
+| [docs/endfield-ui-research.md](docs/endfield-ui-research.md) | 官网 UI 设计语言调研：色彩频次、交互语法证据、徽标素材盘点 |
 | [docs/design-language.md](docs/design-language.md) | 色板、令牌映射与对比度规则 |
 | [docs/features.md](docs/features.md) | 功能行为、默认值、存储键与边界情况 |
 | [docs/engineering-notes.md](docs/engineering-notes.md) | 算法、层叠、动画和性能实现说明 |

@@ -2979,6 +2979,43 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         opacity: 1;
       }
 
+      /* A-4. Composer send/stop button: same arrow morph.
+         Scoped to the composer (the seat band / hero wrapper) and to <button>
+         elements whose class contains '_primary' — the send and stop controls. */
+      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary'] {
+        position: relative;
+      }
+      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']::after {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 10px;
+        height: 55%;
+        background-color: var(--edge-accent-ink, #101110);
+        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
+        transition: clip-path .2s ease, transform .2s ease;
+        pointer-events: none;
+      }
+      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']:hover::after {
+        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
+        transform: translateY(-50%) translateX(6px);
+      }
+
+      /* A-5. Sidebar session/search rows + menu/option items: left signal border.
+         border-left transition instead of ::after — no extra DOM, no stacking
+         context, paint area is a 2px vertical strip. Cheapest possible indicator. */
+      body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow']:hover {
+        border-left: 2px solid var(--edge-accent) !important;
+      }
+      body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow']:hover {
+        border-left: 2px solid var(--edge-accent) !important;
+      }
+      body[data-endfield-motion='signal'] [role='menuitem']:hover {
+        border-left: 2px solid var(--edge-accent) !important;
+      }
+
       /* ================= 方案C impact：冲压反馈 ================= */
 
       /* C-1. 悬停硬阴影收紧（4px→2px：被压向页面） */

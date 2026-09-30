@@ -38,6 +38,6 @@ CHROME_PATH=/usr/bin/chromium-browser npm test   # 全量（含真实渲染）
 
 ## 提交与发布
 
-- **仅用户明示「提交」时才 commit**；Conventional Commits 规范与操作细则见 [git.md](git.md)
+- 完整逻辑变更过验证即可提交；Conventional Commits 规范与操作细则见 [git.md](git.md)
 - 版本号在 package.json；语义：特性 +0.1.0，修复 +0.0.1
 - 未推送的提交可用 `--amend` 折叠后续修复；已推送禁用

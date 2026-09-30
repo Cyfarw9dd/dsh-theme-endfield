@@ -46,7 +46,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 | [docs/testing.md](docs/testing.md) | 主题 | 校验脚本与测试套件说明 |
 | [docs/engineering-notes.md](docs/engineering-notes.md) | 主题 | 工程深水笔记：实现决策与实测数据 |
 | [docs/development.md](docs/development.md) | 主题 | 开发与发布工作流 |
-| [docs/git.md](docs/git.md) | 主题 | Git 提交策略：仅用户明示时提交，Conventional Commits 规范 |
+| [docs/git.md](docs/git.md) | 主题 | Git 提交策略与 Conventional Commits 规范 |
 | [docs/cookbook/](docs/cookbook/) | 手册 | 功能专题：[音频通知](docs/cookbook/audio-notifications.md) · [等高线轨迹](docs/cookbook/contour-trail.md) · [worker](docs/cookbook/contour-worker.md) · [扫描边界](docs/cookbook/contour-scan-bounds.md) · [磨砂玻璃](docs/cookbook/glass.md) |
 | [docs/notes/](docs/notes/) | 记录 | 一次性存档（PR 说明等） |
 

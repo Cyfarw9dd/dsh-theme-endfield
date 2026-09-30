@@ -72,7 +72,7 @@ _centerCol > _header > _titleRow > _titleCluster > _headerActions
 node test/palette-contrast.test.js   # 两套配色每个角色的对比度（从真实 CSS 里读值）
 node test/palette-switch.test.js     # 真实浏览器里切换配色，22 项断言
 node test/settings-buttons.test.js   # 强调色底上的按钮文字对比度（32 项，含回归守卫）
-node test/hover-check.js             # 用 CDP 真的移动鼠标，验证真实 :hover 规则
+node test/hover-check.js             # 用 CDP 真的移动鼠标，验证真实 :hover 规则（3 个面，24 项）
 node test/verify-shots.js            # 解码四张截图统计强调色像素
 ```
 
@@ -82,7 +82,7 @@ node test/verify-shots.js            # 解码四张截图统计强调色像素
 
 **`settings-buttons.test.js`** 读计算样式，用同特异度的 `.HOVERPROBE` 类替代 `:hover`。这是合理的层叠等价，但反向对照暴露了它的边界（见[验证方法论](engineering-notes.md#计算样式触发不了-hover)），因此有了下一个脚本。
 
-**`hover-check.js`** 通过 DevTools 协议**真的移动鼠标**到按钮上，再截图量字形与填充的对比度。
+**`hover-check.js`** 通过 DevTools 协议**真的移动鼠标**到按钮上，再截图量字形与填充的对比度。夹具用的是**当前安装态 bundle 里逐字抄下来的上游 CSS**，覆盖三个面：设置 › 模型的 `编辑`（`_secondaryButton`，强调底落在按钮自己身上）、`添加模型提供商`（`_addButton` **及其外层 `_addActions` 包裹层**——这一条就是模型设置页那次反馈）、输入区 `+`（`_add` 钩子的真实目标，收敛作用域后必须仍在反色）。每个面在两种配色 × 两种模式下各测字形对比度；添加按钮额外断言**外层容器不得被实心强调色填充**，输入区 `+` 额外断言悬停底色**仍是实心强调色**、常态墨色在暗色下仍是强调色、亮色下**不被暗色规则上色**。反向对照：把 `client.js` 换回修复前那版，模型页两条断言在暗色下报 1.06:1 / 1.75:1 红，与反馈截图吻合。
 
 **`verify-shots.js`** 只用 `zlib` 解码 PNG（不引依赖），按色相家族统计像素，用「黄 5.47% → 0.39%、青 0.42% → 5.40%、中性约 93% 不变」这样的数字代替「看起来像换了」。
 

@@ -4692,14 +4692,50 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       /* ================= composer add (+) button hover inversion ================= */
       /* Dark: + icon signal yellow at rest; on hover solid yellow bg + black icon.
-         Substring '_add' must exclude '_addButton' (the settings 添加提供方
-         buttons share it): ':not()' keeps the accent ink off those plain bordered
-         buttons, whose own label colour has to survive. */
-      body[data-ds-dark-theme] [class*='_add']:not([class*='_addButton']) {
+
+         SCOPED TO THE COMPOSER, like the '_arrow' rule below and for the same
+         reason: the hook is a bare SUBSTRING ('_add'), so every upstream class that
+         merely CONTAINS it was painted too. Audited against the installed bundles
+         (0.1.7-era), the collision set is:
+           RlGAzG_add             composer + button                    <- the target
+           _3nPmjq_addActions     settings > 模型 add-block WRAPPER   <- the report
+           _3nPmjq_addBlock / _addCard / _addModes / _addPanel / _addModelButton
+           _0SbxAa_add            deliverables file-diff ADDED line
+           LFNH1G_added / kuvljq_added / pFy1Ka_diffAdded /
+           haSm5q_promptDiffLineadded
+           qWvkEq_address*        sidebar-browser address bar
+           fO69Vq_addButton / _3nPmjq_addButton   (what the old ':not()' excluded)
+
+         The reported screenshot is the WRAPPER. '_addActions' is a plain <div>
+         around 添加模型提供商, so ':disabled' never applies and pointing at the
+         BUTTON hovers the wrapper as well. The theme filled the wrapper with the
+         SOLID accent while the button kept upstream's translucent wash
+         (rgba(255,245,0,.18)) plus color: label-primary — #f5f5f0 on #fff500 =
+         1.05:1, an invisible label. The button's dashed border kept drawing over
+         the fill, which is exactly what the report shows. Measured on the running
+         build (not inferred): rest -> wrapper transparent, hover -> wrapper
+         rgb(255,245,0) under a button at rgb(245,245,240).
+
+         ':not([class*='_addButton'])' could not have caught it — the wrapper is not
+         the button — and every '*_add*' container upstream adds would have had to be
+         appended to that exclusion list one bug report at a time. Scoping fixes the
+         whole family at once, the same way '_arrow' was fixed.
+
+         The scope is the pair the composer '_primary' / '_arrow' rules already use,
+         so the + keeps its inversion. '[data-composer-seat]' is included because the
+         seat declares it upstream ('data-composer-seat', an e2e anchor): a
+         '[class$=]' hook dies silently the moment upstream appends a second class to
+         that element, which is the failure mode this file has already paid for.
+
+         Note the + is the ONLY composer element whose class contains '_add'; the
+         scope cannot reach the settings wrappers, the diff lines or the address bar.
+         Verified by test/hover-check.js against real hovered pixels in both
+         palettes and both schemes. */
+      body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add'] {
         color: var(--edge-accent) !important;
       }
-      body[data-ds-dark-theme] [class*='_add']:not([class*='_addButton']):hover:not(:disabled),
-      body[data-ds-dark-theme] [class*='_add']:not([class*='_addButton']):focus-visible {
+      body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']:hover:not(:disabled),
+      body[data-ds-dark-theme] :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']:focus-visible {
         color: #000 !important;
         background: var(--edge-accent) !important;
       }

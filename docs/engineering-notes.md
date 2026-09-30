@@ -447,7 +447,7 @@ background: var(--dsw-alias-interactive-bg-hover-solid);   /* :hover */
 | `_inspectButton` | `.iWrAna_…` | 技能检查面板 | 1.05:1 | 16.50:1 |
 | `_inspectButton` | `.o3BgMG_…` | 工具检查面板 | 1.05:1 | 16.50:1 |
 | `_arrow`（限输入区容器内） | `.JVDQca_…` | 附件轮播箭头 | 1.05:1 | 16.50:1 |
-| `_add`（排除 `_addButton`） | `.uV2eYG_…` | 输入区 `+` | 早前已修 | — |
+| `_add`（限定输入区容器内） | `.uV2eYG_…` | 输入区 `+` | 早前已修；0.1.7 因裸子串命中容器而复发，见八类 | 18.31:1 |
 
 武陵青下同一处是 2.61:1——也不合格，只是没那么刺眼，这正是它一直没被发现的原因。
 
@@ -568,6 +568,60 @@ div.pI_x6G_centerCol
 **变异验证 5 类，全部报错**：换回第一次修完的那版选择器（漏包裹层）→ 2 条断言红（背景正是线上看到的灰底）；把图标判据换成裸后代 → jobs 标签与"容器外 `_label`"两条反向断言红；重新加回压平 + 增长 → 两条"变成长条"断言红。
 
 `test/preset-chip.test.js` 现在按**量出来的**骨架搭夹具（含那层无 class 包裹层，以及一个"根带 class、`_label` 藏在菜单里"的 jobs 式兄弟条目），断言**结果**而不是选择器文本，并且**同时守住两侧**：既不能没上色，也不能被拉成长条。
+
+### 八类：子串选择器命中了**容器**（`_add` → 设置 › 模型的包裹层）
+
+反馈：设置 › 模型中「添加模型提供商」被鼠标指上去时，整条虚线按钮变成实心信号黄，文字近乎不可见（截图像素：底色 `#fff500`、文字 `#f5f5f0`）。
+
+根因不是"底色归主题、文字归应用"（一类），而是**规则命中了不该命中的元素**：输入区 `+` 的钩子是裸子串
+
+```css
+body[data-ds-dark-theme] [class*='_add']:not([class*='_addButton']) { color: var(--edge-accent) !important; }
+body[data-ds-dark-theme] [class*='_add']:not([class*='_addButton']):hover { color:#000 !important; background: var(--edge-accent) !important; }
+```
+
+而"添加模型提供商"的 `<button>` 上游用**一个普通 `<div>` 包着**（0.1.7 bundle 里 `_3nPmjq_addActions`，按钮是 `_3nPmjq_addButton`）。`_addActions` 不含 `_addButton`，于是它**通过**了 `:not()`；它又是 `div`，`:disabled` 永不成立；**指针停在按钮上时包裹层同样处于 `:hover`**。实测（真实鼠标 hover，暗色·谷地黄）：
+
+| 元素 | 属性 | 修复前 | 修复后 |
+| --- | --- | --- | --- |
+| `div._3nPmjq_addActions`（包裹层） | background | **rgb(255,245,0)** | rgba(0,0,0,0) |
+| `button._3nPmjq_addButton`（按钮） | color / background | rgb(245,245,240) / rgba(255,245,0,.18) | 不变（上游值） |
+| 合成后字形对比度 | — | **1.05:1**（夹具里量到 1.06:1） | 9.65:1 |
+
+按钮自己的半透明淡底（α 0.18）盖在包裹层的实心黄上，等于没盖；虚线边框是**按钮自己**的，所以画在黄底之上——这正是截图的样子。`:not()` 挡不住它：**包裹层不是按钮**，而且每出现一个含 `_add` 的新容器，就得再补一条 `:not()`，一个反馈补一条。
+
+顺着审计安装态 bundle 里所有含 `_add` 的类名，命中面是：
+
+```
+RlGAzG_add            输入区 + 按钮                     ← 目标
+_3nPmjq_addActions    设置 › 模型 添加块包裹层 <div>    ← 本次反馈
+_3nPmjq_addBlock / _addCard / _addModes / _addPanel / _addModelButton
+_0SbxAa_add           deliverables 文件 diff 的"新增行"
+LFNH1G_added / kuvljq_added / pFy1Ka_diffAdded / haSm5q_promptDiffLineadded
+qWvkEq_address*       侧栏浏览器的地址栏
+fO69Vq_addButton / _3nPmjq_addButton    （旧 `:not()` 排除的两个）
+```
+
+**修法：按第三条铁律加作用域**，与 `_arrow` 完全同款——把 `_add` 限定在输入区容器内：
+
+```
+:is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']
+```
+
+作用域同时写上 `[data-composer-seat]`（上游给这个座位声明的 e2e 锚点）与既有的 `_composerSeat`/`_composerHero` 类钩子：`[class$=]` 只要上游给该元素追加第二个类就会**静默失效**，两个钩子取并集可以多扛一次重构。输入区内只有 `+` 一个类名含 `_add`，所以作用域不会误伤设置页、diff 行或地址栏。
+
+**反向对照**（把 `client.js` 换回修复前那版跑同一脚本）——修复前如实报错：
+
+| 用例 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 谷地黄 · 暗色 · 模型页「添加模型提供商」hover | **1.06:1** + 外层容器 `rgb(255,244,0) ≈ accent` | 9.65:1，容器未被填充 |
+| 武陵青 · 暗色 · 同上 | **1.75:1** | 11.16:1 |
+| 输入区 `+` hover（暗色） | 18.31:1（本来正常） | 18.31:1（**未因收敛作用域而丢失**） |
+| 输入区 `+` 常态墨色 | `#fff500` | `#fff500`（作用域仍命中） |
+
+`test/hover-check.js` 现在同时守这三面（编辑按钮 / 模型页添加按钮及其容器 / 输入区 `+`），`test/selector-guard.test.js` 新增第三条断言：**任何裸的 `[class*='_add']` 都要报错**，把这条钩子钉在输入区作用域里。
+
+> 亮色模式本来就不受影响（该规则是 `body[data-ds-dark-theme]` 限定），测试也如实只在暗色下报红——这本身就是"作用域写对了"的证据。
 
 ---
 

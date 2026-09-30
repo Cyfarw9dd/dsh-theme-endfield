@@ -23,6 +23,12 @@
  *      depend on must exist in the source. A renamed suffix or a bad refactor
  *      fails here instead of silently unmounting a feature on the real page.
  *
+ *   3. SUBSTRING HOOKS STAY SCOPED: a bare '[class*=\'_add\']' matches any upstream
+ *      class that contains the substring, not just the composer's + button. That is
+ *      how the settings 添加模型提供商 button ended up invisible (the '*_addActions'
+ *      WRAPPER took the solid accent under it: 1.05:1). The hook must keep the
+ *      composer scope the '_arrow' rule already uses.
+ *
  * This checks the local client.js; test/live-check.js separately proves the
  * running GUI serves that exact byte stream, so the guard transitively covers
  * the live bundle too.
@@ -73,7 +79,7 @@ const hooks = [
   ["[class*='_colorMessages']", 'token meter messages segment'],
   ["[class*='_selected']", 'appearance cube warm border'],
   ["[class*='_previewBadge']", 'hero preview badge'],
-  ["[class*='_add']:not([class*='_addButton'])", 'composer + button (addButton excluded)'],
+  ["[class*='_add']", 'composer + button (composer-scoped, see part 3)'],
   ["[class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']",
     'composer primary send/stop button'],
   ["[class*='_secondaryButton']", 'accent-filled secondary button ink'],
@@ -87,6 +93,28 @@ for (const [needle, label] of hooks) {
   else fail('hook missing: ' + label + ' (' + needle + ')')
 }
 
+/* ---------- 3. the '_add' hook stays scoped to the composer ---------- */
+/* The reported 模型设置页面 bug. '[class*=\'_add\']' is a bare SUBSTRING, so it used
+   to paint every upstream class that merely contains it — including the plain
+   <div> ('*_addActions') that WRAPS 添加模型提供商 in Settings > 模型. Pointing at
+   the button hovers that wrapper, and the theme filled the wrapper with the solid
+   accent while the button kept label-primary: #f5f5f0 on #fff500 = 1.05:1, an
+   invisible label. The fix scopes the hook to the composer, exactly like the
+   '_arrow' rule. This part keeps it scoped: any reappearance of an unscoped
+   '_add' hook — a new rule, or a revert — fails here instead of turning another
+   page's text invisible. (test/hover-check.js measures the real pixels.) */
+const addUses = [...src.matchAll(/\[class\*='_add'\]/g)].map((m) => m.index)
+const unscoped = addUses.filter((i) => !/_composerSeat|_composerHero|data-composer-seat/.test(src.slice(Math.max(0, i - 200), i)))
+if (addUses.length === 0) {
+  fail("the composer + hook ('[class*='_add']') is gone entirely — the + button would lose its inversion")
+} else if (unscoped.length > 0) {
+  fail("unscoped '[class*='_add']' hook at offset(s) " + unscoped.join(', ')
+    + " — it matches ANY class containing '_add' (the settings 添加模型提供商 wrapper is one)"
+    + "\n      -> scope it to the composer: :is([data-composer-seat], [class$='_composerSeat'], [class$='_composerHero']) [class*='_add']")
+} else {
+  pass("the '_add' hook is composer-scoped in all " + addUses.length + ' place(s)')
+}
+
 console.log('')
 if (failures) { console.error(failures + ' selector guard check(s) failed'); process.exit(1) }
-console.log('all selector guard checks passed (' + hooks.length + ' hooks + anti-hash)')
+console.log('all selector guard checks passed (' + hooks.length + ' hooks + anti-hash + substring-hook scoping)')

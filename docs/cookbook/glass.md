@@ -2,12 +2,12 @@
 
 The `glass` setting is `off` by default. `subtle`, `standard` and `strong` add
 bounded local blur (8/14/22 px) to the composer card only. The docked right
-panel keeps the material look (fill + sheen + edge at a raised alpha) with NO
-backdrop blur — it spans half the screen, and blurring behind it read as "the
-whole right side is smeared". The sidebar receives a static tint/sheen only.
-Text, native geometry and the selected palette remain under the theme's
-existing control. Dark surfaces use their own opacity levels. Fullscreen
-panels, dialogs, code blocks and menus are excluded.
+panel keeps its native opaque background entirely — it spans half the screen
+and any translucent material there read as "half the page is frosted". The
+sidebar receives a static tint/sheen only. Text, native geometry and the
+selected palette remain under the theme's existing control. Dark surfaces use
+their own opacity levels. Fullscreen panels, dialogs, code blocks and menus
+are excluded.
 
 Unsupported backdrop filters use a .96 opaque fill; reduced-transparency uses
 an opaque fill and removes blur. Disabling the theme removes the material

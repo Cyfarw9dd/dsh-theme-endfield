@@ -2657,26 +2657,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-endfield-glass='strong'] { --edge-glass-alpha: .9; --edge-glass-blur: 22px; }
       body[data-endfield-glass='subtle'][data-ds-dark-theme] { --edge-glass-alpha: .64; }
       body[data-endfield-glass='strong'][data-ds-dark-theme] { --edge-glass-alpha: .88; }
-      /* Blur is COMPOSER-ONLY. The docked right panel used to share the
-         backdrop-filter, and because it spans half the screen the frost read as
-         'the whole right side is smeared' — content behind it lost all crispness
-         for no local benefit. The panel keeps the material LOOK (fill + sheen +
-         edge) at a near-opaque alpha with NO blur, so its own text stays sharp
-         and whatever shows through is tinted, not smeared. */
+      /* Glass is COMPOSER-ONLY. The docked right panel used to share the
+         material, and because it spans half the screen the translucent fill
+         read as 'half the page is frosted' even without blur — a big slab of
+         milky overlay with nothing local to show for it. The panel now keeps
+         its native opaque background entirely: no fill, no sheen, no edge.
+         The left sidebar keeps a STATIC sheen (no blur, no fill). */
       body[data-endfield-glass] [data-composer-card] {
         background-color: rgb(var(--edge-glass-fill) / var(--edge-glass-alpha)) !important;
         background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
           radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 10%, transparent), transparent 75%) !important;
         -webkit-backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
         backdrop-filter: blur(var(--edge-glass-blur)) saturate(1.05);
-        --dsw-elevation-stroke-color: var(--edge-glass-edge);
-      }
-      body[data-endfield-glass] [data-sidebar-right-panel='push'] {
-        background-color: rgb(var(--edge-glass-fill) / calc(var(--edge-glass-alpha) + 0.15)) !important;
-        background-image: linear-gradient(145deg, var(--edge-glass-sheen), transparent 58%),
-          radial-gradient(ellipse at 0% 0%, color-mix(in srgb, var(--edge-accent) 8%, transparent), transparent 75%) !important;
-        -webkit-backdrop-filter: none;
-        backdrop-filter: none;
         --dsw-elevation-stroke-color: var(--edge-glass-edge);
       }
       body[data-endfield-glass] [data-slot='sidebar'] > div {

@@ -120,7 +120,7 @@ const PAGE = `<!doctype html><html><head><meta charset="utf-8"><style>
 <script src="./client.js"></script>
 <script>
 ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-  var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'1', contour:'0', watermark:'1' })
+  var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'1', watermark:'1' })
   var mod = window.__MOD__.factory(function () { return null })
   mod.apply({
     get: function (n) {

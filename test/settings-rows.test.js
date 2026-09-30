@@ -157,16 +157,15 @@ const buttons = nodes.filter((n) => n.type === 'button')
    happened when 大字入场动画 was added (the count stayed at 9 and the assertion
    passed while a tenth row was on screen). The independent total below is what
    makes that impossible now. */
-/* The row set is the union of both lines of work: main's glass / contour-trail /
-   contour-renderer rows (16) plus this branch's 11 audio rows. The count is
-   asserted below against the rendered tree as well, so a row that exists in the
-   page but not in this list still fails. */
-const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'contour', 'contour-anim', 'contour-trail', 'contour-renderer', 'contour-fps', 'contour-speed', 'contour-scroll-pause', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim', 'audio', 'audio-boot', 'audio-start', 'audio-done', 'audio-volume', 'audio-attention', 'audio-fail', 'audio-source', 'audio-dir', 'audio-human', 'audio-diag']
+/* The row set is the union of both lines of work: main's glass row plus this
+   branch's 11 audio rows. The count is asserted below against the rendered tree
+   as well, so a row that exists in the page but not in this list still fails. */
+const ROW_KEYS = ['theme', 'palette', 'glass', 'radius', 'watermark', 'watermark-persist', 'loader', 'thunder', 'thunder-anim', 'audio', 'audio-boot', 'audio-start', 'audio-done', 'audio-volume', 'audio-attention', 'audio-fail', 'audio-source', 'audio-dir', 'audio-human', 'audio-diag']
 const rows = nodes.filter((n) => n.type === 'div' && n.props && ROW_KEYS.includes(n.props.key))
 const groups = (tree.children || []).filter((c) => c && c.type === 'div' && c.props && /^group-/.test(c.props.key))
 
-if (rows.length === 27) pass('panel has all 27 setting rows')
-else fail('expected 27 rows, found ' + rows.length)
+if (rows.length === 20) pass('panel has all 20 setting rows')
+else fail('expected 20 rows, found ' + rows.length)
 
 /* Count the rows the way the PAGE defines them — every direct child of a group
    container — so an unlisted new row shows up as a mismatch instead of vanishing. */
@@ -206,7 +205,7 @@ else fail('client.js never defines .endfield-settings-group-title — headers wi
    log -S finds no commit adding it), so the assertion tested the test rather than
    the theme and failed on every pristine checkout. Removed rather than left
    red-by-default — a suite that is expected to fail teaches nothing. */
-for (const label of ['主题配色', '等高线背景', '动态等高线']) {
+for (const label of ['主题配色', '背景水印']) {
   if (all.includes(label)) pass('row present: ' + label)
   else fail('row missing: ' + label)
 }
@@ -227,37 +226,11 @@ else {
   else fail('palette toggle wrote ' + JSON.stringify(prefStore.get('palette')) + ', expected "valley"')
 }
 
-/* --- the two sub-switches must be DISABLED while the layer itself is off --- */
-const findBtn = (re) => buttons.find((b) => re.test(textOf(b)))
-const animBtn = findBtn(/切为静态|开启动态/)
-const trailBtn = findBtn(/开启轨迹|关闭轨迹/)
-if (trailBtn && textOf(trailBtn) === '开启轨迹' && trailBtn.props.disabled === true) pass('鼠标轨迹默认关闭，背景关闭时禁用')
-else fail('鼠标轨迹 should default off and be disabled while the layer is off')
-if (animBtn && animBtn.props.disabled === true) pass('动态等高线 disabled while layer off')
-else fail('动态等高线 should be disabled while the contour layer is off')
-const fpsRow = rows.find((r) => r.props.key === 'contour-fps')
-const fpsButtons = fpsRow ? walk(fpsRow).filter((b) => b.type === 'button') : []
-if (fpsButtons.length === 3 && fpsButtons.map((b) => textOf(b)).join(',') === '24,60,120') pass('动态帧率提供 24/60/120 三档')
-else fail('动态帧率 should provide exactly 24/60/120, found: ' + fpsButtons.map((b) => textOf(b)).join(','))
-if (fpsButtons.every((b) => b.props.disabled === true)) pass('动态帧率 disabled while layer off')
-else fail('动态帧率 should be disabled while the contour layer is off')
-const speedRow = rows.find((r) => r.props.key === 'contour-speed')
-const speedButtons = speedRow ? walk(speedRow).filter((b) => b.type === 'button') : []
-if (speedButtons.length === 3 && speedButtons.map((b) => textOf(b)).join(',') === '慢速,标准,快速') pass('动态速度提供慢速/标准/快速三档')
-else fail('动态速度 should provide exactly 慢速/标准/快速, found: ' + speedButtons.map((b) => textOf(b)).join(','))
-if (speedButtons.every((b) => b.props.disabled === true)) pass('动态速度 disabled while layer off')
-else fail('动态速度 should be disabled while the contour layer is off')
-const scrollPauseRow = rows.find((r) => r.props.key === 'contour-scroll-pause')
-const scrollPauseBtn = scrollPauseRow ? walk(scrollPauseRow).find((b) => b.type === 'button') : null
-if (scrollPauseBtn && textOf(scrollPauseRow).includes('滚动窗口动画暂停：开启')) pass('滚动窗口动画暂停默认开启')
-else fail('滚动窗口动画暂停 should be enabled by default')
-if (scrollPauseBtn && scrollPauseBtn.props.disabled === true) pass('滚动窗口动画暂停 disabled while layer off')
-else fail('滚动窗口动画暂停 should be disabled while the contour layer is off')
-
 /* --- 雷霆大字 (娱乐): default OFF, and its 预览 follows the same rule ---
    The row is asserted from the DEFAULT state deliberately: "默认关闭" is the part of
    the request a later edit is most likely to break (flipping the read to !== '0'
    would silently make it opt-out), and no other check would notice. */
+const findBtn = (re) => buttons.find((b) => re.test(textOf(b)))
 prefStore.setField('thunder', '0') // never override it before this point
 if (prefStore.get('thunder') === '0' && prefStore.section.thunder === '0') pass('雷霆大字 未设置即为默认状态')
 if (all.includes('雷霆大字：关闭')) pass('雷霆大字 默认关闭')
@@ -298,56 +271,6 @@ else {
   if (thunderAnimBtn.props.disabled === true) pass('大字入场动画 在大字关闭时为 disabled')
   else fail('大字入场动画 should be disabled while 雷霆大字 itself is off')
 }
-
-/* --- turn the layer on and re-render: the sub-switch must become usable --- */
-prefStore.setField('contour', '1')
-prefStore.setField('contourFps', '120')
-let tree2
-try { tree2 = rendered() } catch (e) { fail('re-render threw: ' + e.message); process.exit(1) }
-const buttons2 = walk(tree2).filter((n) => n.type === 'button')
-const animBtn2 = buttons2.find((b) => /切为静态|开启动态/.test(textOf(b)))
-if (animBtn2 && !animBtn2.props.disabled) pass('动态等高线 enabled once the layer is on')
-else fail('动态等高线 should be enabled once the contour layer is on')
-const trailRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-trail')
-const trailBtn2 = trailRow2 ? walk(trailRow2).find((b) => b.type === 'button') : null
-if (trailBtn2 && !trailBtn2.props.disabled) pass('鼠标轨迹在背景开启后可用')
-else fail('鼠标轨迹 should be enabled with the contour layer')
-if (trailBtn2 && typeof trailBtn2.props.onClick === 'function') {
-  try { trailBtn2.props.onClick() } catch (e) { fail('鼠标轨迹 toggle threw: ' + e.message) }
-  if (prefStore.get('contourTrail') === '1') pass('鼠标轨迹写入持久化 contourTrail 字段')
-  else fail('鼠标轨迹 did not persist contourTrail=1')
-  if (textOf(rendered()).includes('鼠标轨迹：开启')) pass('重新渲染读取持久化轨迹状态')
-  else fail('鼠标轨迹 did not render the persisted preference')
-}
-const fpsRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-fps')
-const fpsButtons2 = fpsRow2 ? walk(fpsRow2).filter((b) => b.type === 'button') : []
-const fps120 = fpsButtons2.find((b) => textOf(b) === '120')
-if (fps120 && !fps120.props.disabled) pass('120 FPS enabled once the layer is on')
-else fail('120 FPS should be enabled once the contour layer is on')
-if (fps120 && typeof fps120.props.onClick === 'function') {
-  try { fps120.props.onClick() } catch (e) { fail('120 FPS toggle threw: ' + e.message) }
-  if (prefStore.get('contourFps') === '120') pass('120 FPS toggle writes dsh-theme-endfield.contourFps=120')
-  else fail('120 FPS toggle did not write contourFps=120')
-} else fail('120 FPS button has no onClick handler')
-const speedRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-speed')
-const speedButtons2 = speedRow2 ? walk(speedRow2).filter((b) => b.type === 'button') : []
-const fastSpeed = speedButtons2.find((b) => textOf(b) === '快速')
-if (fastSpeed && !fastSpeed.props.disabled) pass('动态速度 enabled once the layer is on')
-else fail('动态速度 should be enabled once the contour layer is on')
-if (fastSpeed && typeof fastSpeed.props.onClick === 'function') {
-  try { fastSpeed.props.onClick() } catch (e) { fail('快速速度 toggle threw: ' + e.message) }
-  if (prefStore.get('contourSpeed') === '4') pass('快速速度 toggle writes dsh-theme-endfield.contourSpeed=4')
-  else fail('快速速度 toggle did not write contourSpeed=4')
-} else fail('快速速度 button has no onClick handler')
-const scrollPauseRow2 = walk(tree2).find((n) => n.type === 'div' && n.props && n.props.key === 'contour-scroll-pause')
-const scrollPauseBtn2 = scrollPauseRow2 ? walk(scrollPauseRow2).find((b) => b.type === 'button') : null
-if (scrollPauseBtn2 && !scrollPauseBtn2.props.disabled) pass('滚动窗口动画暂停 enabled once the layer is on')
-else fail('滚动窗口动画暂停 should be enabled once the contour layer is on')
-if (scrollPauseBtn2 && typeof scrollPauseBtn2.props.onClick === 'function') {
-  try { scrollPauseBtn2.props.onClick() } catch (e) { fail('滚动窗口动画暂停 toggle threw: ' + e.message) }
-  if (prefStore.get('contourScrollPause') === '0') pass('滚动窗口动画暂停 toggle writes contourScrollPause=0')
-  else fail('滚动窗口动画暂停 toggle did not write contourScrollPause=0')
-} else fail('滚动窗口动画暂停 button has no onClick handler')
 
 /* --- 雷霆大字 on: 预览 becomes usable and the row states the live behaviour --- */
 prefStore.setField('thunder', '1')
@@ -417,15 +340,15 @@ else fail('the palette row should state #14d0d0')
 prefStore.setField('palette', 'gray')
 
 /* --- clicking a switch must write the documented namespace field --- */
-const contourBtn = buttons2.find((b) => /关闭背景|开启背景/.test(textOf(b)))
-if (contourBtn && typeof contourBtn.props.onClick === 'function') {
-  prefStore.setField('contour', '1')
-  try { contourBtn.props.onClick() } catch (e) { fail('contour toggle threw: ' + e.message) }
-  const v = prefStore.get('contour')
+const wmBtn2 = walk(rendered()).filter((n) => n.type === 'button').find((b) => /开启水印|关闭水印/.test(textOf(b)))
+if (wmBtn2 && typeof wmBtn2.props.onClick === 'function') {
+  prefStore.setField('watermark', '1')
+  try { wmBtn2.props.onClick() } catch (e) { fail('watermark toggle threw: ' + e.message) }
+  const v = prefStore.get('watermark')
   // The button was rendered from state "on", so clicking it stores the off value.
-  if (v === '1' || v === '0') pass('等高线背景 toggle writes contour (=' + v + ')')
-  else fail('等高线背景 toggle did not write its contour field')
-} else fail('等高线背景 toggle has no onClick handler')
+  if (v === '1' || v === '0') pass('背景水印 toggle writes watermark (=' + v + ')')
+  else fail('背景水印 toggle did not write its watermark field')
+} else fail('背景水印 toggle has no onClick handler')
 
 /* --- 雷霆大字 toggle must write its documented field --- */
 if (thunderBtn && typeof thunderBtn.props.onClick === 'function') {

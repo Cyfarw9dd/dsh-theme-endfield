@@ -156,7 +156,7 @@ const mk = (alpha) => `<!doctype html><html><head><meta charset="utf-8"><style>
   ${DARK ? "document.body.setAttribute('data-ds-dark-theme','')" : ''}
   /* Theme reads switches via the settingsScope seam (not localStorage). */
   ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-  var __prefs=__endfieldSettingsScope({ enabled:'1', loader:'0', contour:'0', watermark:'1' })
+  var __prefs=__endfieldSettingsScope({ enabled:'1', loader:'0', watermark:'1', watermarkPersist:'1' })
   const mod=window.__MOD__.factory(()=>null)
   mod.apply({get:(n)=>n==='theme'?{overrideTokens:()=>()=>{}}:(n==='settingsScope'?__prefs.binder:undefined),effect:(f)=>f()})
   document.body.appendChild(document.createElement('span'))

@@ -14,8 +14,8 @@
  *   schemastery validates declared fields and passes extras through, so the
  *   document really did receive `thunder-anim: "1"` — and `thunderAnim` stayed at
  *   its default. The switch worked for the page session and reset on the next
- *   load. Six compound fields were affected: thunderAnim, contourAnim,
- *   contourFps, contourSpeed, contourScrollPause, watermarkPersist.
+ *   load. Two compound fields were affected: thunderAnim,
+ *   watermarkPersist.
  *
  * Why no earlier test caught it: the settings tests fed the theme a fake scope
  * whose section was keyed by the SAME wrong spelling (the fixture stripped the
@@ -240,13 +240,7 @@ const buttonsIn = (row) => (row ? walk(row).filter((n) => n.type === 'button') :
 const TOGGLES = [
   ['theme', 'dsh-theme-endfield-enabled', '0', 'enabled'],
   ['radius', 'dsh-theme-endfield-radius', 'round', 'radius'],
-  ['contour', 'dsh-theme-endfield-contour', '1', 'contour'],
-  ['contour-anim', 'dsh-theme-endfield-contour-anim', '0', 'contourAnim'],
-  ['contour-fps', 'dsh-theme-endfield-contour-fps', '120', 'contourFps', '120'],
-  ['contour-fps', 'dsh-theme-endfield-contour-fps', '60', 'contourFps', '60'],
-  ['contour-speed', 'dsh-theme-endfield-contour-speed', '4', 'contourSpeed', '快速'],
-  ['contour-speed', 'dsh-theme-endfield-contour-speed', '1', 'contourSpeed', '慢速'],
-  ['contour-scroll-pause', 'dsh-theme-endfield-contour-scroll-pause', '0', 'contourScrollPause'],
+
   ['watermark', 'dsh-theme-endfield-watermark', '0', 'watermark'],
   ['watermark-persist', 'dsh-theme-endfield-watermark-persist', '1', 'watermarkPersist'],
   ['loader', 'dsh-theme-endfield-loader', '1', 'loader'],
@@ -256,10 +250,10 @@ const TOGGLES = [
 
 /* Compound fields are the regression surface; the singles passed even with the
    bug, so a test that only covered them would not have caught it. */
-const COMPOUND = ['contourAnim', 'contourFps', 'contourSpeed', 'contourScrollPause', 'watermarkPersist', 'thunderAnim']
+const COMPOUND = ['watermarkPersist', 'thunderAnim']
 const compoundCovered = COMPOUND.filter((f) => Object.values(clientTable).includes(f))
 if (compoundCovered.length === COMPOUND.length) {
-  pass('all six compound fields from the issue are in the mapping')
+  pass('all compound fields from the issue are in the mapping')
 } else {
   fail('compound fields missing from the mapping: ' + COMPOUND.filter((f) => !compoundCovered.includes(f)).join(', '))
 }
@@ -267,8 +261,7 @@ if (compoundCovered.length === COMPOUND.length) {
 {
   const store = hostShapedSection()
   const { render } = boot(store.binder)
-  /* Contour ON so its three sub-switches are enabled, thunder ON for its child. */
-  store.section.contour = '1'
+  /* Thunder ON so its child switch is enabled. */
   store.section.thunder = '1'
   let tree = render()
 
@@ -327,13 +320,10 @@ if (compoundCovered.length === COMPOUND.length) {
   const rawUser = {
     palette: 'valley',
     radius: 'square',
-    contour: '1',
     watermark: '1',
     thunder: '1',
     'watermark-persist': '1',
-    'contour-anim': '0',
-    'contour-speed': '1',
-    'contour-scroll-pause': '1',
+    'thunder-anim': '1',
   }
   const section = Object.assign({}, HOST.FIELD_DEFAULTS, rawUser)
   const wire = []
@@ -356,7 +346,7 @@ if (compoundCovered.length === COMPOUND.length) {
   }
   const { render } = boot({ bind: () => scope })
   const textBefore = textOf(render())
-  if (/动态等高线：开启/.test(textBefore) && /水印保持显示：关闭/.test(textBefore)) {
+  if (/大字入场动画：关闭/.test(textBefore) && /水印保持显示：关闭/.test(textBefore)) {
     pass('回归对照：未声明字段里的值不会被当成已声明字段读取（schema 默认值优先）')
   } else {
     fail('the panel must read the declared fields, not the stray keys, got ' + JSON.stringify(textBefore.slice(0, 220)))
@@ -366,21 +356,21 @@ if (compoundCovered.length === COMPOUND.length) {
   for (const l of listeners.slice()) { try { l() } catch (e) {} }
   const text = textOf(render())
 
-  const migrated = wire.filter(([f]) => f === 'watermarkPersist' || f === 'contourAnim' || f === 'contourSpeed' || f === 'contourScrollPause')
-  if (migrated.length === 4) {
-    pass('旧拼写里的 4 个值被重新提交到 schema 字段上')
+  const migrated = wire.filter(([f]) => f === 'watermarkPersist' || f === 'thunderAnim')
+  if (migrated.length === 2) {
+    pass('旧拼写里的 2 个值被重新提交到 schema 字段上')
   } else {
-    fail('legacy migration re-committed ' + migrated.length + '/4 fields; wire = ' + JSON.stringify(wire))
+    fail('legacy migration re-committed ' + migrated.length + '/2 fields; wire = ' + JSON.stringify(wire))
   }
-  const expected = { watermarkPersist: '1', contourAnim: '0', contourSpeed: '1', contourScrollPause: '1' }
+  const expected = { watermarkPersist: '1', thunderAnim: '1' }
   const wrong = Object.keys(expected).filter((f) => section[f] !== expected[f])
   if (wrong.length === 0) pass('迁移后每个 schema 字段都拿到了旧值')
   else fail('migration left ' + wrong.map((f) => f + '=' + section[f]).join(', ') + ' (expected ' + JSON.stringify(expected) + ')')
 
-  /* It must not invent an edit for a field nobody ever touched: thunderAnim has
-     no legacy key in this section, so nothing may be written for it. */
-  if (!wire.some(([f]) => f === 'thunderAnim')) pass('没有旧拼写记录的字段不会被迁移凭空写入')
-  else fail('migration wrote a field with no legacy value: ' + JSON.stringify(wire))
+  /* It must not invent edits beyond the two fields that really had legacy
+     values: anything else on the wire would be a fabrication. */
+  if (wire.every(([f]) => f === 'watermarkPersist' || f === 'thunderAnim')) pass('迁移只写有旧值的字段，不凭空发明其它写入')
+  else fail('migration invented writes beyond the legacy fields: ' + JSON.stringify(wire))
 
   /* And the re-committed value must reach the theme, not just the document. */
   if (/水印保持显示：开启/.test(text)) {
@@ -392,7 +382,7 @@ if (compoundCovered.length === COMPOUND.length) {
 
 /* A user-set declared value must WIN over a stray legacy key. */
 {
-  const rawUser = { 'contour-anim': '1', contourAnim: '0' }
+  const rawUser = { 'thunder-anim': '0', thunderAnim: '1' }
   const section = Object.assign({}, HOST.FIELD_DEFAULTS, rawUser)
   const wire = []
   const scope = {
@@ -405,7 +395,7 @@ if (compoundCovered.length === COMPOUND.length) {
   }
   const { render } = boot({ bind: () => scope })
   const text = textOf(render())
-  if (/动态等高线：关闭/.test(text)) pass('用户显式写入的 contourAnim=0 覆盖旧拼写里的 1')
+  if (/大字入场动画：开启/.test(text)) pass('用户显式写入的 thunderAnim=1 覆盖旧拼写里的 0')
   else fail('a user-set declared value lost to a stray legacy key: ' + JSON.stringify(text.slice(0, 200)))
   if (wire.length === 0) pass('这种情况不产生任何迁移写入')
   else fail('migration wrote although the user had set the field: ' + JSON.stringify(wire))

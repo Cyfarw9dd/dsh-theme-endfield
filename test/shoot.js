@@ -115,8 +115,7 @@ const mk = (dark, palette, watermark) => `<!doctype html><html><head><meta chars
       <b>Sessions</b>
       <div class="row selected">武陵青 / 谷地黄 配色</div>
       <div class="row">theme tokens</div>
-      <div class="row">contour background</div>
-      <div class="row">watermark</div>
+          <div class="row">watermark</div>
     </div></div>
     <div class="pI_x6G_centerCol"><div class="wSkVaW_root">
       <div class="wSkVaW_header">
@@ -133,7 +132,7 @@ const mk = (dark, palette, watermark) => `<!doctype html><html><head><meta chars
         <div class="turn"><div class="who">Assistant</div>
           <div class="msg">Every accent in the stylesheet now reads from one palette variable
           block, so the whole theme repaints from a single class on &lt;body&gt;. This paragraph
-          exists to prove body text keeps full contrast in either palette — the contour sheet
+          exists to prove body text keeps full contrast in either palette — the background
           sits behind it, and the accent never touches running text.</div>
           <table><thead><tr><th>role</th><th>谷地黄</th><th>武陵青</th></tr></thead>
           <tbody><tr><td>solid fill + ink</td><td>16.50:1</td><td>6.62:1</td></tr>
@@ -150,9 +149,9 @@ const mk = (dark, palette, watermark) => `<!doctype html><html><head><meta chars
   ${dark ? "document.body.setAttribute('data-ds-dark-theme','')" : ''}
   /* Preferences go through the settingsScope seam: the settings refactor removed
      the localStorage store, so the LS.setItem calls this page used to make were
-     silently ignored — every shot rendered the default palette with no contour. */
+     silently ignored — every shot rendered the default palette. */
   const __prefs=(()=>{
-    const sec={enabled:'1',palette:${JSON.stringify(palette)},radius:'square',contour:'1',contourAnim:'1',contourFps:'24',contourSpeed:'2',contourScrollPause:'1',watermark:${watermark ? "'1'" : "'0'"},watermarkPersist:${watermark ? "'1'" : "'0'"},loader:'0',thunder:'0',thunderAnim:'0'}
+    const sec={enabled:'1',palette:${JSON.stringify(palette)},radius:'square',watermark:${watermark ? "'1'" : "'0'"},watermarkPersist:${watermark ? "'1'" : "'0'"},loader:'0',thunder:'0',thunderAnim:'0'}
     const ls=[]
     return { binder:{ bind:()=>({
       getSnapshot:()=>({status:'ready',value:sec,writable:true,mode:'host'}),

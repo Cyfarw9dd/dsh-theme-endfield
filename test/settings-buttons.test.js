@@ -113,7 +113,7 @@ fs.writeFileSync(page, `<!doctype html><html><head><meta charset="utf-8"><style>
 window.__RESULTS__=[]
 /* The theme reads preferences via the settingsScope seam (no localStorage). */
 ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'0', contour:'0' });
+var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'0' });
 const R=(name,pass,detail)=>window.__RESULTS__.push({name,pass:!!pass,detail:detail===undefined?'':String(detail)})
 
 let appliedTokens=[]

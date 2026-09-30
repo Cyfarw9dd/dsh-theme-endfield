@@ -93,13 +93,12 @@ const mk = (dark) => `<!doctype html><html><head><meta charset="utf-8"><style>
      (the same seam test/fixtures/settings-scope.js drives the unit tests with).
 
      Seeded like the old localStorage store: theme ON, thunder ON (the layer under
-     test), and loader / contour / watermark explicitly OFF so the shot shows only
+     test), and loader / watermark explicitly OFF so the shot shows only
      the word over the theme's paper — watermark is default-ON, so it must be forced
      off here or it would layer into the capture. */
-  const DEFAULTS = { enabled:'1', palette:'valley', radius:'square', contour:'0',
-    contourAnim:'1', contourFps:'24', contourSpeed:'2', contourScrollPause:'1',
-    watermark:'1', watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0' }
-  const section = { enabled:'1', thunder:'1', loader:'0', contour:'0', watermark:'0',
+  const DEFAULTS = { enabled:'1', palette:'valley', radius:'square',
+        watermark:'1', watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0' }
+  const section = { enabled:'1', thunder:'1', loader:'0', watermark:'0',
     thunderAnim:'0' }
   const value = {}; for (const k in DEFAULTS) value[k] = (k in section) ? section[k] : DEFAULTS[k]
   let prefListeners = []

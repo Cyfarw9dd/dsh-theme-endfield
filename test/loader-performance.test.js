@@ -1,6 +1,6 @@
 /**
  * loader-performance.test.js — ensure the boot plate does not compete with
- * the hidden contour animation for the main thread during startup.
+ * window and leaves clean geometry behind.
  *
  * Usage: node test/loader-performance.test.js
  */
@@ -40,13 +40,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   document.body.setAttribute('data-ds-dark-theme','')
   /* Theme reads switches via the settingsScope seam (not localStorage). */
   ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-  var __prefs=__endfieldSettingsScope({ enabled:'1', loader:'1', contour:'1', contourAnim:'1', watermark:'0' })
-  const originalClearRect=CanvasRenderingContext2D.prototype.clearRect
-  let contourClears=0
-  CanvasRenderingContext2D.prototype.clearRect=function(x,y,w,h){
-    if(this.canvas && this.canvas.hasAttribute('data-endfield-contour-lines')) contourClears++
-    return originalClearRect.call(this,x,y,w,h)
-  }
+  var __prefs=__endfieldSettingsScope({ enabled:'1', loader:'1', watermark:'0' })
   const mod=window.__MOD__.factory(()=>null)
   window.__dispose__=mod.apply({
     get:(n)=>n==='theme'?{overrideTokens:()=>()=>{}}:(n==='settingsScope'?__prefs.binder:undefined),
@@ -57,10 +51,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
   ;(async()=>{
     await sleep(700)
     const loaderDuring=!!document.querySelector('[data-endfield-loader]')
-    const clearsDuring=contourClears
-    await sleep(500)
-    const clearsWhileLoader=contourClears
-    await sleep(600)
+    await sleep(1100)
     const plate=document.querySelector('[data-endfield-loader]')
     const meter=plate && plate.querySelector('[data-endfield-loader-meter]')
     const pct=plate && plate.querySelector('[data-endfield-loader-pct]')
@@ -76,17 +67,8 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
       meterBottomStyle: getComputedStyle(meter).bottom,
     } : null
     while(document.querySelector('[data-endfield-loader]')) await sleep(100)
-    const clearsAtRemoval=contourClears
-    const beforeToggle=contourClears
-    __prefs.setItem('dsh-theme-endfield-contourAnim','0')
-    document.body.appendChild(document.createElement('span'))
-    await sleep(150)
-    __prefs.setItem('dsh-theme-endfield-contourAnim','1')
-    document.body.appendChild(document.createElement('span'))
-    await sleep(300)
-    const clearsAfterToggle=contourClears
     const loaderAfter=!document.querySelector('[data-endfield-loader]')
-    document.title='LDR '+JSON.stringify({loaderDuring,loaderAfter,clearsDuring,clearsWhileLoader,clearsAtRemoval,beforeToggle,clearsAfterToggle,loaderGeometry})
+    document.title='LDR '+JSON.stringify({loaderDuring,loaderAfter,loaderGeometry})
   })()
 </script></body></html>`
 
@@ -122,10 +104,8 @@ if (r.loaderGeometry && r.loaderGeometry.pct === '100%' && r.loaderGeometry.mete
 } else {
   fail('100% loader meter exceeds the plate bounds or lost bottom anchoring: ' + JSON.stringify(r.loaderGeometry))
 }
-if (r.clearsWhileLoader === r.clearsDuring) ok('contour redraw is paused behind the boot plate (' + r.clearsWhileLoader + ' clears)')
-else fail('contour kept redrawing behind the boot plate (' + r.clearsWhileLoader + ' clears; started at ' + r.clearsDuring + ')')
-if (r.clearsAfterToggle > r.beforeToggle) ok('contour animation resumes after a normal switch reconciliation')
-else fail('contour animation did not resume after switch reconciliation (' + r.beforeToggle + ' -> ' + r.clearsAfterToggle + ')')
+
+
 
 if (failures) { console.error(failures + ' loader performance check(s) failed'); process.exit(1) }
 console.log('all loader performance checks passed')

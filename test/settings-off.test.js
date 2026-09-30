@@ -112,7 +112,7 @@ const setScheme = (s) => {
    seeds a fake binder with the same section the old localStorage lines set:
    master switch and the anim/heavy layers all OFF. */
 ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-var __prefs = __endfieldSettingsScope({ enabled:'0', loader:'0', contour:'0', watermark:'0' });
+var __prefs = __endfieldSettingsScope({ enabled:'0', loader:'0', watermark:'0' });
 
 let rendered = null
 const slots = {

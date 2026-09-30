@@ -3,11 +3,12 @@
  *
  * palette-contrast.test.js checks the numbers are sound; it cannot see whether the
  * switch is wired up. This one runs the REAL client.js in a headless browser
- * against the same app-DOM mock the contour tests use, applies theme tokens the way
+ * against the shared app-DOM mock, applies theme tokens the way
  * the app really does (INLINE ON body — that detail is load-bearing, see below),
- * then flips the palette and measures computed styles and canvas pixels.
+ * then flips the palette and measures computed styles.
  *
  * What it is really guarding:
+
  *   1. A token override whose value is var(--edge-accent) must re-resolve on a class
  *      flip with NO JavaScript repaint. That is the whole design; if it were false
  *      the switch would need a theme.overrideTokens() re-registration and every
@@ -17,9 +18,6 @@
  *      body, which made them compute to EMPTY (a real shipped bug: it silently
  *      disabled the themed scrollbar). A palette variable with the same mistake
  *      would break every rule that reads it, so emptiness is asserted against.
- *   3. The contour canvas is painted by JS and cannot read a CSS variable, so it is
- *      the one surface that needs explicit redraw. Pixels are compared before and
- *      after the flip.
  *   4. Turning the theme off must remove the palette class, not leave a class whose
  *      definitions no longer exist.
  *
@@ -50,7 +48,7 @@ fs.copyFileSync(path.join(ROOT, 'client.js'), path.join(OUT, 'client.js'))
 const page = path.join(OUT, 'mock.html')
 
 /* The mock carries the parts of the real app that this feature touches: the frame
-   (so the contour layer can mount), a table row and a turn-status label (two
+   , a table row and a turn-status label (two
    accent-driven surfaces with very different mechanisms), plus the opaque bg fills. */
 fs.writeFileSync(page, `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body,#root{height:100%;margin:0}
@@ -80,9 +78,9 @@ fs.writeFileSync(page, `<!doctype html><html><head><meta charset="utf-8"><style>
 window.__RESULTS__=[]
 /* The theme now reads its preferences through the dsh settingsScope seam. This
    page seeds a fake binder exactly like the old localStorage lines did, and the
-   master/contour/palette field naming carries the same polarity. */
+   master/palette field naming carries the same polarity. */
 ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'0', contour:'1', contourAnim:'0' });
+var __prefs = __endfieldSettingsScope({ enabled:'1', loader:'0' });
 const R=(name,pass,detail)=>window.__RESULTS__.push({name,pass:!!pass,detail:detail===undefined?'':String(detail)})
 
 /* Apply theme tokens exactly as @deepseek-ai/dsh-client-ui-layout does: inline on
@@ -117,14 +115,6 @@ mod.apply(ctx)
 
 const cs=()=>getComputedStyle(document.body)
 const v=(n)=>cs().getPropertyValue(n).trim()
-const canvas=()=>document.querySelector('[data-endfield-contour-lines]')
-const canvasHash=()=>{
-  const cv=canvas(); if(!cv) return null
-  const c=cv.getContext('2d'); const d=c.getImageData(0,0,cv.width,cv.height).data
-  let n=0,r=0,g=0,b=0
-  for(let i=0;i<d.length;i+=4){ if(d[i+3]>6){n++; r+=d[i]; g+=d[i+1]; b+=d[i+2]} }
-  return n===0?{n:0}:{n,r:Math.round(r/n),g:Math.round(g/n),b:Math.round(b/n)}
-}
 
 /* ---- 1. default palette is 终末地灰 ---- */
 R('默认配色为终末地灰（未设置存储键）', v('--edge-accent').toLowerCase()==='#d9d9d9', v('--edge-accent'))
@@ -147,8 +137,6 @@ const brandDarkBefore=v('--dsw-alias-brand-primary')
 setScheme('light')
 const washBefore=v('--dsw-alias-interactive-bg-hover')
 const glowBefore=getComputedStyle(document.getElementById('status')).backgroundImage
-const yellowCanvas=canvasHash()
-R('等高线画布已上色', yellowCanvas && yellowCanvas.n>0, JSON.stringify(yellowCanvas))
 
 /* ---- 4. FLIP to 武陵青 — via storage + the theme's own sync, no reload ---- */
 __prefs.setField('palette','wuling')
@@ -186,11 +174,6 @@ setTimeout(()=>{
   R('回合状态渐变文字换色', glowAfter!==glowBefore && /0,\\s*106,\\s*106|006a6a/i.test(glowAfter),
     glowAfter.slice(0,90))
 
-  /* ---- 5. the canvas: JS-painted, so it must be redrawn ---- */
-  const cyanCanvas=canvasHash()
-  const changed = cyanCanvas && yellowCanvas && (Math.abs(cyanCanvas.b-yellowCanvas.b)>20 || Math.abs(cyanCanvas.r-yellowCanvas.r)>20)
-  R('等高线画布已按新配色重绘', changed, 'yellow='+JSON.stringify(yellowCanvas)+' cyan='+JSON.stringify(cyanCanvas))
-  R('等高线新配色偏青（B 通道高于 R）', cyanCanvas && cyanCanvas.b>cyanCanvas.r, JSON.stringify(cyanCanvas))
 
   /* ---- 6. switching the theme off must drop the class ---- */
   __prefs.setField('enabled','0')

@@ -53,9 +53,7 @@ const fail = (m) => { console.error('FAIL  ' + m); failures++ }
     ['切换武陵青', 'settings row offers 武陵青'],
     ['切换谷地黄', 'settings row offers 谷地黄'],
     ['#14d0d0', 'row states the accent in hex'],
-    ['#14d0d045', 'cyan contour stroke (dark, 8-digit hex)'],
-    ['#14d0d07a', 'cyan contour stroke (light, 8-digit hex)'],
-    ["dark: 'var(--edge-accent)'", 'brand token follows the palette'],
+        ["dark: 'var(--edge-accent)'", 'brand token follows the palette'],
   ]
   for (const [needle, label] of required) {
     if (served.includes(needle)) pass('live: ' + label)

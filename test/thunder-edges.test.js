@@ -148,7 +148,6 @@ const sessions = {
 const makePrefStore = (extra = {}) => settingsScopeStub(Object.assign({
   enabled: '1',
   loader: '0',
-  contour: '0',
   watermark: '0',
 }, extra))
 
@@ -336,9 +335,8 @@ advance(1)
 if (shownWord() === null) pass('动画开启时 3000ms 已隐藏')
 else fail('the animated plate outlived its 3s hold')
 
-/* The OS preference must still win over an enabled switch, exactly as the contour
-   animation does — otherwise the switch would silently override an accessibility
-   setting. matchMedia is swapped to report the preference for this one check. */
+/* The OS preference must still win over an enabled switch, per the
+   shared motion rule. */
 const realMatchMedia = sandbox.window.matchMedia
 sandbox.window.matchMedia = () => ({ matches: true })
 sessionA.set({ running: false })

@@ -100,21 +100,14 @@ const NAMESPACE = LEGACY_NAMESPACE;
  *   - default-ON switches store '1' and the client reads them as `!== '0'`;
  *   - default-OFF switches store '0' and the client reads them as `=== '1'`;
  *   - palettes / radii / frame-rate / speed each store exactly one of their
- *     documented literals ('gray'/'valley'/'wuling'; 'square'/'round'; fps in
- *     24/60/120; speed in 1/2/4), with the shipped default filled in here.
+ *     documented literals ('gray'/'valley'/'wuling'; 'square'/'round'; glass in
+ *     off/subtle/standard/strong), with the shipped default filled in here.
  */
 const FIELD_DEFAULTS = {
   enabled: '1',             // 终末地主题 —— default on
   palette: 'gray',          // 主题配色 —— 终末地灰 (gray default; 官网灰阶交互语法)
   glass: 'off',             // optional local frost; original material by default
   radius: 'square',         // 主题圆角 —— 直角
-  contour: '0',             // 等高线背景 —— default off
-  contourAnim: '1',         // 动态等高线 —— default on
-  contourFps: '24',         // 动态帧率 —— 24 FPS
-  contourSpeed: '2',        // 动态速度 —— 标准 2x
-  contourRenderer: 'canvas', // opt-in Worker/WebGL; original backend by default
-  contourTrail: '0',        // optional mouse deformation, default off
-  contourScrollPause: '1',  // 滚动暂停 —— default on
   watermark: '1',           // 背景水印 —— default on
   watermarkPersist: '0',    // 水印保持显示 —— default off
   loader: '0',              // 启动加载动画 —— default off

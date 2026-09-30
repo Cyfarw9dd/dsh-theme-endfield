@@ -21,11 +21,11 @@
  * THE SECTION IS KEYED BY SCHEMA FIELD NAME, NOT BY UI KEY. This is the whole
  * point of these tests and it is worth stating explicitly, because getting it
  * wrong here hides the bug that shipped: the host declares camelCase fields
- * (`thunderAnim`, `contourFps`, …) in index.js FIELD_DEFAULTS, so a scope.set
+ * (`thunderAnim`, `watermarkPersist`, …) in index.js FIELD_DEFAULTS, so a scope.set
  * or form.set can only ever store those names. An earlier version of this
  * fixture stripped the `dsh-theme-endfield-` prefix off the UI key instead —
- * the same wrong mapping the client had — so `setField('contour-fps', …)` and
- * the client's `prefsGet('dsh-theme-endfield-contour-fps')` agreed on a name
+ * the same wrong mapping the client had — so `setField('thunder-anim', …)` and
+ * the client's `prefsGet('dsh-theme-endfield-thunder-anim')` agreed on a name
  * that does not exist in the schema, both sides passed, and every compound
  * switch silently reset on reload. KEY_TO_FIELD below is the fixture's copy of
  * that mapping and must stay in step with client.js PREFS_KEY_TO_FIELD.
@@ -52,13 +52,7 @@ const FIELD_DEFAULTS = {
   palette: 'gray',
   radius: 'square',
   glass: 'off',
-  contour: '0',
-  contourAnim: '1',
-  contourFps: '24',
-  contourSpeed: '2',
-  contourTrail: '0',        // optional mouse deformation, default off
-  contourRenderer: 'canvas',
-  contourScrollPause: '1',
+
   watermark: '1',
   watermarkPersist: '0',
   loader: '0',
@@ -87,14 +81,7 @@ const KEY_TO_FIELD = {
   'dsh-theme-endfield-palette': 'palette',
   'dsh-theme-endfield-radius': 'radius',
   'dsh-theme-endfield-glass': 'glass',
-  'dsh-theme-endfield-contour': 'contour',
-  'dsh-theme-endfield-contour-anim': 'contourAnim',
-  'dsh-theme-endfield-contour-fps': 'contourFps',
-  'dsh-theme-endfield-contour-speed': 'contourSpeed',
-  'dsh-theme-endfield-contour-renderer': 'contourRenderer',
-  contourRenderer: 'contourRenderer',
-  'dsh-theme-endfield-contour-scroll-pause': 'contourScrollPause',
-  'dsh-theme-endfield-contour-trail': 'contourTrail',
+
   'dsh-theme-endfield-watermark': 'watermark',
   'dsh-theme-endfield-watermark-persist': 'watermarkPersist',
   'dsh-theme-endfield-loader': 'loader',
@@ -186,7 +173,7 @@ function settingsScopeStub(initial = {}) {
     setField: (key, value) => { section[fieldName(key)] = String(value); notify() },
     /** Write a section key VERBATIM — no key->field mapping. This is how a test
      *  reproduces a document a buggy build wrote (e.g. the undeclared
-     *  'contour-anim' next to a defaulted 'contourAnim'). */
+     *  'thunder-anim' next to a defaulted 'thunderAnim'). */
     setSection: (key, value) => { section[key] = String(value); notify() },
     getSnapshot,
     reset() { for (const k of Object.keys(FIELD_DEFAULTS)) section[k] = FIELD_DEFAULTS[k]; notify() },

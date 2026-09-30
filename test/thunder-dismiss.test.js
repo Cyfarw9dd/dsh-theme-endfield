@@ -77,9 +77,9 @@ document.removeEventListener=(type,fn,opts)=>{
 }
 
 /* Theme reads switches via the settingsScope seam (not localStorage). Enable
-   theme + thunder; keep loader/contour/watermark off. */
+   theme + thunder; keep loader/watermark off. */
 ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-var __prefs=__endfieldSettingsScope({ enabled:'1', thunder:'1', loader:'0', contour:'0', watermark:'0' })
+var __prefs=__endfieldSettingsScope({ enabled:'1', thunder:'1', loader:'0', watermark:'0' })
 
 const mkObs=(init)=>{let s=init;const subs=new Set();return{
   getSnapshot:()=>s,subscribe:(f)=>{subs.add(f);return()=>subs.delete(f)},

@@ -10,7 +10,7 @@
 │ index.js                      │   │ client.js（单文件 IIFE 模块）     │
 │  · volatile Config（设置 schema）│ → │  · 样式表：一个 JS 模板字符串      │
 │  · lib/audio.js 播放运行时     │   │  · 令牌覆盖（theme.overrideTokens）│
-│  · lib/slots.js、lib/tone.js   │   │  · 功能面：水印/等高线/加载屏/大字  │
+│  · lib/slots.js、lib/tone.js   │   │  · 功能面：水印/加载屏/大字        │
 └──────────────┬───────────────┘   │  · React 迷你实现（设置面板）       │
                │                   └───────────────┬─────────────────┘
    cordis.patch.yml（bundle 注入声明）                │ settingsScope/configForms
@@ -25,7 +25,7 @@
 - 全部 CSS 在 client.js 的**一个模板字符串**里，由 `insertCss()` 注入——
   因此 `check.js` 守护反引号/插值/括号配平这类「解析不报错但全坏」的改动
 - 强调色按**调色板 class**（`theme-endfield-gray` / `-wuling`）切换：一个 class
-  翻转全量重绘，无 JS 重绘；例外是等高线画布（MutationObserver 触发重画）
+  翻转全量重绘，无 JS 重绘
 - 选中/光标是**不随调色板**的固定交互灰（官网语法，见调研文档）
 - 生成物（徽标矢量掩码）嵌在标记区 `EMBLEM_MASK_BEGIN/END` 内，
   由 `scripts/build-emblem.js` 生成，`--check` 防漂移

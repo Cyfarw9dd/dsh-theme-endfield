@@ -8,9 +8,9 @@
  * (武陵青 / #14d0d0) doubles every one of those surfaces, so the check is
  * mechanical rather than a promise.
  *
- * It reads the REAL values out of client.js (the palette blocks and the JS contour
- * strokes) instead of restating them, so a future edit to the stylesheet is what
- * this test sees. Restating them would only test the copy.
+ * It reads the REAL values out of client.js (the palette blocks) instead of
+ * restating them, so a future edit to the stylesheet is what this test sees.
+ * Restating them would only test the copy.
  *
  * Usage: node test/palette-contrast.test.js
  */
@@ -153,54 +153,6 @@ for (const [name, block] of Object.entries(palettes)) {
   else fail(name + ' accent-as-ink in dark mode is only ' + worst.toFixed(2) + ':1')
 }
 
-/* ---------- 4. contour stroke strength parity ----------
-   The sheet is a whisper behind everything, so the test is not "readable" but
-   "comparable between palettes": a stroke that is 1.7:1 in one palette and 1.05:1
-   in the other would read as the feature breaking on switch. Both are compared
-   against the yellow values that were tuned by eye on a real render.
-
-   Strokes are 8-DIGIT HEX (#RRGGBBAA) in client.js, so the alpha is parsed from the
-   last byte pair rather than a decimal. Canvas accepts that form and normalises it
-   to the identical rgba() (verified in a browser), so reading the hex is reading
-   exactly what gets painted. */
-const strokeOf = (re) => {
-  const m = src.match(re)
-  if (!m) return null
-  const h = m[1]
-  return {
-    rgb: [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)],
-    a: parseInt(h.slice(6, 8), 16) / 255,
-  }
-}
-const tagged = (tag) => new RegExp(tag + '[^\\n]*#([0-9a-fA-F]{8})')
-const strokes = {
-  '谷地黄 dark': [strokeOf(tagged('EDGE_STROKE_DARK_YELLOW')), DARK_BGS['bg-base']],
-  '谷地黄 light': [strokeOf(tagged('EDGE_STROKE_LIGHT_YELLOW')), LIGHT_BGS['bg-base']],
-  '武陵青 dark': [strokeOf(tagged('EDGE_STROKE_DARK_CYAN')), DARK_BGS['bg-base']],
-  '武陵青 light': [strokeOf(tagged('EDGE_STROKE_LIGHT_CYAN')), LIGHT_BGS['bg-base']],
-}
-const strokeContrast = {}
-let strokesFound = true
-for (const [k, [s, bg]] of Object.entries(strokes)) {
-  if (s === null) { fail('contour stroke not found for ' + k + ' (expected a tagged 8-digit hex in client.js)'); strokesFound = false; continue }
-  strokeContrast[k] = ratio(over(s.rgb, bg, s.a), bg)
-}
-if (strokesFound) {
-  for (const mode of ['dark', 'light']) {
-    const y = strokeContrast['谷地黄 ' + mode]
-    const c = strokeContrast['武陵青 ' + mode]
-    const drift = Math.abs(c - y) / y
-    const line = mode + ' 等高线描边强度：谷地黄 ' + y.toFixed(3) + ':1 / 武陵青 ' + c.toFixed(3) + ':1'
-    // 20% of the yellow value: enough room for a hue that cannot hit the same
-    // composite exactly, tight enough that neither palette reads as broken.
-    if (drift <= 0.20) pass(line + '（相差 ' + (drift * 100).toFixed(1) + '%，两配色观感一致）')
-    else fail(line + ' — ' + (drift * 100).toFixed(1) + '% apart; one palette will read much louder than the other')
-    // A stroke below ~1.06:1 is not visible at all (README's perceptual floor).
-    if (c >= 1.06) pass('武陵青 ' + mode + ' 等高线在感知下限之上')
-    else fail('武陵青 ' + mode + ' contour stroke is below the 1.06:1 perceptual floor')
-  }
-}
-
 /* ---------- 5. hero glow depth ----------
    The glow replaces the app's own #6187D8 at 8%. The README's rule is that the
    replacement must not make the hero read LOUDER than the glow it replaces,
@@ -319,22 +271,6 @@ if (ac !== null) {
     for (const bg of Object.values(DARK_BGS)) worst = Math.min(worst, ratio(hex(gAccent), bg))
     if (worst >= 3) pass('终末地灰 暗色图标/焦点环强调色：' + worst.toFixed(2) + ':1 (>=3 非文本下限)')
     else fail('终末地灰 accent-as-ink in dark mode is only ' + worst.toFixed(2) + ':1')
-  }
-}
-
-/* ---------- 9. 终末地灰 contour strokes: same parity rule ---------- */
-{
-  for (const [k, tag] of [['终末地灰 dark', 'EDGE_STROKE_DARK_GRAY'], ['终末地灰 light', 'EDGE_STROKE_LIGHT_GRAY']]) {
-    const s = strokeOf(tagged(tag))
-    if (s === null) { fail('contour stroke not found for ' + k); continue }
-    const bg = k.endsWith('dark') ? DARK_BGS['bg-base'] : LIGHT_BGS['bg-base']
-    const c = ratio(over(s.rgb, bg, s.a), bg)
-    const y = strokeContrast[k.endsWith('dark') ? '谷地黄 dark' : '谷地黄 light']
-    const drift = Math.abs(c - y) / y
-    if (drift <= 0.20) pass(k + ' 等高线描边强度 ' + c.toFixed(3) + ':1（与谷地黄相差 ' + (drift * 100).toFixed(1) + '%）')
-    else fail(k + ' contour strength ' + c.toFixed(3) + ':1 drifts ' + (drift * 100).toFixed(1) + '% from 谷地黄')
-    if (c >= 1.06) pass(k + ' 等高线在感知下限之上')
-    else fail(k + ' contour stroke is below the 1.06:1 perceptual floor')
   }
 }
 

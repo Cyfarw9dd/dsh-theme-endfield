@@ -169,7 +169,6 @@ const mount = (ctxExtras, section) => {
 const baseStore = () => ({
   enabled: '1',
   loader: '0',
-  contour: '0',
   watermark: '0',
 })
 

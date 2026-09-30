@@ -125,7 +125,7 @@ function makePage(chip) {
 <script>
   document.body.setAttribute('data-ds-dark-theme','')
   ${BROWSER_SETTINGS_SCOPE_SNIPPET}
-  var __prefs = __endfieldSettingsScope({ enabled:'1', palette:'valley', loader:'0', contour:'0', watermark:'0', thunder:'0' })
+  var __prefs = __endfieldSettingsScope({ enabled:'1', palette:'valley', loader:'0', watermark:'0', thunder:'0' })
   var mod = window.__MOD__.factory(function () { return null })
   window.__dispose__ = mod.apply({
     get: function (n) {

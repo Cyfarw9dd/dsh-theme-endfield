@@ -4,7 +4,7 @@
  * THE BUG THIS EXISTS FOR. DSH 0.1.2-rc.1 rebuilt its CSS modules and every hex
  * module hash changed. The theme then pinned 33 selectors to those hashes
  * (.wSkVaW_root, .pXSMma_root, .YDXeBa_sessionRow, …) and ALL of them died
- * silently: the contour sheet only showed over the sidebar, the watermark never
+ * silently: the watermark never
  * mounted, and no error appeared anywhere — a screenshot diff is far too coarse
  * to catch "this one background stopped being transparent".
  *
@@ -62,17 +62,13 @@ if (hashPinned.size === 0) {
 
 /* ---------- 2. the hash-free hooks are all present ---------- */
 const hooks = [
-  // JS detectors (client.js watermark/contour anchoring)
+  // JS detectors (client.js watermark anchoring)
   ['[class$="_root"][data-phase="hero"]', 'hero detector (isHeroVisible)'],
   ['[class$="_root"][data-phase]', 'conversation-column detector (findConversationRoot)'],
   ['[class$="_headlineText"]', 'headline detector (findVisibleHeadline)'],
   ['[class$="_centerCol"], [class*="_centerCol "]', 'app-frame locator (findAppFrame)'],
   // stylesheet hooks
   ["[class$='_root']:has(> [data-endfield-watermark])", 'watermark host isolation'],
-  ["[class*='_frame']:has(> [data-endfield-contour]) [class$='_centerCol'] [class$='_root']",
-    'contour: conversation column transparency'],
-  ["[class*='_frame']:has(> [data-endfield-contour]) [class$='_detailsCol'] [class$='_root']",
-    'contour: details column transparency'],
   ["[class$='_sidebarCol'] [class*='_sessionRow']", 'sidebar workspace rows'],
   ["[class$='_sidebarCol'] [class*='_folder']", 'light-mode sidebar ink'],
   ["[class$='_centerCol'] [class$='_header'] [class$='_headerActions'] [class*='_label']:has(> svg)", 'agent-preset header chip'],

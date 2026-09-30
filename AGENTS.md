@@ -6,7 +6,7 @@ DSH Web 主题插件（《明日方舟：终末地》工业编辑风）。改任
 
 - **双半架构**：`index.js`（Host/Node，启动加载）+ `client.js`（浏览器，按请求读盘、**刷新生效**）。安装用 link 方式：`dsh plugin --profile web add <本仓库>`
 - 样式表是 client.js 里的**一个 JS 模板字符串**——反引号/`${`/注释配平都会「解析不报错但全坏」，`check.js` 守这些
-- 生成物三件套（音效 `sounds/`、等高线 worker、徽标掩码 EMBLEM_MASK 区）：**只改源与脚本，不手改产物**，`--check` 防漂移
+- 生成物两件套（音效 `sounds/`、徽标掩码 EMBLEM_MASK 区）：**只改源与脚本，不手改产物**，`--check` 防漂移
 
 ## 硬规则
 

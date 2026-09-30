@@ -13,15 +13,15 @@
  * index.js FIELD_DEFAULTS — see the long note in ./settings-scope.js for why a
  * fixture that strips the `dsh-theme-endfield-` prefix instead of mapping it
  * hides the shipped field-name bug. A key the page passes in may be a schema
- * field ('contourAnim'), a UI key ('dsh-theme-endfield-contour-anim'), or a
- * namespaced schema field ('dsh-theme-endfield-contourAnim', the spelling the
+ * field ('thunderAnim'), a UI key ('dsh-theme-endfield-thunder-anim'), or a
+ * namespaced schema field ('dsh-theme-endfield-thunderAnim', the spelling the
  * upstream browser tests seed with); all three name a declared field. The legacy
- * pre-migration spelling ('contour-anim') deliberately does NOT resolve — it must
+ * pre-migration spelling ('thunder-anim') deliberately does NOT resolve — it must
  * stay an undeclared key so a test can reproduce the shipped bug verbatim.
  *
  * Usage inside a page <script> (after client.js has loaded):
  *
- *   var __prefs = __endfieldSettingsScope({ enabled: '1', contour: '1', ... });
+ *   var __prefs = __endfieldSettingsScope({ enabled: '1', thunder: '1', ... });
  *
  * A second, optional argument models the Host fetch window, which is what a real
  * page load actually sees (the scope is still 'loading' while apply() runs):
@@ -35,8 +35,7 @@
  */
 const BROWSER_SETTINGS_SCOPE_SNIPPET = `
 var __endfieldFieldDefaults = {
-  enabled:'1', palette:'gray', radius:'square', glass:'off', contour:'0', contourAnim:'1',
-  contourTrail:'0', contourFps:'24', contourSpeed:'2', contourRenderer:'canvas', contourScrollPause:'1', watermark:'1',
+  enabled:'1', palette:'gray', radius:'square', glass:'off', watermark:'1',
   watermarkPersist:'0', loader:'0', thunder:'0', thunderAnim:'0',
   audioEnabled:'0', audioVolume:'100', audioBoot:'1', audioTurnStart:'1', audioTurnDone:'1',
   audioAttention:'1', audioTurnFail:'1', audioDebounceMs:'2500', audioSoundDir:'',
@@ -45,14 +44,7 @@ var __endfieldFieldDefaults = {
 var __endfieldKeyToField = {
   'dsh-theme-endfield-enabled':'enabled', 'dsh-theme-endfield-palette':'palette',
   'dsh-theme-endfield-glass':'glass',
-  'dsh-theme-endfield-radius':'radius', 'dsh-theme-endfield-contour':'contour',
-  'dsh-theme-endfield-contour-anim':'contourAnim',
-  'dsh-theme-endfield-contour-trail':'contourTrail',
-  'dsh-theme-endfield-contour-fps':'contourFps',
-  'dsh-theme-endfield-contour-speed':'contourSpeed',
-  'dsh-theme-endfield-contour-renderer':'contourRenderer',
-  'contourRenderer':'contourRenderer',
-  'dsh-theme-endfield-contour-scroll-pause':'contourScrollPause',
+  'dsh-theme-endfield-radius':'radius',
   'dsh-theme-endfield-watermark':'watermark',
   'dsh-theme-endfield-watermark-persist':'watermarkPersist',
   'dsh-theme-endfield-loader':'loader', 'dsh-theme-endfield-thunder':'thunder',
@@ -65,9 +57,9 @@ var __endfieldKeyToField = {
   'dsh-theme-endfield-audio-human-only':'audioHumanOnly', 'dsh-theme-endfield-audio-diag':'audioDiag'
 };
 /* UI key -> schema field, mirroring client.js PREFS_KEY_TO_FIELD, plus the
-   namespaced schema-field spelling ('dsh-theme-endfield-contourAnim') the
-   upstream tests seed with. Anything else (a bare schema field like 'contourAnim',
-   or a stray spelling like 'contour-anim') is handed back unchanged: a field name
+   namespaced schema-field spelling ('dsh-theme-endfield-thunderAnim') the
+   upstream tests seed with. Anything else (a bare schema field like 'thunderAnim',
+   or a stray spelling like 'thunder-anim') is handed back unchanged: a field name
    is already correct, and a stray spelling must NOT be silently corrected here —
    that is the client's job to never produce, and a fixture that quietly accepted
    it would hide the bug. */
@@ -114,7 +106,7 @@ function __endfieldSettingsScope(initial, opts) {
     getSnapshot: snap,
     set: scope.set,
     /* Drop-in shims so a page that still speaks the old localStorage-key
-       vocabulary keeps working: setItem('dsh-theme-endfield-contour-anim', v)
+       vocabulary keeps working: setItem('dsh-theme-endfield-thunder-anim', v)
        now writes the SCHEMA field, which is the whole point. */
     setItem: function (name, v) { scope.set(fieldOf(name), v); },
     removeItem: function (name) { scope.set(fieldOf(name), __endfieldFieldDefaults[fieldOf(name)]); },

@@ -194,7 +194,7 @@
 ## 05 音频（默认关闭）
 
 四种提示音，**由宿主进程播放**而不是浏览器：页面最小化、切到别的应用时同样能听到——那恰好是最需要提示的场合。
-完整文档见 [audio-notifications.md](audio-notifications.md)。
+完整文档见 [audio-notifications.md](cookbook/audio-notifications.md)。
 
 | 槽位 | 触发时机 |
 | --- | --- |

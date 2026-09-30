@@ -796,14 +796,25 @@ function installAudio(ctx, settingsScope) {
   ctx.on('approval/request', (request, next) => {
     attentionSeen.approval += 1;
     if (audio.diagnosing) audio.note('approval/request', String(request === undefined ? '' : request.kind || ''));
-    if (audio.enabled(PREF.attention)) audio.play('attention', { reason: 'approval request' });
+    if (audio.enabled(PREF.attention)) {
+      /* This event is a waterfall: play() must never be allowed to throw past
+         next(), or the whole approval chain dies exactly the way the
+         tools/execute note below describes. play() itself guards its file
+         parsing, so this is the belt to that brace. */
+      try { audio.play('attention', { reason: 'approval request' }); }
+      catch (error) { audio.note('play-threw', `approval/request: ${error && error.message ? error.message : error}`); }
+    }
     return typeof next === 'function' ? next() : undefined;
   });
 
   ctx.on('user-questions/request', (request, next) => {
     attentionSeen.question += 1;
     if (audio.diagnosing) audio.note('user-questions/request', 'pending question');
-    if (audio.enabled(PREF.attention)) audio.play('attention', { reason: 'user question' });
+    if (audio.enabled(PREF.attention)) {
+      // Same waterfall contract as approval/request above.
+      try { audio.play('attention', { reason: 'user question' }); }
+      catch (error) { audio.note('play-threw', `user-questions/request: ${error && error.message ? error.message : error}`); }
+    }
     return typeof next === 'function' ? next() : undefined;
   });
 
@@ -825,11 +836,15 @@ function installAudio(ctx, settingsScope) {
      that can silently break every tool in the profile. */
 
   ctx.on('agent/turn-stopping', ({ agent, turn }) => {
-    if (!isRootAgent(agent)) return;
-    if (!audio.enabled(PREF.done)) return;
     const key = turnKey(agent, turn);
+    /* Cleanup runs BEFORE the switches below. Both early returns used to sit in
+       front of the delete, which leaked entries two ways: subagent turns fail
+       isRootAgent yet are recorded by the session/event handler above, and a
+       user who turned the done sound off stopped reaping anything at all. */
     const hadText = terminals.get(key) === true;
     terminals.delete(key);
+    if (!isRootAgent(agent)) return;
+    if (!audio.enabled(PREF.done)) return;
     // One report per turn, and only for a turn that actually produced a written
     // result: a turn the user interrupted, or one that stopped on an approval
     // prompt, has nothing to announce.
@@ -1009,10 +1024,13 @@ function apply(ctx, config) {
   }
 
   /* The notification feature installs alongside the settings work below: which
-     settings GENERATION answered does not matter to it, so it is started on
-     every path — including "no settings seam at all", where the sound engine
-     simply runs on the shipped defaults. The guard keeps a double mount from
-     installing two engines on one context. */
+     settings GENERATION answered does not matter to it. A host WITHOUT the
+     inject capability starts the engine right here, on the shipped defaults; a
+     host WITH it starts the engine when the settings service arrives — and if
+     that service never appears, inject keeps waiting, so the engine (and the
+     bridge mounted together with it) never comes up. No known DSH generation
+     behaves that way. The guard keeps the two in-apply paths from installing
+     two engines on one context. */
   let audioInstalled = false;
   const startAudio = (settingsScope) => {
     if (audioInstalled) return;

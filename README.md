@@ -2,7 +2,7 @@
 
 参考《明日方舟：终末地》官网风格的 DSH Web 主题插件。
 
-奶油纸底、墨黑文字、信号黄/武陵青强调色、全直角工业编辑风。插件只运行在 Client 侧，通过主题令牌和样式覆盖界面，不修改应用代码。
+奶油纸底、墨黑文字、信号黄/武陵青强调色、全直角工业编辑风。Client 侧（`client.js`）通过主题令牌和样式覆盖界面；Host 侧（`index.js`）负责设置持久化与可选的音频通知（派生系统播放器子进程），均不修改应用代码。
 
 ## 安装
 
@@ -26,7 +26,8 @@ dsh plugin --profile web rm dsh-theme-endfield
 - 可选鼠标轨迹：鼠标附近的等高线局部变形并逐渐恢复，默认关闭；
 - 背景水印及持续显示；
 - 启动加载动画；
-- 雷霆大字及入场动画。
+- 雷霆大字及入场动画；
+- 可选音频通知：启动音、任务开始/结束音、需要回应时提示，音量与自定义音效目录可调（默认关闭，详见 [docs/audio-notifications.md](docs/audio-notifications.md)）。
 
 所有设置由 DSH 自己的设置服务持久化，与页面 origin/端口无关：在 **DSH 0.1.7-rc.1** 上，Host `index.js` 导出一份字段全部 `.volatile()` 的 schemastery `Config`（命名空间 = 本插件 profile entry id `theme-endfield`），浏览器 `client.js` 通过 `ctx.configForms` 读写并订阅，值随 `<profile>/cordis.patch.yml` 落盘；在**旧版 DSH** 上则回落到 `ctx.settings.register('dsh-theme-endfield', schema)` + `ctx.settingsScope`（`<dshHome>/settings.yaml`）。两代都与页面 origin 无关，因此 DSH web 与 DSH Desktop 都能正确保存并在重启/换端口后恢复，不再使用会被 Desktop 随机端口清空的 `localStorage`。详见 [docs/features.md](docs/features.md) 与 [docs/engineering-notes.md](docs/engineering-notes.md)；0.1.7 升级后旧设置需要在设置页重设一次（`settings.yaml` 已被 DSH 废弃，见 [engineering-notes.md § DSH 0.1.7-rc.1 换掉了整套 settings API](docs/engineering-notes.md#dsh-017-rc1-换掉了整套-settings-api-v110-已跟进)）。设置文案支持中英文；动态等高线尊重系统「减少动态效果」，动画帧率和速度可独立调整。
 
@@ -57,6 +58,8 @@ npm test
 ```text
 client.js          Client 侧主题实现
 index.js           Host 侧：导出 volatile Config，声明设置命名空间
+lib/               音频通知：槽位定义、WAV 合成与播放运行时
+sounds/            生成的通知音（npm run sound:build 重新生成）
 cordis.patch.yml   Bundle 注入配置
 check.js           样式表静态校验
 selftest.js        校验器自检

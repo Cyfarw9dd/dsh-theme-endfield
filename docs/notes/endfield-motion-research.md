@@ -631,3 +631,51 @@ background-image:linear-gradient(90deg,#bfbfbf 6.25rem,transparent 0,transparent
 | `clip-path` 矩形揭示 | ✅ 该页用于抽屉（`.3s ease`），与正文 §5.1a 的按钮揭示同源 |
 | 工业母题多为静态 | ✅ 斜纹、三色条、纹理层均**无动画**；该页 `@keyframes` = 0 |
 | `:focus` / 减效降级缺位 | ✅ 该 bundle 同样为 0（`prefers-reduced-motion` 0 次） |
+
+---
+
+## 附录 C：`/operator` 右侧栏（干员切换列）拆解
+
+取自该路由唯一 bundle `5f3bf8547312569e.css`（85,521 B / 412 条规则，与附录 B 同一份）。
+下面的选择器都做了去哈希处理（`.__02-Operator_` → `.`），尺寸保留原 rem 值。
+
+### C1 结构
+
+| 层 | 类名 | 关键声明 | 作用 |
+| --- | --- | --- | --- |
+| 外列 | `operatorSwitcher` | `width:9.8125rem; height:69.875rem; padding:4.875rem 0; flex-direction:column; align-items:center; justify-content:space-between` | 右侧竖排容器（窄栏 + 上下两端对齐） |
+| 斜纹底 | `operatorSwitcher:before` | `mask-image:linear-gradient(180deg, rgba(0,0,0,0) 0, #000 20%, #000 80%, rgba(0,0,0,0))` + `background-image:linear-gradient(-45deg, …)` + `opacity:.05` | 45° 斜纹，**两端用 mask 渐隐**，整层 5% 不透明度 |
+| 条目层 | `itemContainer` | `position:absolute; left:-50%; width:200%; margin:9.75rem 0; padding:.625rem 0` + `mask-image:linear-gradient(180deg, transparent 0, #000 .625rem, #000 calc(100% - .625rem), transparent)` | 可滚动条带，**上下 10px 渐隐** |
+| 条目 | `switchItem` | `width/height:8.5rem; border-radius:50%; box-shadow:0 0 .75rem rgba(2,2,2,.4); font-size:2.5rem; color:#fff; transition:transform .3s ease-in-out; cursor:pointer` | 圆形头像按钮 |
+| 2D/3D 开关 | `switchLayer` | `width:4.5rem; height:7.5rem; border:3px solid #666; border-radius:2.25rem; background:rgba(0,0,0,.5); filter:drop-shadow(0 0 .75rem white); transition:background-color .2s ease-in-out` | 圆角胶囊，里面两枚小圆用 `::before`/`::after` 写 `content:"3D"` / `content:"2D"`，各自 `transition:transform .2s ease-in-out` |
+
+### C2 状态语法（右边栏的按钮全部靠「换色 + 描边」表达状态）
+
+```css
+/* 条目常态 / 悬停 / 按下 —— 与全站同一套三段式灰阶 */
+listButton          { background-color:#383838; transition:background-color .2s ease }
+listButton:hover    { background-color:#626262 }
+listButton:active   { background-color:#282828 }   /* 按下比常态更暗 */
+
+/* 圆形条目：选中态与悬停态都用 2px 黄边，而不是换底色 */
+switchItem          { color:#fff; transition:transform .3s ease-in-out }
+switchItem(选中)     { border-color:#fffa00; border-width:2px }
+switchItem:hover    { border-color:#fffa00; border-width:2px }
+```
+
+### C3 对动效设计的四条可迁移结论
+
+1. **这一列里没有任何形变动效**：全部 `transition` 只有 `transform .3s` 与
+   `background-color .2s/.2s ease-in-out`；没有 `@keyframes`、没有 clip-path 揭示、
+   没有位移/缩放/旋转。状态表达 100% 由**颜色与描边**承担。
+2. **黄只做「被选中 / 正被指向」的信号**：2px `#fffa00` 描边；底色变化一律走灰阶
+   `#383838 → #626262 → #282828`（悬停提亮、按下压暗）。这与
+   [endfield-ui-research.md](../endfield-ui-research.md) 的静态结论互证。
+3. **柔边靠 `mask-image` 渐隐，而不是渐变到透明**：`itemContainer` 上下各 10px 渐隐、
+   `operatorSwitcher:before` 上下 20% 渐隐。这是该站对「长列表贴边」的固定处理，
+   **静态写法**（没有动画）。
+4. **45° 斜纹是低透明度静态纹理**（`opacity:.05` + `linear-gradient(-45deg, …)`），
+   不是流动扫描线。给它加动画会超出官网语法。
+
+> 本次拆解**只读取了 CSS 文本**，没有下载或内嵌该站的任何图片/字体/音效；
+> 上述 rem 数值保留原文，未做换算。

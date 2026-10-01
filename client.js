@@ -3044,28 +3044,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         transform: translateY(-50%) translateX(0) scale(1);
       }
 
-      /* A-4. Composer send/stop button：同款箭头滑入 */
-      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary'] {
-        position: relative;
-      }
-      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']::after {
-        content: '';
-        position: absolute;
-        left: 8px;
-        top: 50%;
-        width: 12px;
-        height: 55%;
-        background-color: var(--edge-accent-ink, #101110);
-        clip-path: polygon(0 15%, 100% 50%, 0 85%);
-        opacity: 0;
-        transform: translateY(-50%) translateX(-14px) scale(.4);
-        transition: opacity .2s ease, transform .2s cubic-bezier(.16, 1, .3, 1);
-        pointer-events: none;
-      }
-      body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']:hover::after {
-        opacity: 1;
-        transform: translateY(-50%) translateX(0) scale(1);
-      }
+      /* A-4. 发送/停止按钮（输入区 _primary）**不做动效**。
+         这里曾经是一个「信号色箭头自左侧滑入」的伪元素。取消它的理由有两条：
+         · 官方 /operator 右侧那列圆形按钮（切换干员）只有 .3s 的 transform 与
+           background-color .2s 两种过渡，**没有任何形变式动效**——它的状态靠
+           颜色与 2px 黄边表达（选中 '#fffa00'、悬停 '#626262'、按下 '#282828'）。
+           发送按钮上挂一个滑入箭头，比参考对象本身更吵；也不符合设计语言
+           「强调色只做信号、不做装饰」。
+         · 发送是高频动作，箭头在每一次悬停都重放，属于噪音。
+         现在发送按钮只保留全局的颜色过渡（背景/文字/边框），与其它按钮一致。 */
 
       /* A-5. Sidebar session/search rows + menu/option items + table rows:
          left signal border on hover. Uses --edge-accent-onpaper (a DARK step
@@ -3390,6 +3377,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         outline-offset: -2px;
       }
 
+      /* 输入区发送/停止按钮：所有方案下都不做动效（见 A-4 的理由）。
+         一条显式取消规则比在每个方案里加 :not() 更清楚，也不改变任何既有
+         选择器的特异性——它在源码顺序上更靠后，且带 !important。 */
+      body[data-endfield-motion] button[class*='_primary']:is([class$='_composerSeat'] *, [class$='_composerHero'] *),
+      body[data-endfield-motion] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary'] {
+        animation: none !important;
+        transform: none !important;
+      }
+
       /* ---------- 方案B silent 无额外规则（仅共通的过渡 + active） ---------- */
 
       /* ---------- 尊重「减少动态效果」：D–F 的位移/动画/揭示全部关掉，只留颜色 ---------- */
@@ -3441,7 +3437,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         body[data-endfield-motion='clamp'] [role='option']::after,
         body[data-endfield-motion='signal'] [class$='_newSession']::after,
         body[data-endfield-motion='signal'] [data-cordis-approve]::after,
-        body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']::after,
         body[data-endfield-motion='meter'] [class$='_iconButton']::before,
         body[data-endfield-motion='meter'] [role='menuitem']::before,
         body[data-endfield-motion='meter'] [role='option']::before {

@@ -229,6 +229,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
   .x_iconButton{width:28px;height:28px;border:none;background:transparent;cursor:pointer;
     display:inline-flex;align-items:center;justify-content:center}
   .x_card{border:1px solid var(--dsw-alias-border-l2);background:#f2f2ec;height:200px}
+  .x_composerSeat{padding:4px 0}
   .x_menuRow{display:block;width:180px;padding:6px 8px;margin:6px 0}
   .x_upstream{display:block;padding:4px 6px;margin:6px 0}
   /* An upstream decoration carried on a CLASS selector, the shape the app would use
@@ -240,6 +241,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
 </head><body ${motion ? `data-endfield-motion="${motion}"` : ''}>
   <button class="x_newSession" id="newSession">+ 新建会话</button>
   <button class="x_primary" id="primary">发送</button>
+  <div class="x_composerSeat"><button class="x_primary" id="send" aria-label="send">▶</button></div>
   <button class="x_iconButton" id="iconButton" aria-label="more">···</button>
   <button id="plain">编辑</button>
   <button id="approve" data-cordis-approve>允许</button>
@@ -743,6 +745,34 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       fail('F stamp · 普通按钮悬停应有 2px onpaper 外框  [' + plainF.outlineWidth + ' ' + plainF.outlineStyle + ' ' + plainF.outlineColor + ']')
     }
     await park()
+
+    /* ============ 发送按钮：不得有任何动效 ============
+       用户在看过官方 /operator 右侧那列圆形按钮（只有 transform .3s 与
+       background-color .2s，无形变动效）之后，要求取消发送按钮上的动画。
+       这条断言把它钉死：两个方案 × 悬停/按下，都不能有伪元素、动画或位移。 */
+    for (const scheme of ['signal', 'stamp']) {
+      await setMotion(scheme)
+      await park()
+      const sendRest = await styleOf('send')
+      const sendAfter = await styleOf('send', '::after')
+      await hover('send')
+      const sendHover = await styleOf('send')
+      const holdSend = await press('send', { release: false })
+      const sendActive = await styleOf('send')
+      await holdSend.release()
+      const staticOk = !sendAfter.content || sendAfter.content === 'none'
+      const noAnim = sendActive.animationName === 'none' && sendHover.animationName === 'none'
+      const noShift = sendActive.transform === 'none' && sendHover.transform === 'none'
+      if (staticOk && noAnim && noShift) {
+        pass('发送按钮 · ' + scheme + ' 下无伪元素动效、无动画、无位移  [after=' + sendAfter.content
+          + ' anim=' + sendActive.animationName + ' transform=' + sendActive.transform + ']')
+      } else {
+        fail('发送按钮 · ' + scheme + ' 下仍有动效  [after=' + sendAfter.content + ' anim=' + sendActive.animationName
+          + ' hover-transform=' + sendHover.transform + ' active-transform=' + sendActive.transform
+          + ' rest-transform=' + sendRest.transform + ']')
+      }
+      await park()
+    }
 
     /* ============ control: off ============ */
     /* The runtime removes the attribute for `off` (client.js syncMotion), it does

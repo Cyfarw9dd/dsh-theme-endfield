@@ -15,6 +15,7 @@ DSH Web 主题插件（《明日方舟：终末地》工业编辑风）。改任
 3. **颜色是量出来的**：新色值必须对实际底面算对比度并写进 `test/palette-contrast.test.js`；选中/光标是**不随调色板的固定灰**（官网语法，依据见 docs/endfield-ui-research.md）
 4. **测试从真实文件读值，不复述数值**；每条断言做过变异验证（selftest.js 方法论）
 5. **`--edge-*` 变量声明在 `body`，绝不在 `:root`**（应用令牌是 body 行内样式，:root 解析为空）
+6. **装饰克制**：新增装饰/动效前先过 [docs/design-principles.md](docs/design-principles.md) 的三问——装饰不得拦截交互或盖住正文，动效只许动合成器属性并过 `test/perf-motion.test.js` 的预算
 
 ## 验证门槛
 

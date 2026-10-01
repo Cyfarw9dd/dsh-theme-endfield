@@ -2,7 +2,7 @@
 
 本文是这套主题的设计说明：**颜色是什么、为什么是这个值、落在哪个界面角色上**。想拿它当设计语言学习入口的，读这一篇就够。
 
-工程实现细节在 [engineering-notes.md](engineering-notes.md)，测试在 [testing.md](testing.md)。
+「允许加什么、不允许加什么」这条总纲在 [design-principles.md](design-principles.md)；工程实现细节在 [engineering-notes.md](engineering-notes.md)，测试在 [testing.md](testing.md)。
 
 ---
 

@@ -37,6 +37,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 | 文档 | 层 | 内容 |
 | --- | --- | --- |
 | [docs/AGENTS.md](docs/AGENTS.md) | 治理 | 文档分层规则与贡献流程 |
+| [docs/design-principles.md](docs/design-principles.md) | 治理 | 设计原则：装饰只做必要的一处、不进入核心工作区、动效必须付得起 |
 | [docs/architecture.md](docs/architecture.md) | 主题 | 双半结构、样式表组织、验证链 |
 | [docs/compatibility.md](docs/compatibility.md) | 主题 | 向后兼容与稳定性：上游依赖风险分级、版本适配清单 |
 | [docs/glossary.md](docs/glossary.md) | 主题 | 术语与令牌速查 |

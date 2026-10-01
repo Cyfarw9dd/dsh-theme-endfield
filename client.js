@@ -2931,9 +2931,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         border-radius: 6px !important;
       }
 
-      /* A-2. 主 CTA / 新会话按钮：clip-path 箭头变形（官网签名动效）。
-         信号色窄条 (::after) 在悬停时变形为右指箭头并向右滑动。
-         与 hover 色变并行，不串行。 */
+      /* A-2. 主 CTA 箭头动效（新会话 / 审批 / 发送）。
+         不做 clip-path 变形——两个 polygon 之间的点位插值在过渡期间产生
+         自交形状（蝶形），视觉上闪烁扭曲。改为：形状固定为右指三角，
+         仅动画 transform + opacity（合成器级，零 paint，零重排）。
+         悬停时箭头从左侧滑入并放大到位。 */
       body[data-endfield-motion='signal'] [class$='_newSession'] {
         position: relative;
       }
@@ -2942,21 +2944,22 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         position: absolute;
         left: 6px;
         top: 50%;
-        transform: translateY(-50%);
-        width: 14px;
+        width: 12px;
         height: 60%;
         background-color: var(--edge-accent-ink, #101110);
-        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
-        transition: clip-path .2s ease, transform .2s ease;
+        clip-path: polygon(0 15%, 100% 50%, 0 85%);
+        opacity: 0;
+        transform: translateY(-50%) translateX(-14px) scale(.4);
+        transition: opacity .2s ease, transform .2s cubic-bezier(.16, 1, .3, 1);
         pointer-events: none;
         z-index: 1;
       }
       body[data-endfield-motion='signal'] [class$='_newSession']:hover::after {
-        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
-        transform: translateY(-50%) translateX(6px);
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
       }
 
-      /* A-3. 审批按钮也获得箭头（approve 方向朝右 = 批准） */
+      /* A-3. 审批按钮：同款箭头滑入 */
       body[data-endfield-motion='signal'] [data-cordis-approve] {
         position: relative;
       }
@@ -2965,24 +2968,21 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         position: absolute;
         left: 6px;
         top: 50%;
-        transform: translateY(-50%);
-        width: 8px;
+        width: 10px;
         height: 55%;
         background-color: currentColor;
-        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
-        transition: clip-path .2s ease, transform .2s ease;
-        pointer-events: none;
+        clip-path: polygon(0 15%, 100% 50%, 0 85%);
         opacity: 0;
+        transform: translateY(-50%) translateX(-12px) scale(.4);
+        transition: opacity .2s ease, transform .2s cubic-bezier(.16, 1, .3, 1);
+        pointer-events: none;
       }
       body[data-endfield-motion='signal'] [data-cordis-approve]:hover::after {
-        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
-        transform: translateY(-50%) translateX(4px);
         opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
       }
 
-      /* A-4. Composer send/stop button: same arrow morph.
-         Scoped to the composer (the seat band / hero wrapper) and to <button>
-         elements whose class contains '_primary' — the send and stop controls. */
+      /* A-4. Composer send/stop button：同款箭头滑入 */
       body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary'] {
         position: relative;
       }
@@ -2991,17 +2991,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         position: absolute;
         left: 8px;
         top: 50%;
-        transform: translateY(-50%);
-        width: 10px;
+        width: 12px;
         height: 55%;
         background-color: var(--edge-accent-ink, #101110);
-        clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
-        transition: clip-path .2s ease, transform .2s ease;
+        clip-path: polygon(0 15%, 100% 50%, 0 85%);
+        opacity: 0;
+        transform: translateY(-50%) translateX(-14px) scale(.4);
+        transition: opacity .2s ease, transform .2s cubic-bezier(.16, 1, .3, 1);
         pointer-events: none;
       }
       body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']:hover::after {
-        clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
-        transform: translateY(-50%) translateX(6px);
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
       }
 
       /* A-5. Sidebar session/search rows + menu/option items + table rows:

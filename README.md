@@ -25,7 +25,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 - 启动加载动画；
 - 雷霆大字及入场动画；
 - 工业风通知：任务完成回执（6 秒自动消失）、提问/索权常驻卡片（处理完自动消失），音效跟随音频通知开关；
-- 可选音频通知：启动音、任务开始/结束音、需要回应时提示，音量与自定义音效目录可调（默认关闭，详见 [docs/audio-notifications.md](docs/cookbook/audio-notifications.md)）。
+- 可选音频通知：启动音、任务开始/结束音、需要回应时提示，音量与自定义音效目录可调（默认关闭，详见 [docs/cookbook/audio-notifications.md](docs/cookbook/audio-notifications.md)）。
 
 所有设置由 DSH 自己的设置服务持久化，与页面 origin/端口无关：在 **DSH 0.1.7-rc.1** 上，Host `index.js` 导出一份字段全部 `.volatile()` 的 schemastery `Config`（命名空间 = 本插件 profile entry id `theme-endfield`），浏览器 `client.js` 通过 `ctx.configForms` 读写并订阅，值随 `<profile>/cordis.patch.yml` 落盘；在**旧版 DSH** 上则回落到 `ctx.settings.register('dsh-theme-endfield', schema)` + `ctx.settingsScope`（`<dshHome>/settings.yaml`）。两代都与页面 origin 无关，因此 DSH web 与 DSH Desktop 都能正确保存并在重启/换端口后恢复，不再使用会被 Desktop 随机端口清空的 `localStorage`。详见 [docs/features.md](docs/features.md) 与 [docs/engineering-notes.md](docs/engineering-notes.md)；0.1.7 升级后旧设置需要在设置页重设一次（`settings.yaml` 已被 DSH 废弃，见 [engineering-notes.md § DSH 0.1.7-rc.1 换掉了整套 settings API](docs/engineering-notes.md#dsh-017-rc1-换掉了整套-settings-api-v110-已跟进)）。设置文案支持中英文；大字入场动画尊重系统「减少动态效果」。
 
@@ -47,7 +47,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 | [docs/development.md](docs/development.md) | 主题 | 开发与发布工作流 |
 | [docs/git.md](docs/git.md) | 主题 | Git 提交策略与 Conventional Commits 规范 |
 | [docs/cookbook/](docs/cookbook/) | 手册 | 功能专题：[音频通知](docs/cookbook/audio-notifications.md) · [磨砂玻璃](docs/cookbook/glass.md) |
-| [docs/notes/](docs/notes/) | 记录 | 一次性存档（PR 说明等） |
+| [docs/notes/](docs/notes/) | 记录 | 一次性存档（[PR 说明](docs/notes/PR-description.md)、[官网动效调研](docs/notes/endfield-motion-research.md)） |
 
 ## 开发与验证
 

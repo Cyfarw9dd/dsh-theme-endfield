@@ -88,6 +88,23 @@ node test/verify-shots.js            # 解码四张截图统计强调色像素
 
 ---
 
+## 按钮动效
+
+```bash
+node test/motion-check.js            # 真实浏览器 + 真实指针，验证 D/E/F 三套动效（22 项）
+```
+
+**`motion-check.js`** 把 `client.js` 里那一整条 `insertCss()` 模板字符串抽出来注入一张夹具页，再用 DevTools 协议的 `Input.dispatchMouseEvent` **真的把鼠标移到按钮上并按下**，然后读计算样式、必要时**解码截图数像素**。它守的是「选择器写了但没生效」这一类静默失败：
+
+- 属性钩子：`data-endfield-motion` 是 `<body>` 上的一个值，写错值等于整套规则不存在；
+- 层叠：应用自己有 `button { transition: none !important }`，主题的过渡必须赢过它；
+- 伪元素生成：宿主元素不是 `position: relative` 时 `::after` 根本不生成——`clamp` 的四角角标就栽在这里，而且**遮罩图会按自身宽高比缩放**：把 24×24 的图设成 `mask-size:100% 100%`，形状会保持 1:1 居中，角标跑到按钮中间去。这条只有数像素能抓到，所以左上角 14×14 区域必须找到 ≥12 个 onpaper 色像素；
+- 反面对照：`off` 必须什么都不剩（但共通的 `:active` 暗一档要在），`prefers-reduced-motion: reduce` 必须关掉位移/动画/揭示而**保留颜色反馈**——读数条在减效下降到满格（信息照给，滑动取消）。
+
+夹具里那一条对上游的假设（目标按钮带 `position: relative`）写在文件顶部注释里；上游若改掉，测试会红，而不是假装通过。
+
+---
+
 ## 设置页
 
 ```bash

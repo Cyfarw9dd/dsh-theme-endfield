@@ -1122,7 +1122,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
     const ENABLED_KEY = 'dsh-theme-endfield-enabled'
     const isEnabled = () => prefsGet(ENABLED_KEY) !== '0'
     const MOTION_KEY = 'dsh-theme-endfield-motion'
-    const MOTION_OPTIONS = ['signal', 'silent', 'impact', 'off']
+    /* Order is the select's order, default first. A–C are the original three;
+       D–F were added as three independent motion MOTIFS (corner brackets /
+       instrument meter / stamp) so each can be judged separately rather than
+       stacked onto one button. */
+    const MOTION_OPTIONS = ['signal', 'silent', 'impact', 'clamp', 'meter', 'stamp', 'off']
+    /* Option label keys, in MOTION_OPTIONS order. Kept as a table rather than a
+       nested ternary chain so a new scheme cannot be added to the list and
+       silently fall back to the off label (the old chain had no default). */
+    const MOTION_LABEL_KEYS = {
+      signal: 'motionSignal', silent: 'motionSilent', impact: 'motionImpact',
+      clamp: 'motionClamp', meter: 'motionMeter', stamp: 'motionStamp', off: 'motionOff',
+    }
     const readMotion = () => {
       const value = prefsGet(MOTION_KEY)
       return MOTION_OPTIONS.includes(value) ? value : 'signal'
@@ -2882,29 +2893,57 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         color: var(--edge-select-ink, #000);
         background: var(--edge-select-fill, #d9d9d9);
       }
-      /* ================= 按钮交互动效（三套方案，data-endfield-motion 切换） =======
+      /* ================= 按钮交互动效（六套方案，data-endfield-motion 切换） =======
+
+         每套方案是「一种动效母题 × 不同按钮角色」，切换只动 <body> 上的一个
+         data-* 值；下面所有规则都以该属性为前缀，互斥生效。
 
          方案A signal（默认）：官网签名复刻
            · 全局 .2s 颜色过渡（hover 不再瞬变）
            · :active 按下 = 底色暗一档
            · 悬停圆角软化 0 → 4px（仅直角模式）
-           · 主 CTA / 新会话按钮：信号色 clip-path 箭头变形（官网签名）
+           · 主 CTA / 新会话按钮：信号色箭头自左侧滑入
 
          方案B silent：极简克制
            · 仅全局 .2s 颜色过渡 + :active 暗一档
-           · 无 clip-path、无圆角变化——零视觉噪音
+           · 无箭头、无角标、无位移——零视觉噪音
 
          方案C impact：冲压反馈
            · 全局 .2s 颜色过渡 + :active 暗一档
            · 悬停硬阴影位移（4px→2px，模拟被压入页面）
            · 悬停时左侧信号色边条闪现（width 0→3px）
 
+         方案D clamp：工程标注（角标母题）
+           · 悬停时四角亮起 12px L 形角标（.18s 自角落弹出）——工程图纸的
+             「框选/定位」语法；圆形图标按钮被排除在外
+           · 主 CTA：左缘 3px 信号边条 + 文字横移 2px（像被标注框对齐）
+           · 颜色过渡与 :active 沿用共通段；无整体位移、无缩放
+
+         方案E meter：仪表读数（计量母题）
+           · 图形按钮（类名以 _iconButton 结尾、且未被恢复成圆的那个）：
+             悬停四角出现准星刻度，按下 scale(.92)——仪表按钮被按下
+           · 主 CTA：底部读数条 6% → 100% 展开，按下瞬间炸成满条亮色
+           · 悬停文字切信号色 + 方括号字形（工业面板的「选中通道」语法）
+           · 零位移：所有变化都是 line/scale，不推挤相邻元素
+
+         方案F stamp：冲压盖章（落印母题）
+           · 批准 / 运行类按钮：按下时 -1.5° 落印 + 硬阴影收紧 + 180ms
+             keyframes（放大 1.06 → 回落 1），像把印章砸在纸上
+           · 拒绝 / 停止类按钮（同一母题的反向）：按下水平抖一下再归位
+           · 装饰性按钮（iconButton / actionButton）：按下缩到 .88
+           · 悬停时四角信号色框（outline，不占布局）
+
          off：完全关闭，回到无动效的瞬变状态。
 
          官网实测数据支撑（见 endfield-ui-research.md）：
-         · 时长全部 ≤.3s；无弹跳/无回弹
+         · 时长全部 ≤.3s；无弹跳/无回弹（keyframes 的 cubic-bezier y ≤ 1）
          · 变形优先于位移；颜色就是状态（hover亮/active暗）
-         · 零 JS 动画库，纯 CSS transition */
+         · 零 JS 动画库，纯 CSS transition
+
+         色彩取值：信号色边条/角标/读数条一律走 --edge-accent-onpaper（各调色板
+         都有、且都已通过亮暗双底对比度断言），因此 D–F 不需要任何新色值。
+
+         prefers-reduced-motion：A–F 的位移动画全部关掉，保留颜色过渡，见本节末尾。 */
 
       /* ---------- 共通（signal + silent + impact）：全局颜色过渡 ---------- */
       body[data-endfield-motion] button,
@@ -3053,7 +3092,265 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         border-left-color: var(--edge-accent, currentColor);
       }
 
+      /* ================= 方案D clamp：工程标注（角标母题） ================= */
+
+      /* D-1. 四角 L 形角标：两个 12px 方块伪元素，各自用一条 SVG 遮罩切出 L。
+         mask 的坑（实测，不是推测）：遮罩图按自身宽高比缩放——把 24×24 的图
+         mask-size 写成 100% 100% 时，它保持 1:1 并居中，角标会跑到按钮中间去。
+         所以伪元素本身就是 12×12 方块、mask 按内容尺寸使用；两个角分放
+         ::before / ::after（::after 只画右下角），保证不互相覆盖——半透明遮罩
+         叠加会加深那一角，L 的两条臂就不再等宽。
+         排除条件是必要的，不是装饰：圆角恢复规则把 [class*='actionButton' i] 与
+         不带该子串的 [class$='_iconButton'] 都变回圆形，而带 'actionButton'
+         子串的图标按钮变体（走纸/危险态）同样是圆的——圆形按钮上放角标是错的。
+         命中 4n+3 个类名：':not()' 自身不增加特异性，净特异性 = 元素 + 4 属性 +
+         伪元素，高于应用的同名 hover 规则。 */
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
+      body[data-endfield-motion='clamp'] [role='option']:hover::before,
+      body[data-endfield-motion='clamp'] [role='option']:hover::after {
+        content: '';
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        pointer-events: none;
+        z-index: 2;
+        background-color: var(--edge-accent-onpaper, var(--edge-accent));
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        animation: endfield-clamp-in .18s cubic-bezier(.16, 1, .3, 1) 1 both;
+      }
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
+      body[data-endfield-motion='clamp'] [role='option']:hover::before {
+        left: -1px;
+        top: -1px;
+        transform-origin: left top;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+      }
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
+      body[data-endfield-motion='clamp'] [role='option']:hover::after {
+        right: -1px;
+        bottom: -1px;
+        transform-origin: right bottom;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+      }
+      @keyframes endfield-clamp-in {
+        from { opacity: 0; transform: scale(.3); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      body[data-endfield-motion='clamp'] button,
+      body[data-endfield-motion='clamp'] [role='button'],
+      body[data-endfield-motion='clamp'] [role='tab'],
+      body[data-endfield-motion='clamp'] [role='menuitem'],
+      body[data-endfield-motion='clamp'] [role='option'] {
+        position: relative;
+      }
+
+      /* D-2. 主 CTA：左缘边条 + 文字横移 2px（被标注框对齐）。
+         列容器用 flex 布局，子元素整体右移 2px 不会被文字节点吃掉。 */
+      body[data-endfield-motion='clamp'] [class$='_newSession'] {
+        border-left: 3px solid transparent !important;
+      }
+      body[data-endfield-motion='clamp'] [class$='_newSession']:hover:not(:disabled) {
+        border-left-color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
+      }
+      body[data-endfield-motion='clamp'] [class$='_newSession'] > *,
+      body[data-endfield-motion='clamp'] [class$='_newSession']:hover:not(:disabled) > * {
+        transition: transform .2s cubic-bezier(.16, 1, .3, 1);
+      }
+      body[data-endfield-motion='clamp'] [class$='_newSession']:hover:not(:disabled) > * {
+        transform: translateX(2px);
+      }
+
+      /* ================= 方案E meter：仪表读数（计量母题） ================= */
+
+      /* E-1. 图形按钮：悬停四角准星刻度。只命中「类名以 _iconButton 结尾且
+         没被圆角恢复规则改成圆」的那个角色——圆形按钮上放角标是错的。 */
+      body[data-endfield-motion='meter'] [class$='_iconButton']:not([class*='actionButton' i]) {
+        position: relative;
+      }
+      body[data-endfield-motion='meter'] [class$='_iconButton']:not([class*='actionButton' i]):hover:not(:disabled)::before {
+        content: '';
+        position: absolute;
+        inset: 3px;
+        pointer-events: none;
+        z-index: 2;
+        background-image:
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent)));
+        background-repeat: no-repeat;
+        background-size: 7px 2px, 2px 7px, 7px 2px, 2px 7px, 7px 2px, 2px 7px, 7px 2px, 2px 7px;
+        background-position: left top, left top, right top, right top,
+          left bottom, left bottom, right bottom, right bottom;
+      }
+      body[data-endfield-motion='meter'] button[class$='_iconButton']:not([class*='actionButton' i]):active:not(:disabled),
+      body[data-endfield-motion='meter'] [role='button'][class$='_iconButton']:not([class*='actionButton' i]):active:not(:disabled) {
+        transform: scale(.92);
+        filter: none;
+      }
+
+      /* E-2. 主 CTA：底部读数条 6% → 100%，按下瞬间炸成满条亮色。
+         读数条走 --edge-accent（实心信号），不是 onpaper 深一档的版本。 */
+      body[data-endfield-motion='meter'] [class$='_newSession'] {
+        position: relative;
+      }
+      body[data-endfield-motion='meter'] [class$='_newSession']::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 3px;
+        width: 6%;
+        background-color: var(--edge-accent, currentColor);
+        transition: width .22s cubic-bezier(.16, 1, .3, 1), background-color .12s linear;
+        pointer-events: none;
+      }
+      body[data-endfield-motion='meter'] [class$='_newSession']:hover:not(:disabled)::after,
+      body[data-endfield-motion='meter'] [class$='_newSession']:focus-visible:not(:disabled)::after {
+        width: 100%;
+      }
+      body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled)::after {
+        width: 100%;
+        background-color: var(--edge-accent-onpaper, var(--edge-accent));
+      }
+      body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled),
+      body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled) * {
+        color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
+      }
+
+      /* E-3. 列表行 / 菜单项：悬停时文字前出现方括号（纯 ::before，无位移） */
+      body[data-endfield-motion='meter'] [role='menuitem']:hover,
+      body[data-endfield-motion='meter'] [role='option']:hover {
+        position: relative;
+      }
+      body[data-endfield-motion='meter'] [role='menuitem']:hover::before,
+      body[data-endfield-motion='meter'] [role='option']:hover::before {
+        content: '[';
+        position: absolute;
+        left: 4px;
+        color: var(--edge-accent-onpaper, var(--edge-accent));
+        pointer-events: none;
+      }
+      body[data-endfield-motion='meter'] [role='menuitem']:hover::after,
+      body[data-endfield-motion='meter'] [role='option']:hover::after {
+        content: ']';
+        position: absolute;
+        right: 4px;
+        color: var(--edge-accent-onpaper, var(--edge-accent));
+        pointer-events: none;
+      }
+
+      /* ================= 方案F stamp：冲压盖章（落印母题） ================= */
+
+      /* F-1. 批准 / 运行类：按下落印。transform 先转 -1.5°，动画在旋转基准上
+         做一次 1.06 → 1 的缩放回落；硬阴影同步收紧，视觉上「压进纸面」。 */
+      @keyframes endfield-stamp {
+        0% { transform: rotate(-1.5deg) scale(1.06); }
+        55% { transform: rotate(-1.5deg) scale(.99); }
+        100% { transform: rotate(-1.5deg) scale(1); }
+      }
+      body[data-endfield-motion='stamp'] [data-cordis-approve]:active:not(:disabled),
+      body[data-endfield-motion='stamp'] [data-cordis-approve-plugin]:active:not(:disabled),
+      body[data-endfield-motion='stamp'] [class*='_primary']:active:not(:disabled) {
+        animation: endfield-stamp 180ms cubic-bezier(.2, .9, .25, 1) 1 both;
+        filter: none;
+        box-shadow: 0 0 0 2px var(--edge-accent-onpaper, var(--edge-accent));
+      }
+
+      /* F-2. 拒绝 / 停止类：同一母题的反向——水平抖一下再归位（0.18s，无回弹） */
+      @keyframes endfield-stamp-refuse {
+        0% { transform: translateX(0); }
+        25% { transform: translateX(-2px); }
+        60% { transform: translateX(2px); }
+        100% { transform: translateX(0); }
+      }
+      body[data-endfield-motion='stamp'] [data-cordis-decline]:active:not(:disabled),
+      body[data-endfield-motion='stamp'] [class*='_stopButton']:active:not(:disabled),
+      body[data-endfield-motion='stamp'] [class*='_danger']:active:not(:disabled) {
+        animation: endfield-stamp-refuse 180ms linear 1 both;
+        filter: none;
+      }
+
+      /* F-3. 装饰性按钮（圆形图标按钮 / 走纸按钮）：按下缩进去 */
+      body[data-endfield-motion='stamp'] [class$='_iconButton']:active:not(:disabled),
+      body[data-endfield-motion='stamp'] [class*='actionButton' i]:active:not(:disabled) {
+        transform: scale(.88);
+        filter: none;
+      }
+
+      /* F-4. 普通按钮：悬停四角信号色细框（outline 不参与布局，零位移） */
+      body[data-endfield-motion='stamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled),
+      body[data-endfield-motion='stamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled) {
+        outline: 2px solid var(--edge-accent-onpaper, var(--edge-accent));
+        outline-offset: -2px;
+      }
+
       /* ---------- 方案B silent 无额外规则（仅共通的过渡 + active） ---------- */
+
+      /* ---------- 尊重「减少动态效果」：D–F 的位移/动画/揭示全部关掉，只留颜色 ---------- */
+      @media (prefers-reduced-motion: reduce) {
+        body[data-endfield-motion] button,
+        body[data-endfield-motion] [role='button'],
+        body[data-endfield-motion] [role='tab'],
+        body[data-endfield-motion] [role='menuitem'],
+        body[data-endfield-motion] [role='option'] {
+          animation: none !important;
+          transform: none !important;
+          box-shadow: none !important;
+          /* Colour IS the state, so the colour feedback stays: only the stamps
+             whose outline is the whole effect lose it. outline-color rather than
+             the shorthand, so the app's focus ring keeps its width and style. */
+          outline-color: transparent !important;
+        }
+        /* The dim-on-press half of the shared feedback is a colour change, not
+           motion: keep it even though the stamp schemes above blank the filter. */
+        body[data-endfield-motion] button:active:not(:disabled),
+        body[data-endfield-motion] [role='button']:active:not(:disabled) {
+          filter: brightness(.85) !important;
+        }
+        body[data-endfield-motion='clamp'] [class$='_newSession'] > *,
+        body[data-endfield-motion='clamp'] [class$='_newSession']:hover > * {
+          transition: none !important;
+          transform: none !important;
+        }
+        /* No sliding bar, no appearing brackets: the reveal is the motion. */
+        body[data-endfield-motion='meter'] [class$='_newSession']::after {
+          transition: none !important;
+          width: 100% !important;
+          background-color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
+        }
+        body[data-endfield-motion='clamp'] button:hover::after,
+        body[data-endfield-motion='clamp'] [role='button']:hover::after,
+        body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
+        body[data-endfield-motion='clamp'] [role='option']:hover::after,
+        body[data-endfield-motion='meter'] [class$='_iconButton']:hover::before,
+        body[data-endfield-motion='meter'] [role='menuitem']:hover::before,
+        body[data-endfield-motion='meter'] [role='menuitem']:hover::after,
+        body[data-endfield-motion='meter'] [role='option']:hover::before,
+        body[data-endfield-motion='meter'] [role='option']:hover::after {
+          content: none !important;
+        }
+      }
 
       /* Square corners (default): zero EVERY classed element, then restore circles/pills below.
          body.theme-endfield-round disables all of this and restores app-native rounding. */
@@ -4602,10 +4899,13 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimHintOn: '大字由大缩小砸入并淡出（关闭后为直接显示，仍保持 3 秒）',
       thunderAnimHintOff: '默认关闭；大字直接出现、3 秒后消失，不做缩放与淡入淡出',
       motionRow: '按钮动效',
-      motionHint: '三套方案：A 信号（官网签名）· B 静默（极简）· C 冲压（激进）',
+      motionHint: '六套母题，作用于不同按钮角色：A 信号（官网签名）· B 静默（极简）· C 冲压（激进）· D 角标（工程标注）· E 读数（仪表计量）· F 盖章（落印）',
       motionSignal: '方案A · 信号（官网签名）',
       motionSilent: '方案B · 静默（极简）',
       motionImpact: '方案C · 冲压（激进）',
+      motionClamp: '方案D · 角标（工程标注）',
+      motionMeter: '方案E · 读数（仪表计量）',
+      motionStamp: '方案F · 盖章（落印）',
       motionOff: '关闭（无动效）',
       notifyRow: '工业风通知',
       notifyOn: '开启通知',
@@ -4739,10 +5039,13 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimHintOn: 'The word punches in from oversized and fades out (appears instantly when off, still held 3s)',
       thunderAnimHintOff: 'Off by default; the word appears instantly and leaves after 3s, with no scaling or fading',
       motionRow: 'Button motion',
-      motionHint: 'Three schemes: A Signal (official signature), B Silent (minimal), C Impact (aggressive)',
+      motionHint: 'Six motifs, each aimed at different button roles: A Signal (official) · B Silent (minimal) · C Impact (aggressive) · D Clamp (corner brackets) · E Meter (instrument) · F Stamp (imprint)',
       motionSignal: 'A · Signal (official)',
       motionSilent: 'B · Silent (minimal)',
       motionImpact: 'C · Impact (aggressive)',
+      motionClamp: 'D · Clamp (corner brackets)',
+      motionMeter: 'E · Meter (instrument)',
+      motionStamp: 'F · Stamp (imprint)',
       motionOff: 'Off (no animation)',
       notifyRow: 'Industrial notify',
       notifyOn: 'Turn on',
@@ -5335,7 +5638,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                   style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
                     border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
                 }, MOTION_OPTIONS.map((v) => R.createElement('option', { key: v, value: v },
-                  t(v === 'signal' ? 'motionSignal' : v === 'silent' ? 'motionSilent' : v === 'impact' ? 'motionImpact' : 'motionOff')
+                  t(MOTION_LABEL_KEYS[v] || 'motionOff')
                 )))
               ]),
               row('glass', false, [

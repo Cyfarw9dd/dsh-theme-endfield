@@ -179,20 +179,20 @@ DSH 自带 DeepSeek 品牌蓝。主题把这些令牌整组重映射，否则会
 
 ### 设置面板统一下拉
 
-「终末地主题设置」的每一个有值行都用同一下拉（2026-10，用户指定「统一设计」）。形制不是发明，是量测**本应用自己的下拉**得来的（安装包 lib/*.css 一手取数）：
+「终末地主题设置」的每一个有值行都用同一下拉（2026-10，用户指定「统一设计」；同月二次核对后按应用真实值逐条校准）。形制不是发明，是量测**本应用自己的下拉**得来的（安装包 lib/*.css 一手取数，两处参考：primitives 的 Menu/MenuSurface 与 model-selection 的模型位菜单）：
 
 | 部位 | 应用原文（量测） | 本主题落点 |
 | --- | --- | --- |
-| 菜单卡片 | Menu.module.css 的 .list：padding 4px、top calc(100% + 4px)、min-width 144px、z-index 100、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1 | 同尺寸；右对齐（行控件在右侧，alignEnd 语法） |
+| 菜单卡片 | Menu.module.css 的 .list：padding 4px、top calc(100% + 4px)、min-width 144px、max-width 360px、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1；MenuSurface 的 .surface 圆角 --dsw-radius-lg | 同尺寸同圆角；右对齐（行控件在右侧，等价 .alignEnd） |
 | 卡片表面 | MenuSurface 的 .material：--dsw-menu-surface-fill（上游默认是 58%/45% 半透明配磨砂；本主题已映射为不透明纸面 #f2f2ec/#1c1e1c） | 同令牌，自动继承主题的菜单面色 |
-| 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、悬停 = focus-visible = --dsw-alias-interactive-bg-hover（fill 即焦点指示） | 同尺寸同令牌 |
-| 选中态 | check 模式：透明底 + 尾随 14px 对勾；role=menuitemradio + aria-checked | 同结构——选中行由全局「菜单当前项」划词灰规则上色，与模型栏/权限弹层一条规则 |
-| 触发器 | 模型位 _trigger / composer _select：28px 高、12px 山形箭头居右、悬停淡染 | 同结构；值文字用 label-primary（设置页语境里触发器承载当前值） |
-| 圆角 | 上游 radius-md/lg；本主题全局直角化接管 | 跟随全局直角/圆角模式，不单独声明 |
+| 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、圆角 --dsw-radius-md、悬停 = focus-visible = --dsw-alias-interactive-bg-hover（fill 即焦点指示）、元素是 button[role=menuitem] | 同尺寸/圆角/令牌，元素同为可聚焦 button（role=menuitemradio） |
+| 选中态 | check 模式：透明底 + 尾随 14px 对勾（IconCheckOutlineRegular，16 viewBox / 1px 描边） | 同结构同路径——选中行由全局「菜单当前项」划词灰规则上色，与模型栏/权限弹层一条规则 |
+| 触发器 | 模型位 _trigger：28px 高、圆角 --dsw-radius-sm、label-secondary、gap 4px、padding 0 4px 0 8px、13px/400/20px、悬停淡染；_chevron：label-caption、transition transform .12s、展开态 rotate(180deg)；composer _select 的山形箭头是 12px / 1.5px 描边数据 URI | 同尺寸末梢：值文字 label-secondary、箭头 label-caption 且展开旋转 180°（箭头路径照抄 composer 的 12px 数据 URI） |
+| 圆角 | 上游 radius-sm/md/lg；本主题直角模式下全局 [class]{border-radius:0!important} 接管 | 三条 radius 明确写出——直角模式被全局规则覆盖，圆角模式则与应用原生菜单一致（不写的话圆角模式下只有本控件保持直角） |
 
-行为同样照应用菜单：Escape 与点击面板外收起（监听器开时挂、收时摘，target.closest 对自己的根判定）；选中即写值并收起；重复点选当前项不写（与原生 select 的 change 语义一致）。**入场动画只动 opacity**（.15s；perf-motion 的静态守卫扫到本段，允许清单不变），prefers-reduced-motion 下关闭。主题关闭时样式表卸载，触发器退回应用令牌的内联兜底（与 btnStyleFor 的 !themed 分支同策略），settings-off 的按钮对比度探针因此继续成立。
+行为同样照应用菜单：Escape 与点击面板外收起（监听器开时挂、收时摘，target.closest 对自己的根判定）；选中即写值并收起；重复点选当前项不写（与原生 select 的 change 语义一致）。**入场动画只动 opacity**（.15s；perf-motion 的静态守卫扫到本段，允许清单不变），prefers-reduced-motion 下关闭菜单动画与箭头过渡（保留 180° 的状态翻转本身）。主题关闭时样式表卸载，触发器退回应用令牌的内联兜底（与 btnStyleFor 的 !themed 分支同策略），settings-off 的按钮对比度探针因此继续成立。
 
-已知边界：菜单在行内绝对定位（不 portal）。设置页的行不裁剪溢出，正常显示；若日后某个宿主把设置页放进 overflow 容器，需要把菜单 portal 到 body（应用自己的菜单正是为此 portal 的）。
+已知边界：菜单在行内绝对定位（不 portal）。设置页的行不裁剪溢出，正常显示，且 absolute 让菜单随页面滚动跟随触发器；若日后某个宿主把设置页放进 overflow 容器，需要把菜单 portal 到 body（应用自己的菜单正是为此 portal + fixed 的）。
 
 ### 交互动效：合并设计
 

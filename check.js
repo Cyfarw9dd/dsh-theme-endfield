@@ -350,5 +350,21 @@ if (failures) {
   } else {
     fail('endfield-select-in must only animate opacity (compositor-only, per docs/design-principles.md)')
   }
+  /* 2026-10 二次核对把这几条量测值钉死：它们全部来自应用自己的下拉
+     （Menu/MenuSurface 与 model-selection 的模型位），改动它们等于把控件
+     从页面的统一语言里拉出来。 */
+  const triggerRule = /\.endfield-select-trigger\s*\{([^}]*)\}/.exec(s2.replace(/\n\s*/g, ' '))
+  const shapeChecks = [
+    [triggerRule && /border-radius:\s*var\(--dsw-radius-sm\)/.test(triggerRule[1]), 'trigger 圆角 = --dsw-radius-sm（应用 _trigger 同值）'],
+    [triggerRule && /color:\s*var\(--dsw-alias-label-secondary\)/.test(triggerRule[1]), 'trigger 文字 = --dsw-alias-label-secondary（应用 _trigger 同色）'],
+    [/\.endfield-select\.is-open\s+\.endfield-select-trigger\s+svg\s*\{[^}]*rotate\(180deg\)/.test(s2.replace(/\n\s*/g, ' ')), '展开时山形箭头 rotate(180deg)（应用 _chevronOpen 同款）'],
+    [/\.endfield-select-menu\s*\{[^}]*border-radius:\s*var\(--dsw-radius-lg\)/.test(s2.replace(/\n\s*/g, ' ')), '菜单卡片圆角 = --dsw-radius-lg（MenuSurface .surface 同值）'],
+    [/\.endfield-select-option\s*\{[^}]*border-radius:\s*var\(--dsw-radius-md\)/.test(s2.replace(/\n\s*/g, ' ')), '选项行圆角 = --dsw-radius-md（Menu .item 同值）'],
+    [src.includes("R.createElement('button', {\n              key: o.value, type: 'button', role: 'menuitemradio'"), '选项是 button[role=menuitemradio]（可聚焦，同应用菜单元素）'],
+  ]
+  for (const [ok, what] of shapeChecks) {
+    if (ok) pass('统一下拉形制 · ' + what)
+    else fail('统一下拉形制丢失：' + what)
+  }
 }
 console.log('all checks passed')

@@ -278,6 +278,13 @@ for (const label of ['主题配色', '背景水印']) {
     const opts = menu ? walk(menu).filter((n) => n.props.role === 'menuitemradio') : []
     if (opts.length === 3) pass('下拉菜单提供三档（menuitemradio）')
     else fail('palette menu has ' + opts.length + ' options, expected 3')
+    /* 元素必须是可聚焦的 button：应用的菜单行就是 button[role=menuitem*]，
+       div 会丢掉键盘 Tab/Enter（2026-10 二次核对后钉住）。 */
+    if (opts.length > 0 && opts.every((n) => n.type === 'button' && n.props.type === 'button')) {
+      pass('下拉选项是 button[type=button]（可聚焦，同应用菜单）')
+    } else {
+      fail('下拉选项不是 button：' + JSON.stringify(opts.map((n) => n.type)))
+    }
     const checked = opts.filter((n) => n.props['aria-checked'] === 'true')
     if (checked.length === 1 && textOf(checked[0]).includes('谷地黄')) pass('当前值以 aria-checked 标在谷地黄上')
     else fail('aria-checked should mark exactly the current option, got ' + checked.length + ' checked')

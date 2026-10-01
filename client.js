@@ -3578,19 +3578,26 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
 
       /* ================= 设置面板统一下拉（.endfield-select） =================
-         「终末地主题设置」里所有有值行的唯一控件。形制逐条量测自本应用自己的
-         下拉（2026-10，安装包 lib/*.css 一手取数），不是另起炉灶：
+         「终末地主题设置」里所有有值行的唯一控件。形制**逐条量测自本应用自己的
+         下拉**（2026-10 二次核对，安装包 lib/*.css 一手取数）——不是另起炉灶。
+         两处参考模块：primitives 的 Menu/MenuSurface（权限弹层、预设菜单共用）
+         与 model-selection 的模型位菜单（composer 里最常被打开的那一个）。
 
-           | 部位 | 应用原文 | 本组件 |
-           | --- | --- | --- |
-           | 菜单卡片 | Menu.module.css .list：padding 4px、top calc(100%+4px)、min-width 144px、z-index 100、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1 | 同尺寸；右对齐（行控件在右，alignEnd 语法） |
-           | 卡片表面 | MenuSurface .material：--dsw-menu-surface-fill（本主题已映射为不透明纸面 #f2f2ec/#1c1e1c） | 同令牌 |
-           | 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、悬停=focus=--dsw-alias-interactive-bg-hover | 同尺寸同令牌 |
-           | 选中态 | check 模式：透明底 + 尾随 14px 对勾；role=menuitemradio | 同结构——选中行由全局划词灰规则上色（与模型栏一致，本表上方「菜单当前项」段） |
-           | 触发器 | 模型位 _trigger / composer _select：28px 高、label-secondary、右侧 12px 山形箭头、悬停淡染 | 同结构，值文字用 label-primary（设置页语境里触发器承载当前值） |
+          | 部位 | 应用原文 | 本组件 |
+          | --- | --- | --- |
+          | 菜单卡片 | Menu .list：padding 4px、top calc(100%+4px)、min-width 144px、max-width 360px、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1；MenuSurface .surface 圆角 --dsw-radius-lg | 同尺寸；右对齐（等价 .alignEnd） |
+          | 卡片表面 | MenuSurface .material：--dsw-menu-surface-fill（本主题已映射为不透明纸面 #f2f2ec/#1c1e1c，不接磨砂） | 同令牌 |
+          | 选项行 | Menu .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、圆角 --dsw-radius-md、悬停＝focus-visible＝--dsw-alias-interactive-bg-hover（fill 即焦点指示）、元素是 button[role=menuitem] | 同尺寸/圆角/令牌，且同为可聚焦 button（role=menuitemradio） |
+          | 选中态 | check 模式：透明底 + 尾随 14px 对勾 | 同结构——选中行由全局划词灰规则上色（与模型栏同一条规则，见上方「菜单当前项」段） |
+          | 触发器 | model-selection _trigger：28px、圆角 --dsw-radius-sm、label-secondary、gap 4px、padding 0 4px 0 8px、13px/400/20px、悬停淡染；_chevron：label-caption、transition transform .12s、展开态 rotate(180deg) | 同尺寸末梢（值文字 label-secondary，山形箭头 label-caption 且展开旋转 180°） |
 
-         直角/圆角跟随全局规则（本段不写 radius）；入场只动 opacity（.15s，
-         合成器属性，菜单 absolute 定位不参与布局，无重排），reduce 下关闭。 */
+         radius 明确写出（sm/md/lg）：直角模式下全局 [class]{border-radius:0!important}
+         会覆盖它们，圆角模式下则与应用原生菜单一致——不写的话本控件在圆角模式
+         下会孤零零地保持直角。
+         入场只动 opacity（.15s，合成器属性；菜单 absolute 定位不参与布局、无重排），
+         reduce 下关掉菜单动画与箭头过渡（保留 180° 状态翻转本身）。
+         与应用的差异（有意）：菜单在行内绝对定位，不 portal 成 fixed——设置页无
+         overflow 裁剪，absolute 还让菜单随页面滚动跟随触发器。 */
       .endfield-select {
         position: relative;
         display: inline-flex;
@@ -3599,34 +3606,35 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       .endfield-select-trigger {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         height: 28px;
-        padding: 0 8px;
+        max-width: 360px;
+        padding: 0 4px 0 8px;
         border: none;
+        border-radius: var(--dsw-radius-sm);
         cursor: pointer;
         background: transparent;
-        color: var(--dsw-alias-label-primary);
+        color: var(--dsw-alias-label-secondary);
         font-size: 13px;
+        font-weight: 400;
         line-height: 20px;
         white-space: nowrap;
         transition: background-color .2s ease, color .2s ease;
       }
-      .endfield-select-trigger:hover:not(:disabled),
-      .endfield-select-trigger:focus-visible,
-      .endfield-select.is-open .endfield-select-trigger {
+      .endfield-select-trigger:hover:not(:disabled) {
         background: var(--dsw-alias-interactive-bg-hover);
-        outline: none;
       }
       .endfield-select-trigger:disabled {
-        opacity: 0.4;
+        color: var(--dsw-alias-label-dimmed);
         cursor: not-allowed;
       }
       .endfield-select-trigger svg {
         flex: none;
-        color: var(--dsw-alias-label-secondary);
+        color: var(--dsw-alias-label-caption);
+        transition: transform .12s;
       }
       .endfield-select.is-open .endfield-select-trigger svg {
-        color: var(--dsw-alias-label-primary);
+        transform: rotate(180deg);
       }
       .endfield-select-value {
         min-width: 0;
@@ -3637,13 +3645,16 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         position: absolute;
         top: calc(100% + 4px);
         right: 0;
-        z-index: 100;
+        z-index: 1100;
         box-sizing: border-box;
-        min-width: 160px;
-        max-width: 320px;
+        min-width: 144px;
+        max-width: 360px;
+        max-height: min(360px, 100vh - 96px);
+        overflow-y: auto;
         padding: 4px;
         display: flex;
         flex-direction: column;
+        border-radius: var(--dsw-radius-lg);
         background: var(--dsw-menu-surface-fill);
         box-shadow: var(--dsw-elevation-prominent);
         --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
@@ -3661,16 +3672,23 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         min-height: 34px;
         padding: 6px 8px;
         border: none;
+        border-radius: var(--dsw-radius-md);
         background: transparent;
         cursor: pointer;
         color: var(--dsw-alias-label-primary);
         font-size: 13px;
+        font-weight: 400;
         line-height: 20px;
         text-align: left;
         white-space: nowrap;
       }
-      .endfield-select-option:hover {
+      .endfield-select-option:hover,
+      .endfield-select-option:focus-visible {
         background: var(--dsw-alias-interactive-bg-hover);
+      }
+      .endfield-select-option:disabled {
+        color: var(--dsw-alias-label-dimmed);
+        cursor: not-allowed;
       }
       .endfield-select-option-label {
         flex: 1;
@@ -3686,6 +3704,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       @media (prefers-reduced-motion: reduce) {
         .endfield-select-menu { animation: none; }
         .endfield-select-trigger { transition: none; }
+        .endfield-select-trigger svg { transition: none; }
       }
 
       /* Square corners (default): zero EVERY classed element, then restore circles/pills below.
@@ -6057,18 +6076,20 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               'aria-haspopup': 'menu', 'aria-expanded': open ? 'true' : 'false',
               'aria-label': ariaLabel, disabled: disabled === true, title: title || '',
               onClick: () => { if (disabled === true) return; if (open) closeMenu(); else openMenu() },
-              style: { color: 'var(--dsw-alias-label-primary)', background: enabled ? undefined : 'var(--dsw-alias-bg-layer-1)' },
+              style: { color: 'var(--dsw-alias-label-secondary)', background: enabled ? undefined : 'var(--dsw-alias-bg-layer-1)' },
             }, R.createElement('span', { key: 'val', className: 'endfield-select-value' }, current ? current.label : ''), chevron)
             const menu = (open && disabled !== true) ? R.createElement('div', {
               key: 'menu', className: 'endfield-select-menu', role: 'menu', 'aria-label': ariaLabel,
-            }, options.map((o) => R.createElement('div', {
-              key: o.value, role: 'menuitemradio', 'aria-checked': o.value === value ? 'true' : 'false',
+            }, options.map((o) => R.createElement('button', {
+              key: o.value, type: 'button', role: 'menuitemradio', 'aria-checked': o.value === value ? 'true' : 'false',
               className: 'endfield-select-option',
               onClick: () => { if (o.value !== value) onChange(o.value); closeMenu() },
             },
               R.createElement('span', { key: 'l', className: 'endfield-select-option-label' }, o.label),
-              (o.value === value ? R.createElement('svg', { key: 'c', className: 'endfield-select-check', width: 14, height: 14, viewBox: '0 0 14 14', fill: 'none', 'aria-hidden': 'true' },
-                R.createElement('path', { d: 'M2.5 7.5L5.5 10.5L11.5 3.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' })) : null)
+              /* 对勾用的是应用自己的 IconCheckOutlineRegular 路径（16 viewBox、
+                 1px 描边），由 CSS 渲染成菜单里的 14px——不是我画的近似勾。 */
+              (o.value === value ? R.createElement('svg', { key: 'c', className: 'endfield-select-check', width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' },
+                R.createElement('path', { d: 'M2.25 8.5L5.49732 11.7473C5.90519 12.1552 6.57263 12.1344 6.95426 11.7018L13.75 4', stroke: 'currentColor', strokeWidth: 1 })) : null)
             ))) : null
             return R.createElement('div', {
               className: 'endfield-select' + (open ? ' is-open' : ''),

@@ -2928,7 +2928,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* A-1. 悬停圆角软化（仅直角模式） */
       body[data-endfield-motion='signal']:not(.theme-endfield-round) button:hover:not(:disabled),
       body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:hover:not(:disabled) {
-        border-radius: 4px !important;
+        border-radius: 6px !important;
       }
 
       /* A-2. 主 CTA / 新会话按钮：clip-path 箭头变形（官网签名动效）。
@@ -2940,15 +2940,16 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-endfield-motion='signal'] [class$='_newSession']::after {
         content: '';
         position: absolute;
-        left: 8px;
+        left: 6px;
         top: 50%;
         transform: translateY(-50%);
-        width: 10px;
-        height: 55%;
+        width: 14px;
+        height: 60%;
         background-color: var(--edge-accent-ink, #101110);
         clip-path: polygon(0 0, 25% 0, 25% 100%, 0 100%);
         transition: clip-path .2s ease, transform .2s ease;
         pointer-events: none;
+        z-index: 1;
       }
       body[data-endfield-motion='signal'] [class$='_newSession']:hover::after {
         clip-path: polygon(0 20%, 100% 50%, 0 80%, 0 80%);
@@ -3003,17 +3004,29 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         transform: translateY(-50%) translateX(6px);
       }
 
-      /* A-5. Sidebar session/search rows + menu/option items: left signal border.
-         border-left transition instead of ::after — no extra DOM, no stacking
-         context, paint area is a 2px vertical strip. Cheapest possible indicator. */
+      /* A-5. Sidebar session/search rows + menu/option items + table rows:
+         left signal border on hover. Uses --edge-accent-onpaper (a DARK step
+         that reads on both paper and panel) because --edge-accent alone is
+         #d9d9d9 in the default gray palette — invisible on cream hover tints. */
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow']:hover {
-        border-left: 2px solid var(--edge-accent) !important;
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow']:hover {
-        border-left: 2px solid var(--edge-accent) !important;
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
       body[data-endfield-motion='signal'] [role='menuitem']:hover {
-        border-left: 2px solid var(--edge-accent) !important;
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
+      }
+      body[data-endfield-motion='signal'] [role='option']:hover {
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
+      }
+      /* Table row hover: same left border as sidebar rows. */
+      body[data-endfield-motion='signal'] tbody tr:hover {
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
+      }
+      /* Settings panel buttons: left border on hover, visible feedback. */
+      body[data-endfield-motion='signal'] .endfield-settings button:hover:not(:disabled) {
+        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
 
       /* ================= 方案C impact：冲压反馈 ================= */

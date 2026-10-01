@@ -3029,6 +3029,35 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
       }
 
+      /* 对话/轨迹 标签（_tabs/_tab，在 header 里）的选中短划。原生是 2px 纯色
+         压在 header 底边上（bottom:-1px），亮色模式下主题把那枚令牌映射成
+         墨色 #101110，于是灰纸上是根生硬黑条，还正好把下面的三色分划线截断
+         （用户实测反馈）。
+
+         第一版改成三色线想「与分划线连成一条」，被定量评审否决（ds_review_tab）：
+         · 24px 宽的 tab 里三段只有 紫3/黄5/绿16px——读不出三段，是「带杂色头
+           的绿线」（可辨识需整线 ≥60px）；
+         · 两线**相位不同**（分划线按整行宽取样、底线按按钮宽取样），右端断缝
+           ΔRGB=369，选中处还叠出 3px 厚、与分划线错 1px；
+         · 亮米底上黄 1.11:1 绿 1.08:1 隐没、暗墨底上三色全 6-17:1 炸亮——同一
+           控件两种性格。
+         结构性结论：「与整行分划线融合」与「选中线可见」几何互斥。
+
+         采用评审方案：**短划上移**（bottom:-1px→5px，落进 tab 自己的 9px 下
+         padding、紧贴文字），与分划线脱开 ≥4px——读作「文字下的标注线」
+         （工程图纸语法），分划线保持整行连续。颜色走主题「选中=灰阶」语言：
+         亮色用与选中文字同色的墨 #101110（15:1），暗色用官网暗选中灰
+         #d9d9d9（13.4:1，docs/endfield-ui-research.md 的官网选中灰阶）——
+         暗色下选中文字 3.49:1 偏弱，正好由线扛显著性。三色线回归单一职责：
+         只做整行分划。轨迹页自己的 detailTab（大写 T 结尾）不受影响。 */
+      [class$='_centerCol'] [class$='_tabs'] [class$='_tabActive']::after {
+        bottom: 5px;
+        background: #101110;
+      }
+      body[data-ds-dark-theme] [class$='_centerCol'] [class$='_tabs'] [class$='_tabActive']::after {
+        background: #d9d9d9;
+      }
+
       /* 降级：要求减少透明/更高对比时整段让位（装饰不与无障碍偏好争）。
          注意伪元素：列上的 background-image:none 只清背景图层，两个叠加层
          （::before 网格 / ::after 斜纹）必须各自 display:none。 */

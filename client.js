@@ -5318,6 +5318,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimRow: '大字入场动画',
       thunderAnimHintOn: '大字由大缩小砸入并淡出（关闭后为直接显示，仍保持 3 秒）',
       thunderAnimHintOff: '默认关闭；大字直接出现、3 秒后消失，不做缩放与淡入淡出',
+      glassRow: '磨砂玻璃',
+      glassHint: '只作用于输入卡片：轻微/标准/强 = 8/14/22px 有界局部模糊；右侧面板保持不透明，侧栏仅静态着色',
+      glassOff: '关闭',
+      glassSubtle: '轻微',
+      glassStandard: '标准',
+      glassStrong: '强',
       textureRow: '工业底纹',
       textureHint: '官网 /operator 的背景（只作用于主内容列）：上半网格渐隐 + 底部斜纹带 + 两级波纹',
       textureOff: '关闭（纯色）',
@@ -5360,7 +5366,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       audioSlotUi: '界面',
       audioAttentionRow: '需要你回应',
       audioTurnFailRow: '出错提示音',
-      audioReservedHint: '审批请求、我的提问、计划求批都会响',
+      audioAttentionHint: '审批请求、我的提问、计划求批都会响',
       audioReservedNeed: '无事件接线：不需要人工干预的错误保持静音',
       audioSoundDirRow: '自定义音效目录',
       audioSoundDirHint: '把 turn-start.wav / turn-done.wav 放进该目录即可覆盖内置音；留空则查工作区与桌面',
@@ -5426,6 +5432,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       thunderAnimRow: 'Announcement entry animation',
       thunderAnimHintOn: 'The word punches in from oversized and fades out (appears instantly when off, still held 3s)',
       thunderAnimHintOff: 'Off by default; the word appears instantly and leaves after 3s, with no scaling or fading',
+      glassRow: 'Frosted glass',
+      glassHint: 'Composer card only: subtle/standard/strong = 8/14/22px bounded blur; the docked right panel stays opaque, the sidebar gets a static tint only',
+      glassOff: 'Off',
+      glassSubtle: 'Subtle',
+      glassStandard: 'Standard',
+      glassStrong: 'Strong',
       textureRow: 'Industrial texture',
       textureHint: 'The official /operator backdrop (main column only): top-fading grid, bottom hatch band, two wave layers',
       textureOff: 'Off (flat colour)',
@@ -5466,7 +5478,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       audioSlotUi: 'Seen',
       audioAttentionRow: 'Needs your response',
       audioTurnFailRow: 'Error sound',
-      audioReservedHint: 'Fires on approval requests, my questions and plan reviews',
+      audioAttentionHint: 'Fires on approval requests, my questions and plan reviews',
       audioReservedNeed: 'Not wired by design: an error needing no human decision stays silent',
       audioSoundDirRow: 'Custom sound directory',
       audioSoundDirHint: 'Drop turn-start.wav / turn-done.wav there to override the built-in tone; blank falls back to the workspace and the Desktop',
@@ -6432,7 +6444,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               row('audio-attention', false, [
                 R.createElement('span', { style: labelStyle },
                   t('audioAttentionRow') + t('sep') + stateOf(audioTestReady()),
-                  R.createElement('span', { style: hintStyle }, t('audioReservedHint'))
+                  R.createElement('span', { style: hintStyle }, t('audioAttentionHint'))
                 ),
                 R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
                   audioTestButton('attention', 'audioSlotAttention')
@@ -6441,7 +6453,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               row('audio-fail', false, [
                 R.createElement('span', { style: labelStyle },
                   t('audioTurnFailRow') + t('sep') + stateOf(audioTestReady()),
-                  R.createElement('span', { style: hintStyle }, t('audioReservedHint'))
+                  R.createElement('span', { style: hintStyle }, t('audioReservedNeed'))
                 ),
                 R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
                   audioTestButton('turn-fail', 'audioSlotFail')

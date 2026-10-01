@@ -228,6 +228,15 @@ function hostShapedSection(extra = {}) {
 /** Find the panel row for a UI key and its primary switch button. */
 const findRow = (tree, key) => walk(tree).find((n) => n.type === 'div' && n.props && n.props.key === key)
 const buttonsIn = (row) => (row ? walk(row).filter((n) => n.type === 'button') : [])
+const selectsIn = (row) => (row ? walk(row).filter((n) => n.type === 'select') : [])
+/* The persist row became a select: its STATE lives in props.value now, not in the
+   label text (both option labels always render). These sections assert FIELD
+   READING, so the state readout is the select value. */
+const wmPersistValue = (tree) => {
+  const row = findRow(tree, 'watermark-persist')
+  const sel = selectsIn(row)[0]
+  return sel ? String(sel.props.value) : null
+}
 
 /* ======================================================================
    2. A toggle must write the DECLARED field — every one of them, not just
@@ -275,20 +284,28 @@ if (compoundCovered.length === COMPOUND.length) {
     }
     const row = findRow(tree, rowKey)
     if (!row) { fail('no panel row keyed ' + rowKey); continue }
+    /* radius and watermark-persist are selects now (two named values beat a cycle
+       button); the write-direction check is the same, the trigger is onChange. */
+    const sel = selectsIn(row).find((n) => n.props && typeof n.props.onChange === 'function')
     const btns = buttonsIn(row).filter((b) => b.props && typeof b.props.onClick === 'function')
-    if (btns.length === 0) { fail('row ' + rowKey + ' has no clickable button'); continue }
-    /* An option row picks the button labelled with the wanted value; a boolean
-       row's primary switch is its LAST button (rows lead with 预览/重播). */
-    const target = option
-      ? btns.find((b) => textOf(b) === option)
-      : btns[btns.length - 1]
-    if (!target) {
-      fail('row ' + rowKey + ' has no button labelled ' + JSON.stringify(option)
-        + '; labels = ' + JSON.stringify(btns.map(textOf)))
-      continue
-    }
+    if (!sel && btns.length === 0) { fail('row ' + rowKey + ' has no clickable button or select'); continue }
     const before = store.wire.length
-    try { target.props.onClick() } catch (e) { fail(rowKey + ' toggle threw: ' + e.message); continue }
+    if (sel) {
+      /* A select row writes the picked literal; the TOGGLES entry names it. */
+      try { sel.props.onChange({ target: { value } }) } catch (e) { fail(rowKey + ' select threw: ' + e.message); continue }
+    } else {
+      /* An option row picks the button labelled with the wanted value; a boolean
+         row's primary switch is its LAST button (rows lead with 预览/重播). */
+      const target = option
+        ? btns.find((b) => textOf(b) === option)
+        : btns[btns.length - 1]
+      if (!target) {
+        fail('row ' + rowKey + ' has no button labelled ' + JSON.stringify(option)
+          + '; labels = ' + JSON.stringify(btns.map(textOf)))
+        continue
+      }
+      try { target.props.onClick() } catch (e) { fail(rowKey + ' toggle threw: ' + e.message); continue }
+    }
     const fired = store.wire.slice(before)
     if (fired.length === 0) { fail(rowKey + ' toggle wrote nothing at all'); continue }
     const names = fired.map(([f]) => f)
@@ -345,8 +362,9 @@ if (compoundCovered.length === COMPOUND.length) {
     set(f, v) { wire.push([f, String(v)]); section[f] = String(v) },
   }
   const { render } = boot({ bind: () => scope })
-  const textBefore = textOf(render())
-  if (/大字入场动画：关闭/.test(textBefore) && /水印保持显示：关闭/.test(textBefore)) {
+  const beforeTree = render()
+  const textBefore = textOf(beforeTree)
+  if (/大字入场动画：关闭/.test(textBefore) && wmPersistValue(beforeTree) === '0') {
     pass('回归对照：未声明字段里的值不会被当成已声明字段读取（schema 默认值优先）')
   } else {
     fail('the panel must read the declared fields, not the stray keys, got ' + JSON.stringify(textBefore.slice(0, 220)))
@@ -356,6 +374,7 @@ if (compoundCovered.length === COMPOUND.length) {
   for (const l of listeners.slice()) { try { l() } catch (e) {} }
   const text = textOf(render())
 
+  const migratedTree = render()
   const migrated = wire.filter(([f]) => f === 'watermarkPersist' || f === 'thunderAnim')
   if (migrated.length === 2) {
     pass('旧拼写里的 2 个值被重新提交到 schema 字段上')
@@ -373,7 +392,7 @@ if (compoundCovered.length === COMPOUND.length) {
   else fail('migration invented writes beyond the legacy fields: ' + JSON.stringify(wire))
 
   /* And the re-committed value must reach the theme, not just the document. */
-  if (/水印保持显示：开启/.test(text)) {
+  if (wmPersistValue(migratedTree) === '1') {
     pass('迁移后的值立即生效（水印保持显示 = 开启）')
   } else {
     fail('migrated values did not take effect in the panel: ' + JSON.stringify(text.slice(0, 220)))
@@ -455,15 +474,14 @@ if (compoundCovered.length === COMPOUND.length) {
   }
   const { render } = boot({ bind: () => scope })
   const row = findRow(render(), 'watermark-persist')
-  const btn = buttonsIn(row).find((b) => b.props && typeof b.props.onClick === 'function')
-  if (!btn) { fail('no watermark-persist switch rendered'); process.exit(1) }
-  /* Read the direction off the panel itself: a row offers the action it is NOT
-     in, so the button's label is the state the click is about to store. Deriving
-     it (rather than assuming "on -> off") keeps this section independent of what
-     the previous sections left in the shared client instance. */
-  const turnsOn = /保持显示/.test(textOf(btn))
-  const nextValue = turnsOn ? '1' : '0'
-  try { btn.props.onClick() } catch (e) { fail('watermark-persist toggle threw: ' + e.message) }
+  /* The row became a select (two named values beat a cycle button); the held-edit
+     mechanism it exercises is unchanged — the trigger is onChange now. */
+  const sel = selectsIn(row).find((n) => n.props && typeof n.props.onChange === 'function')
+  if (!sel) { fail('no watermark-persist select rendered'); process.exit(1) }
+  /* Derive the direction off the panel itself: the select's current value is the
+     state it is IN, so the change is to the other one. */
+  const nextValue = sel.props.value === '1' ? '0' : '1'
+  try { sel.props.onChange({ target: { value: nextValue } }) } catch (e) { fail('watermark-persist select threw: ' + e.message) }
   if (wire.length === 0) pass('未就绪时改回默认值：没有出线写入')
   else fail('a write leaked to the wire while the namespace was unserved: ' + JSON.stringify(wire))
 

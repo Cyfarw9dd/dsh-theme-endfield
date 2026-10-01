@@ -86,9 +86,11 @@
 
 `prefers-reduced-motion: reduce` 下位移、`@keyframes` 与揭示式动效全部关掉，只保留颜色反馈（读数条停在 6% 刻度、角标两个都不生成、落印不播放）。触屏（无 hover 能力）目前**没有**像官网那样加 `@media(any-hover: hover)` 守卫，点按后悬停态会粘住，列为已知分歧。验证：`node test/motion-check.js`。
 
-### 主题圆角
+### 主题圆角（下拉）
 
-直角（默认）/ 圆角。同样是一个 class：`body.theme-endfield-round` 让整组 `border-radius: 0` 规则失效，恢复应用原生圆角。
+直角（默认）/ 圆角，下拉选择。同样是一个 class：`body.theme-endfield-round` 让整组 `border-radius: 0` 规则失效，恢复应用原生圆角。
+
+**设置面板的两值切换一律是下拉**（与配色/动效/玻璃/纹理同一形态）：当前值预选、候选项一目了然。按钮只留给「开/关」语义的开关。水印保持显示（仅新建页/保持显示）同理。
 
 ---
 

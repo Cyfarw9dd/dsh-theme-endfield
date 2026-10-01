@@ -273,7 +273,15 @@ function panelPaletteSelect(client) {
   return walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
 }
 const findButton = (buttons, re) => buttons.find((b) => re.test(textOf(b)))
-const RADIUS_RE = /切换直角|切换圆角/
+/** The radius row became a select (two named values beat a cycle button); this
+    test uses it as its write-probe across every transport scenario, so the
+    probe is the select's onChange now. */
+function panelRadiusSelect(client) {
+  const tree = client.render()
+  if (!tree) return null
+  return walk(tree).find((n) => n.type === 'select'
+    && n.props && n.props['aria-label'] === '主题圆角')
+}
 
 async function main() {
   /* =======================================================================
@@ -332,11 +340,11 @@ async function main() {
       fail('configForms value was not adopted: <body> lacks theme-endfield-wuling')
     }
 
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) {
-      fail('no radius toggle button rendered')
+      fail('no radius select rendered')
     } else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       const w = stub.writes
       if (w.length === 1 && w[0].ns === 'theme-endfield' && w[0].field === 'radius' && w[0].value === 'round') {
         pass('panel toggle wrote radius=round through form.set on the entry namespace')
@@ -358,10 +366,10 @@ async function main() {
   {
     const stub = configFormsStub({ 'include:theme-endfield': {} }, { served: ['include:theme-endfield'] })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
-    if (!radius) fail('no radius toggle button rendered (prefixed entry)')
+    const radius = panelRadiusSelect(client)
+    if (!radius) fail('no radius select rendered (prefixed entry)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       if (stub.writtenNamespaces().join(',') === 'include:theme-endfield') pass('bound the served prefixed entry id when that is the one the Host serves')
       else fail('wrote to ' + JSON.stringify(stub.writtenNamespaces()) + ' instead of include:theme-endfield')
       await drain()
@@ -370,10 +378,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: [] })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
-    if (!radius) fail('no radius toggle button rendered (re-selection case)')
+    const radius = panelRadiusSelect(client)
+    if (!radius) fail('no radius select rendered (re-selection case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       if (stub.writes.length === 0) pass('edit stayed held while only the wrong spelling was bound')
       else fail('wrote through an unserved spelling: ' + JSON.stringify(stub.writes))
 
@@ -394,10 +402,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: ['theme-endfield'], accept: () => false })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (refusal case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       await drain() // the refusal settles in a microtask; the edit must be held by then
       if (stub.writes.length === 1) pass('refused write was issued once')
       else fail('expected exactly one attempted write, saw ' + JSON.stringify(stub.writes))
@@ -422,10 +430,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: [] })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (unserved case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       if (stub.writes.length === 0) pass('nothing reached the transport while the entry was unserved')
       else fail('wrote before the entry was served: ' + JSON.stringify(stub.writes))
 
@@ -447,10 +455,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: ['theme-endfield'], mode: 'memory' })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (memory case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       client.flush()
       await drain()
       if (stub.writes.length === 0) pass('memory mode issued no durable write')
@@ -480,10 +488,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: [], quiet: true })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (settle-watch case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       if (stub.writes.length === 0) pass('silent-transition case: edit held while unserved')
       else fail('wrote before the entry was served: ' + JSON.stringify(stub.writes))
 
@@ -508,10 +516,10 @@ async function main() {
   {
     const stub = configFormsStub({}, { served: [], quiet: true })
     const client = bootClient({ configForms: stub.service })
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (silent re-selection case)')
     else {
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       stub.serve('include:theme-endfield') // served, silent, different spelling
       client.flush()
       await drain()
@@ -559,11 +567,11 @@ async function main() {
       fail('boot window not modelled: snap=' + JSON.stringify(bootSnap) + ' writes=' + JSON.stringify(stub.writes))
     }
 
-    const radius = findButton(panelButtons(client), RADIUS_RE)
+    const radius = panelRadiusSelect(client)
     if (!radius) fail('no radius toggle button rendered (loading-transition case)')
     else {
       // The user edits while the entry is still loading: must be HELD, not lost.
-      radius.props.onClick()
+      radius.props.onChange({ target: { value: 'round' } })
       await drain()
       if (stub.writes.length === 0) pass('edit made during the loading window was held, not written to an unserved entry')
       else fail('wrote into a loading entry: ' + JSON.stringify(stub.writes))
@@ -587,15 +595,15 @@ async function main() {
       }
 
       // And the panel must now REFLECT the settled section — the actual
-      // regression, which the write-replay above does not prove. The radius
-      // toggle names the mode it will switch TO, so after adopting a section
-      // whose radius is 'round' the label offers the other one ('切换直角').
-      const readBack = findButton(panelButtons(client), RADIUS_RE)
-      const label = readBack ? textOf(readBack) : ''
-      if (/切换直角/.test(label)) {
+      // regression, which the write-replay above does not prove. The select's
+      // value IS the state now, so after adopting a section whose radius is
+      // 'round' the value must read 'round'.
+      const readBack = panelRadiusSelect(client)
+      const label = readBack ? String(readBack.props.value) : 'no select'
+      if (label === 'round') {
         pass('panel re-read the settled section after the loading -> ready transition')
       } else {
-        fail('panel still on schema defaults after the section settled: label=' + JSON.stringify(label))
+        fail('panel still on schema defaults after the section settled: value=' + JSON.stringify(label))
       }
     }
   }
@@ -661,13 +669,12 @@ async function main() {
         + (after && after.props.value) + ' (this is the reported reset bug)')
     }
 
-    // The served radius must show up too: the toggle names the mode it switches
-    // TO, so a served 'round' makes the button offer '切换直角'.
-    const radius = findButton(panelButtons(client), RADIUS_RE)
-    if (radius && /切换直角/.test(textOf(radius))) {
+    // The served radius must show up too: the select's value mirrors the state.
+    const radius = panelRadiusSelect(client)
+    if (radius && String(radius.props.value) === 'round') {
       pass('panel re-synced the radius switch onto the served section as well')
     } else {
-      fail('radius switch did not re-sync: ' + (radius ? JSON.stringify(textOf(radius)) : 'no button'))
+      fail('radius switch did not re-sync: ' + (radius ? JSON.stringify(String(radius.props.value)) : 'no select'))
     }
 
     // Adopting a served section must never be mistaken for a user edit.
@@ -721,8 +728,8 @@ async function main() {
         + (toggle && toggle.props.value) + ' — this is the live boot-report defect')
     }
 
-    const radius = findButton(panelButtons(client), RADIUS_RE)
-    if (radius && /切换直角/.test(textOf(radius))) {
+    const radius = panelRadiusSelect(client)
+    if (radius && String(radius.props.value) === 'round') {
       pass('panel mounting after the section settled shows the stored radius too')
     } else {
       fail('radius did not converge on a post-settle mount: '

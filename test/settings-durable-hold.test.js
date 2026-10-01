@@ -181,9 +181,11 @@ const findBtn = (re) => buttons.find((b) => re.test(textOf(b)))
 
 /* The reported symptom was radius=round and palette=wuling. Toggle BOTH while
    the namespace is unserved; the old bug would fire scope.set for each. */
-const radiusBtn = findBtn(/切换直角|切换圆角/)
-if (!radiusBtn) { fail('no radius toggle button rendered'); process.exit(1) }
-try { radiusBtn.props.onClick() } catch (e) { fail('radius toggle threw: ' + e.message) }
+/* The radius row is a select now (two named values beat a cycle button); the
+   held-edit scenario it drives is unchanged, the trigger is onChange. */
+const radiusSel = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题圆角')
+if (!radiusSel) { fail('no radius select rendered'); process.exit(1) }
+try { radiusSel.props.onChange({ target: { value: 'round' } }) } catch (e) { fail('radius select threw: ' + e.message) }
 
 const paletteRow = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
 if (!paletteRow) { fail('no palette select rendered'); process.exit(1) }

@@ -3296,12 +3296,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          菜单/列表框条目（[role='menuitem'] / [role='option']）**已移出**这条处理：
          它们原生 border:none，在紧凑弹层里挂一条悬停才显色的左边框读起来是
          「没闭合的边框」（用户实测反馈），且常态的 3px 透明预声明会把条目内容
-         右推 3px。弹层里的选中反馈交给应用自己的底色高亮。左边框只属于「行」
-         语境：侧栏会话行、表格行、设置页按钮。 */
+         右推 3px。弹层里的选中反馈交给应用自己的底色高亮。**设置页按钮同理
+         移出**：它们原生带整圈 1px 边框（内联样式），把左边压成 3px 透明条会把
+         那圈边框「打开」——上下边到左缘断掉（02 背景/03 动画组实测反馈），悬停
+         色条也与 1px 边框不协调。左边框只属于原生无边框的「行」：侧栏会话行、
+         表格行。 */
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow'],
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow'],
-      body[data-endfield-motion='signal'] tbody tr,
-      body[data-endfield-motion='signal'] .endfield-settings button {
+      body[data-endfield-motion='signal'] tbody tr {
         border-left: 3px solid transparent !important;
       }
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow']:hover {
@@ -3312,10 +3314,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       /* Table row hover: same left border as sidebar rows. */
       body[data-endfield-motion='signal'] tbody tr:hover {
-        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
-      }
-      /* Settings panel buttons: left border on hover, visible feedback. */
-      body[data-endfield-motion='signal'] .endfield-settings button:hover:not(:disabled) {
         border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
 
@@ -5188,8 +5186,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       radiusRow: '主题圆角',
       radiusRound: '圆角',
       radiusSquare: '直角',
-      radiusToRound: '切换圆角',
-      radiusToSquare: '切换直角',
       watermarkRow: '背景水印',
       watermarkOn: '开启水印',
       watermarkOff: '关闭水印',
@@ -5333,8 +5329,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       radiusRow: 'Corners',
       radiusRound: 'Rounded',
       radiusSquare: 'Square',
-      radiusToRound: 'Use rounded',
-      radiusToSquare: 'Use square',
       watermarkRow: 'Background wordmark',
       watermarkOn: 'Turn on',
       watermarkOff: 'Turn off',
@@ -5707,6 +5701,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             setWmOn(next)
             syncWatermarkVisibility()
           }
+          /* Persist as a select (was a two-value cycle button): same pattern. */
+          const setWmPersistValue = (value) => {
+            const next = value === '1'
+            if (next === isWatermarkPersistOn()) return
+            prefsSet(WATERMARK_PERSIST_KEY, next ? '1' : '0')
+            setWmPersist(next)
+            syncWatermarkVisibility()
+          }
           const toggleWmPersist = () => {
             const next = !isWatermarkPersistOn()
             prefsSet(WATERMARK_PERSIST_KEY, next ? '1' : '0')
@@ -5780,6 +5782,16 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                the difference between the two modes is only visible during the entry,
                so a silent toggle would look like it did nothing. */
             showThunder(THUNDER_START)
+          }
+          /* Radius as a select (was a cycle button): the same shape as the
+             palette row — the current value preselects, onChange writes through. */
+          const setRadiusValue = (value) => {
+            if (value !== 'square' && value !== 'round') return
+            if (value === (prefsGet(RADIUS_KEY) || 'square')) return
+            prefsSet(RADIUS_KEY, value)
+            setMode(value)
+            if (value === 'round') document.body.classList.add('theme-endfield-round')
+            else document.body.classList.remove('theme-endfield-round')
           }
           const toggleMode = () => {
             const next = (prefsGet(RADIUS_KEY) || 'square') === 'round' ? 'square' : 'round'
@@ -6000,8 +6012,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                   t(value === 'off' ? 'textureOff' : value === 'subtle' ? 'textureSubtle' : 'textureStandard'))))
               ]),
               row('radius', true, [
-                R.createElement('span', { style: labelStyle }, t('radiusRow') + t('sep') + t(mode === 'round' ? 'radiusRound' : 'radiusSquare')),
-                R.createElement('button', { type: 'button', onClick: toggleMode, style: btnStyleFor(mode === 'round') }, t(mode === 'round' ? 'radiusToSquare' : 'radiusToRound'))
+                R.createElement('span', { style: labelStyle }, t('radiusRow')),
+                R.createElement('select', {
+                  'aria-label': t('radiusRow'), value: mode,
+                  onChange: (event) => setRadiusValue(event.target.value),
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
+                }, ['square', 'round'].map((value) => R.createElement('option', { key: value, value },
+                  t(value === 'square' ? 'radiusSquare' : 'radiusRound'))))
               ]),
             ]),
             /* --- 02 背景：水印，主开关在前、附属开关在后 --- */
@@ -6013,19 +6031,21 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               ]),
               row('watermark-persist', true, [
                 R.createElement('span', { style: labelStyle },
-                  t('wmPersistRow') + t('sep') + stateOf(wmPersist),
+                  t('wmPersistRow'),
                   R.createElement('span', { style: hintStyle },
                     t(wmPersist ? 'wmPersistHintOn' : 'wmPersistHintOff')
                   )
                 ),
-                R.createElement('button', {
-                  type: 'button',
-                  onClick: toggleWmPersist,
-                  style: btnStyleFor(wmPersist, !wmOn),
-                  // The switch only has meaning while the watermark itself is on.
+                R.createElement('select', {
+                  'aria-label': t('wmPersistRow'), value: wmPersist ? '1' : '0',
+                  onChange: (event) => setWmPersistValue(event.target.value),
+                  // The choice only has meaning while the watermark itself is on.
                   disabled: !wmOn,
                   title: wmOn ? '' : t('wmPersistNeedWm'),
-                }, t(wmPersist ? 'wmPersistOff' : 'wmPersistOn'))
+                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
+                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
+                }, [['0', 'wmPersistOff'], ['1', 'wmPersistOn']].map(([value, key]) =>
+                  R.createElement('option', { key, value }, t(key))))
               ]),
             ]),
             /* --- 03 动画：启动加载动画 --- */

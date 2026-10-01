@@ -230,24 +230,30 @@ DSH 自带 DeepSeek 品牌蓝。主题把这些令牌整组重映射，否则会
 
 ### 背景纹理：官网 /operator 那一套
 
-背景不是「深色底 + 一点噪点」，而是**四层叠加**，全部按官方 `/operator` 路由的 CSS 逐条复刻（[调研附录 D](notes/endfield-motion-research.md)）：
+背景不是「深色底 + 一点噪点」，也不是整窗平铺——官网把每一层**锚定在内容区的一个部位**（[调研附录 D](notes/endfield-motion-research.md)），本主题逐条照搬这套锚定，映射到主内容列：
 
-| 层 | 做法 | 官方依据 |
+| 层 | 官方锚定 | 本主题落点 |
 | --- | --- | --- |
-| 工程网格 | 官方 `block-bg.svg` 当 **alpha 遮罩**，颜色由 `--edge-tex-grid-color` 提供，`12.8125rem` 一格、`left bottom 3px` | 官方 `background-size:12.8125rem 12.8125rem` + `:before{opacity:.05}` |
-| 45° 斜纹 | `repeating-linear-gradient(-45deg, …)`，百分比停靠值**逐字复用**，8px 周期、只铺底部 45% | 官方 `shallowBg` 的 `16.1610023423% / 33.8389976577%` |
-| 两级波纹 | 官方 `wave-bg`（右上，`contain`）与 `tape-wave-bg`（底部居中，`cover`），`fixed` 定位到视口 | 官方尺寸 39.1875×26.3125rem、59.125rem×13.5rem |
-| 三色信号线 | `linear-gradient(90deg,#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0)`，2px | 官方 `decoLine` 原文 |
+| 工程网格 | `decoFlag`：clip-path 水平裁到中央内容列，mask 180°（上半实、50% 后淡出），`opacity:.05` | 会话根 `::before`：**颜色渐变自带 180° 淡出**，官方 SVG 当 alpha 遮罩只管形状；只画内容列的上半段 |
+| 45° 斜纹 | `shallowBg`：**底部一条 32.8125rem 高的带**，mask 0°（底边最实、往上渐隐），`.75rem` 周期、`13.9512529279%/36.0487470721%` 停靠 | 会话根 `::after`：叠加层本身就是那条带（top/bottom 定界，不声明尺寸），单一 0° 遮罩复刻渐隐；窄视口把带高收到 45% |
+| 右上波纹 | `backgroundDeco:before`：`right:0; top:0`，39.1875×26.3125rem / contain | standard 档的背景图层，钉内容列右上角 |
+| 中下波纹带 | `decoTape`：`top:50%+3.8125rem`，13.5rem 高，白底 + 左缘 mask 渐隐 | standard 档的背景图层，照官方放中下部；窄列里超宽部分由列右缘裁掉 |
+| 三色信号线 | `decoLine` 原文停靠值 | 设置页分组标题下（官方放在波纹带底边） |
 
-三条实现要点，每条都是踩过才写下来的：
+**锚点是会话根，不是 `_centerCol`**——`_centerCol` 里面还有一层**不透明的** `wSkVaW_root`（`background:var(--dsw-alias-bg-base); height:100%`）。挂在 `_centerCol` 上的 `z-index:-1` 叠加层会画在那层不透明底**之下**、整段纹理无声消失（像素实测零变化）；挂到根上才真正落在「根底色之上、正文之下」。侧栏与外框不挂纹理；往 `_frame`/`_sidebarCol` 上铺等于整窗平铺，测试里有绊线专门防这个回归。
 
-1. **官方那张网格 SVG 只能当遮罩**：它的路径只有 `stroke` 没有 `fill`，也就是透明底 + 黑色描边。当背景图画不出东西；当不透明图画会把整面刷黑。所以它走 `mask-image`，颜色另给（与水印徽标同一手法）。
-2. **`url()` 不能放进 `linear-gradient()`**：把 `--edge-tex-grid`（一个 `url(...)`）当作渐变色会让整条 `background-image` 在计算值阶段失效、解析成 `none`——实测整层消失且不报错。
-3. **网格单独占一个叠加伪元素**：`background-image` 的多层遮罩默认取**交集**，想把「网格被筛过、其余层正常画」写成一条规则需要 `mask-composite`，实测把整面弄没了。现在网格在 `::before`（`position:fixed; inset:0; pointer-events:none`），其余层走背景图——互不干扰，也不参与布局。
+**hero 阶段是例外**：hero 时水印挂在 body 上，与 `composerHero`（z:1，包着 z:20 的下拉框）同层比大小。此时若把根隔离，整个根子树变成一个 z:auto 单元，被 body 级水印按 DOM 顺序压过——水印自己修过的那类 bug（见 `test/watermark-stacking.test.js` 头注）。所以 hero 下不隔离根，网格/斜纹两个叠加层随之不显示；波纹/光晕是元素的背景图层，不建层叠上下文，hero 下照常安全。
 
-**装饰强度是量出来的**：网格/斜纹的 alpha 取官方那档（亮 5%/5%，暗 7%/6%），合成后对实际底面是 **1.10–1.19:1**，落在与水印、hero 光晕同一条装饰区间（1.06–1.60:1）。`test/texture.test.js` 从样式表读 alpha 再算，不是复述数值。
+四条实现要点，每条都是踩过才写下来的：
 
-**default `standard`**：三档 `off / subtle / standard`，出厂给完整版（就是官网页面的那一套）。`prefers-reduced-transparency: reduce` 与 `prefers-contrast: more` 下整段关闭；纹理不含任何动画。
+1. **官方网格 SVG 只能当遮罩**：路径只有 `stroke` 没有 `fill`（透明底 + 黑描边）。当背景图画不出东西；当不透明图画会把整面刷黑。所以走 `mask-image`，颜色另给（与水印徽标同一手法）。
+2. **`url()` 不能当渐变色**：把 `--edge-tex-grid`（一个 `url(...)`）塞进 `linear-gradient()` 会让整条 `background-image` 在计算值阶段失效、解析成 `none`——实测一整叠图层无声消失。
+3. **淡出不放进遮罩列表**：多张 mask 默认 `add`（并集），把「形状遮罩 + 渐隐遮罩」写在一起会得到整面色块。所以网格的渐隐放在**颜色渐变里**（一层遮罩只管形状），斜纹的渐隐用**单独一条 0° 遮罩**（它只有这一层遮罩）。
+4. **叠加层必须压在内容之下**：`::before/::after` 用 `z-index:-1`，宿主 `isolation:isolate` 建层叠上下文——没有这一步，-1 的伪元素会落到列自己的背景后面（等于看不见）。第一版还把叠加层写成 `position:fixed; inset:0` 挂三个面，纹理盖住全窗——正是这次修掉的「整窗平铺」。
+
+**装饰强度是量出来的**：网格/斜纹的 alpha 取官方那档（亮 5%/5%，暗 7%/6%），合成后对实际底面 **1.10–1.19:1**，落在与水印、hero 光晕同一条装饰区间（1.06–1.60:1）。`test/texture.test.js` 从样式表读 alpha 再算，不是复述数值。
+
+**默认 `standard`**：三档 `off / subtle / standard`，出厂给完整版。三档都按**值**匹配（`data-endfield-texture='subtle'`/`'standard'`）——不按属性存在匹配，这样属性残留 `'off'` 值时也不会画（第一版按存在匹配，实测残留值时纹理照画）。`prefers-reduced-transparency: reduce` 与 `prefers-contrast: more` 下整段关闭（含两个叠加层的 `display:none`）；纹理不含任何动画。
 
 **性能约束（都被 `test/perf-motion.test.js` 钉住）**
 

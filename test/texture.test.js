@@ -65,12 +65,18 @@ const varIn = (block, name) => {
 }
 
 /* ---------- 1. the switch exists and is wired end to end ---------- */
-/* `off` is the ABSENCE of the attribute (syncTexture removes it), so it needs no
-   CSS of its own — only the two painted tiers do. */
-for (const opt of ['subtle', 'standard']) {
-  if (new RegExp("data-endfield-texture='" + opt + "'").test(src)) pass('CSS carries the ' + opt + ' tier')
-  else fail('no CSS rules for tier ' + opt)
+/* `off` is the ABSENCE of the attribute in the real client (syncTexture removes
+   it) — but the CSS must not RELY on that: the first version gated every rule on
+   the attribute's PRESENCE, and a stale 'off' value then painted the texture
+   anyway (measured). The overlays are therefore gated on explicit values, and
+   this assertion pins that: 'subtle' must name the overlay by value. */
+if (/body\[data-endfield-texture='subtle'\] \[class\$='_centerCol'\] > \[class\$='_root'\]:not\(\[data-phase='hero'\]\)::before/.test(src)) {
+  pass('subtle 档按值命中叠加层（网格 + 斜纹，无背景图层；残留 off 值不会画）')
+} else {
+  fail('叠加层没有按值匹配——属性残留 off 时纹理仍会画（按存在匹配的老写法）')
 }
+if (/data-endfield-texture='standard'/.test(src)) pass('CSS carries the standard tier')
+else fail('no CSS rules for tier standard')
 /* Collapse whitespace so the check is about the code, not its line breaks. */
 const oneLine = src.replace(/\s+/g, ' ')
 if (/setAttribute\?\.\('data-endfield-texture', value\)[\s\S]{0,60}else document\.body\.removeAttribute\?\.\('data-endfield-texture'\)/.test(oneLine)) {
@@ -85,6 +91,28 @@ else fail('PREFS_KEY_TO_FIELD has no entry for dsh-theme-endfield-texture — th
 const host = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8')
 if (/texture: 'standard'/.test(host)) pass('host FIELD_DEFAULTS ships texture=standard')
 else fail('index.js FIELD_DEFAULTS has no texture default — the switch would reset every load')
+
+/* ---------- 1b. the texture must be CONTENT-ANCHORED, never window-tiled ----------
+   The first implementation painted 'position:fixed; inset:0' overlays on the
+   frame, the center column AND the sidebar, plus full-element repeating hatch
+   layers — i.e. tiled across the whole window. The official page anchors every
+   layer to a content region instead (grid clipped to the content column and
+   fading downward, hatch as a bottom band fading upward, wave pinned top-right).
+   These two tripwires stop exactly that regression from coming back. */
+{
+  const section = src.slice(src.indexOf('背景纹理：官网'), src.indexOf('The watermark is the Endfield Industries LOGO'))
+  if (!/\[class\$='_frame'\]/.test(section) && !/\[class\$='_sidebarCol'\]/.test(section)) {
+    pass('纹理不挂外框/侧栏（不整窗平铺，只锚定主内容列）')
+  } else {
+    fail('纹理又挂到了 _frame/_sidebarCol 上——那是整窗平铺；官方做法是按内容区域锚定')
+  }
+  const overlayRule = section.slice(section.indexOf('::before'), section.indexOf('::before') + 700)
+  if (/z-index:\s*-1/.test(overlayRule)) {
+    pass('叠加层在内容之下（z-index:-1 + isolation）——装饰不盖文字')
+  } else {
+    fail('网格叠加层不在内容之下：需要 z-index:-1，否则纹理画在正文上面')
+  }
+}
 
 /* ---------- 2. the official assets are embedded, and only as data URIs ---------- */
 for (const prop of ['--edge-tex-grid-mask', '--edge-tex-wave', '--edge-tex-tape']) {

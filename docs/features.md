@@ -28,6 +28,7 @@
 | | 主题圆角 | 直角 | `radius` |
 | | 磨砂玻璃 | 关 | `glass` |
 | | 按钮动效 | A 信号 | `motion` |
+| | 工业底纹 | 完整（官网 /operator） | `texture` |
 | 02 背景 | 背景水印 | 开 | `watermark` |
 | | 水印保持显示 | 关 | `watermarkPersist` |
 | 03 动画 | 启动加载动画 | 关 | `loader` |
@@ -68,6 +69,14 @@
 终末地灰的填充与文字通过 `--edge-accent-ink` 配对（暗色白字、亮色墨字），「强调作文字」的角色（暗色图标/链接/回合状态）读 `--edge-status-dark`——亮黄/青两套配色里两者相等，所以只有灰配色受这个拆分影响。详见 [design-language.md](design-language.md)。
 
 切换只是 `<body>` 上加减一个 class，不重新注册令牌层、无 JS 重绘。
+
+### 工业底纹
+
+三档下拉：**关闭**（纯色）/ **轻**（工程网格 + 45° 斜纹）/ **完整**（再加两级官方波纹与顶部光晕）。**默认完整**，即官网 `/operator` 页面那套背景。
+
+素材是官方站点自己的发布产物，以原始字节内嵌；分层、参数与"装饰强度"约束见 [design-language.md § 背景纹理](design-language.md#背景纹理官网-operator-那一套)，来源与 sha256 见 [scripts/build-texture.js](../scripts/build-texture.js) 与 README「素材归属」。
+
+纹理用一条 `background-image` 多图层 + 一个 `fixed` 的网格叠加伪元素实现：**不新增 DOM 节点、不改任何布局属性、不含动画**。`prefers-reduced-transparency: reduce` 与 `prefers-contrast: more` 下整段关闭。验证：`node test/texture.test.js`。
 
 ### 按钮动效
 

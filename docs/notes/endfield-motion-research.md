@@ -716,3 +716,36 @@ switchItem:hover    { border-color:#fffa00; border-width:2px }
    无描边、无位移、无圆角变化。
 
 > ⚠️ **仅读取 CSS 文本**：图标槽的 `url(...)` 只登记未下载，未内嵌任何官方素材。
+
+---
+
+## 附录 D：`/operator` 的背景合成（本次取用的素材）
+
+来源同附录 B/C 的 bundle `5f3bf8547312569e.css`。官网页面背景是**多层叠加**，逐层参数：
+
+| 层 | 官方声明 | 素材 |
+| --- | --- | --- |
+| 平铺工程网格 | `background-size:12.8125rem 12.8125rem`；`background-position:left bottom 3px`；用在 `:before` 上并给 `opacity:.05` | `block-bg.f05eda37.svg`（**163 B 矢量**，`viewBox 0 0 217 217`，唯一的 `<path>` 是 `stroke-width:2` 的横线+竖线+一条对角线） |
+| 45° 斜纹 | `background-size:.5rem .5rem`；`linear-gradient(-45deg, transparent 0 13.9512529279%, black 0 36.0487470721%, transparent 0 63.9512529279%, black 0 86.0487470721%, transparent 0)` | 无 |
+| 底部斜纹（同族，换色） | 同上；颜色换成 `#424242`，停靠值 `16.1610023423% / 33.8389976577%` | 无 |
+| 右上波纹 | `right:0; top:0; width:39.1875rem; height:26.3125rem; background-size:contain; background-position:100% 0` | `wave-bg.8955885a.png`（627×461） |
+| 中央波纹带 | `left:calc(50% - 59.5rem + 3.75rem); width:59.125rem; height:13.5rem; background-size:cover`；外层 `mask-image:linear-gradient(90deg, transparent 0, #000 calc(50% - 59.5rem + 3.75rem), #000)` 做左缘渐隐 | `tape-wave-bg.2bce9fc0.png`（946×216） |
+| 三色信号线 | `height:.25rem; background-image:linear-gradient(90deg,#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0)` | 无 |
+
+可迁移的结论：
+
+1. **网格素材本身就是矢量**（163 字节），而且它的 `<path>` 不带 `fill`，只有 `stroke` ——
+   也就是**透明底 + 黑色描边**。这决定了它只能当 **alpha 遮罩**用（本主题用
+   `mask-image` + 一个上色层，与水印徽标同一手法）；直接当背景图画不出东西，
+   当不透明图会把整面刷黑（两种都实测过）。
+2. **斜纹一律用百分比停靠的 `linear-gradient`**，全站 `repeating-linear-gradient` 为 0。
+   0.5rem 周期下 `16.1610023423% → 33.8389976577%` 即 2.5px 的填充带，与分辨率无关，
+   本主题逐字复用。
+3. **透明度是 0.05 量级**（网格 `opacity:.05`），而斜纹用的是**不透明黑**叠加在
+   `#383838` 上——所以同一条斜纹在亮色模式下必须换成深墨色，否则两种模式里必有一种
+   看不见（本主题用 `--edge-tex-ink` 按模式翻转，alpha 5%/6%/7%）。
+4. **全部静态**：这一整套背景没有任何 `animation`/`transition`。
+
+> 取用方式：这三张图**以官方原始字节内嵌**进 `client.js` 的 data URI（构建脚本
+> `scripts/build-texture.js`，sha256 固化，`--check` 防漂移）。矢量与位图均未再加工；
+> 未下载任何角色立绘或其他位图素材。

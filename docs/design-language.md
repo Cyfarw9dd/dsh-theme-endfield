@@ -228,6 +228,27 @@ DSH 自带 DeepSeek 品牌蓝。主题把这些令牌整组重映射，否则会
 2. **角标与读数条在官网是静态装饰**（`repeating-linear-gradient` 斜纹 4 处、角标全部静止）。把它们变成「悬停才出现」的动效是本主题的推导，不是复刻。
 3. **官网在 28 处用 `@media(any-hover: hover)` 守卫悬停，本主题没有**。触屏上点按后悬停态会粘住（角标/准星/指示条停在屏幕上）。这是**已知缺口**，不是「官网也这样」；要补的话应该只包住「揭示式」的 hover 规则，颜色反馈不必包。
 
+### 背景纹理：官网 /operator 那一套
+
+背景不是「深色底 + 一点噪点」，而是**四层叠加**，全部按官方 `/operator` 路由的 CSS 逐条复刻（[调研附录 D](notes/endfield-motion-research.md)）：
+
+| 层 | 做法 | 官方依据 |
+| --- | --- | --- |
+| 工程网格 | 官方 `block-bg.svg` 当 **alpha 遮罩**，颜色由 `--edge-tex-grid-color` 提供，`12.8125rem` 一格、`left bottom 3px` | 官方 `background-size:12.8125rem 12.8125rem` + `:before{opacity:.05}` |
+| 45° 斜纹 | `repeating-linear-gradient(-45deg, …)`，百分比停靠值**逐字复用**，8px 周期、只铺底部 45% | 官方 `shallowBg` 的 `16.1610023423% / 33.8389976577%` |
+| 两级波纹 | 官方 `wave-bg`（右上，`contain`）与 `tape-wave-bg`（底部居中，`cover`），`fixed` 定位到视口 | 官方尺寸 39.1875×26.3125rem、59.125rem×13.5rem |
+| 三色信号线 | `linear-gradient(90deg,#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0)`，2px | 官方 `decoLine` 原文 |
+
+三条实现要点，每条都是踩过才写下来的：
+
+1. **官方那张网格 SVG 只能当遮罩**：它的路径只有 `stroke` 没有 `fill`，也就是透明底 + 黑色描边。当背景图画不出东西；当不透明图画会把整面刷黑。所以它走 `mask-image`，颜色另给（与水印徽标同一手法）。
+2. **`url()` 不能放进 `linear-gradient()`**：把 `--edge-tex-grid`（一个 `url(...)`）当作渐变色会让整条 `background-image` 在计算值阶段失效、解析成 `none`——实测整层消失且不报错。
+3. **网格单独占一个叠加伪元素**：`background-image` 的多层遮罩默认取**交集**，想把「网格被筛过、其余层正常画」写成一条规则需要 `mask-composite`，实测把整面弄没了。现在网格在 `::before`（`position:fixed; inset:0; pointer-events:none`），其余层走背景图——互不干扰，也不参与布局。
+
+**装饰强度是量出来的**：网格/斜纹的 alpha 取官方那档（亮 5%/5%，暗 7%/6%），合成后对实际底面是 **1.10–1.19:1**，落在与水印、hero 光晕同一条装饰区间（1.06–1.60:1）。`test/texture.test.js` 从样式表读 alpha 再算，不是复述数值。
+
+**default `standard`**：三档 `off / subtle / standard`，出厂给完整版（就是官网页面的那一套）。`prefers-reduced-transparency: reduce` 与 `prefers-contrast: more` 下整段关闭；纹理不含任何动画。
+
 **性能约束（都被 `test/perf-motion.test.js` 钉住）**
 
 官网那篇调研给出的性能线索比视觉线索更硬：13 个关键帧里只有 4 种玩法，`transform` / `opacity` 是绝对主力，而它自己的黄条揭示**宁可写 `scaleX` 也不写 `width`**——因为 `width` 每帧都要重排重绘。这套主题照做，并且在浏览器里量过：

@@ -358,7 +358,12 @@ const pct = (arr, p) => {
        position or its host's `position: relative` does not. 2.6ms/s is ~0.04ms per
        frame; the budget is set just above it so a real regression (16-29ms/s when
        geometry is created on hover) still trips. */
-    const LAYOUT_BUDGET = 4
+    /* 4ms/s proved too tight for the meter's residual, which moves with machine load
+       (measured 2.5-3.2 idle, 3.6-4.3 while other browser suites were running). The
+       tripwire that matters is the hover-created-geometry regression at 16-29ms/s,
+       so the budget keeps a wide margin above the honest floor instead of failing
+       on scheduling noise. */
+    const LAYOUT_BUDGET = 6
     const P95_BUDGET = 40
     const MAX_BUDGET = 120
     const SLOW_FRAME_RATIO = 0.05

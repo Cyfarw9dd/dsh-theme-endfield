@@ -88,6 +88,26 @@ node test/verify-shots.js            # 解码四张截图统计强调色像素
 
 ---
 
+## 背景纹理
+
+```bash
+node scripts/build-texture.js --check   # 内嵌块与 assets/ 的字节一致（sha256 已固化）
+node test/texture.test.js               # 三档开关 + 装饰强度 + 静态性 + 降级（19 项）
+```
+
+**`build-texture.js`** 与徽标那条管线同形：三张官方素材（网格 SVG、两级波纹 PNG）以**原始字节**内嵌为 data URI，内嵌块夹在 `EDGE_TEX_BEGIN/END` 之间，**不手改产物**。头注固化官方 URL 与 sha256；上游若换图，`--check` 在构建期就红，而不是运行时静默失效。PNG 不做再压缩。
+
+**`texture.test.js`** 守四件事：
+
+1. **开关接线**：CSS 有三档、`TEXTURE_OPTIONS` 与之一致、`PREFS_KEY_TO_FIELD` 有映射、Host schema 有默认值、`off` 通过**移除属性**实现（与 motion 的运行时行为一致）。
+2. **装饰强度**（核心）：从 stylesheet 读出 `--edge-tex-ink` 与两个 alpha，按 WCAG 公式合成到真实底面上，断言落在**装饰区间 1.06–1.60:1**——与水印、hero 光晕同一条产品规则。数值不复述，改 alpha 就是改断言输入。
+3. **静态性**：纹理段没有 `transition`/`@keyframes`/`will-change`，且承载面只走 `background-*`（不改宽高/内外边距）。
+4. **降级与来源**：`prefers-reduced-transparency`/`prefers-contrast` 会关掉纹理；三色信号线逐字沿用官方 `decoLine` 停靠值。
+
+反向对照：把网格 alpha 从 5% 提到 25% → 断言必须变红（实测亮色 1.69:1、1.71:1，超出 1.6 上限）。
+
+---
+
 ## 按钮动效
 
 ```bash
@@ -107,7 +127,7 @@ node test/perf-motion.test.js        # 量「流畅」：静态守卫 + layout/�
 **`perf-motion.test.js`** 回答另一个问题：这些动效**花掉多少**。它的方法是**同一次运行里的 A/B**——指针按同样的坐标、同样的节奏扫过 300 行 + 120 个按钮，唯一变量是 `<body>` 上的 `data-endfield-motion`，所以 `silent` 是同一轮里测得的地板。断言分四层：
 
 1. **静态守卫**（无需浏览器，秒级）：动效段里**每一条 `transition` 与每个 `@keyframes`** 的属性只许是 `transform`、`opacity`、颜色，外加方案 A 的 `border-radius`（官网也动画它）。还断言没有常态 `will-change`。**它抓不到「悬停时才生成几何」这一类**（没有 transition、没有关键帧的 `position`/`border`/伪元素创建）——那一类由 layout 预算兜住，这一点写在脚本注释里，不假装守卫比它实际更宽。
-2. **layout 预算**：`LayoutDuration ≤ 4ms/s`。实测五套方案 **0.00**、`meter` 2.5–3.2（准星伪元素的存在本身，逐条 bisect 过），所以预算是「量出来的上界 + 余量」，而不是零的橡皮章；真正昂贵的写法（悬停才生成几何 = 16–29ms/s）会立刻顶红。
+2. **layout 预算**：`LayoutDuration ≤ 6ms/s`。实测五套方案 **0.00**、`meter` 2.5–4.3（准星伪元素的存在本身，逐条 bisect 过；数值随机器负载浮动，所以预算留了宽余量）。真正昂贵的写法（悬停才生成几何 = 16–29ms/s）仍然会立刻顶红。
 3. **帧间隔**：页面内 `requestAnimationFrame` 采样的 p95 ≤40ms、>32ms 帧占比 ≤5%。这才是「看起来顺不顺」的判据。
 4. **task 预算**：主线程 ≤350ms/s（≈每帧 ≤5.8ms，不到半帧）。**刻意用绝对值而不是「静默基线的 N 倍」**：silent 几乎什么都不做，一个每帧只花 0.15ms 的方案会被读成「基线的 6 倍」，比例在这里是误导。
 5. **停留不做事**：指针停在按钮上 1.6s，layout 必须 ≤2ms/s——代价只许发生在指针**移动**时。

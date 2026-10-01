@@ -80,6 +80,7 @@ docs/              设计、功能、工程与测试文档
 本插件是**非官方同人作品**，与鹰角网络（Hypergryph）不存在任何隶属、赞助或背书关系。
 
 - 《明日方舟：终末地》（Arknights: Endfield）的游戏名称、标识、商标、官网视觉与设计语言及相关美术素材，版权归**鹰角网络（上海鹰角网络科技有限公司，Hypergryph Network Technology）**所有。
+- 背景纹理直接沿用官方站点自身的发布产物：`endfield-block-bg.svg`（工程网格）、`endfield-wave-bg.png`（右上波纹）、`endfield-tape-wave-bg.png`（中央波纹带），三者取自官方 CDN `web.hycdn.cn/endfield/official-v4/_next/static/media/` 的 `/operator` 路由发布文件，**以原始字节内嵌**（不做再压缩）。来源 URL、sha256 与构建方式见 [scripts/build-texture.js](scripts/build-texture.js) 头注；采用已获本仓库所有者明确指示（「沿用官方」）。
 - 本仓库中的**部分素材**（如 `assets/` 下的界面截图，水印徽标矢量源 [endfield-industries.svg](assets/endfield-industries.svg)（[Yue-plus/endfield_icons](https://github.com/Yue-plus/endfield_icons) 对官方标识的矢量重制，采用已经本仓库所有者批准），以及主题中还原的 `ENDFIELD` 字标、信号黄配色与工业编辑风版式）源自或参考上述作品及其官网，仅用于**学习、展示与非商业用途**；其权利仍归鹰角网络所有，**不在本项目的 MIT 许可证覆盖范围内**。
 - 本项目的原创代码（`client.js`、`index.js`、`scripts/`、`test/` 等）以 MIT 许可证发布。
 - 若权利方认为本仓库中的任何素材使用不当，请通过 Issue 联系，我们会立即删除或替换相关内容。

@@ -2988,8 +2988,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          现在圆角在悬停时瞬跳，与按钮的其它状态变化一致，文档也照此修正。
          （border-radius 也**不该**进共通过渡：浏览器把它当作可能触发重排的属性，
          放进全局规则会让长列表每次悬停整屏布局失效。） */
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:hover:not(:disabled),
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:hover:not(:disabled) {
+      /* 排除圆形控件与发送按钮：前者被圆角恢复规则变回圆，后者在直角化下是 0，
+         两者都不该在悬停瞬间长出 6px 倒角。用子串匹配：真实 bundle 里这些类常带
+         复合类名（iconButton 与 toggle 并存），后缀匹配会静默漏掉。 */
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:not([class*='_iconButton']):not([class*='actionButton' i]):not([class*='_primary']):hover:not(:disabled),
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:not([class*='_iconButton']):not([class*='actionButton' i]):not([class*='_primary']):hover:not(:disabled) {
         border-radius: 6px !important;
       }
 

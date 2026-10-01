@@ -258,7 +258,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     window.__style__ = (id, pseudo) => {
       const el = document.getElementById(id)
       const s = getComputedStyle(el, pseudo || null)
-      const keys = ['width','height','transform','outlineColor','outlineWidth','outlineStyle',
+      const keys = ['width','height','borderRadius','transform','outlineColor','outlineWidth','outlineStyle',
         'backgroundColor','borderLeftWidth','borderLeftColor','boxShadow','content',
         'maskImage','webkitMaskImage','backgroundImage','backgroundSize','backgroundColor',
         'animationName','animationDuration',
@@ -746,6 +746,20 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     }
     await park()
 
+    /* 圆形控件在悬停时也不得被方化：A-1 的 6px 与圆角恢复规则的顺序一度让
+       `_iconButton` 在悬停瞬间从 50% 变成 6px（默认方案 A 的回归）。 */
+    await setMotion('signal')
+    await park()
+    const iconRest = await styleOf('iconButton')
+    await hover('iconButton')
+    const iconHover = await styleOf('iconButton')
+    if (iconRest.borderRadius === iconHover.borderRadius && /50%|999px/.test(iconHover.borderRadius)) {
+      pass('圆形图标按钮 · 悬停不改圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
+    } else {
+      fail('圆形图标按钮 · 悬停改变了圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
+    }
+    await park()
+
     /* ============ 发送按钮：不得有任何动效 ============
        用户在看过官方 /operator 右侧那列圆形按钮（只有 transform .3s 与
        background-color .2s，无形变动效）之后，要求取消发送按钮上的动画。
@@ -760,6 +774,16 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       const holdSend = await press('send', { release: false })
       const sendActive = await styleOf('send')
       await holdSend.release()
+      const sendRestRadius = sendRest.borderRadius
+      const sendHoverRadius = sendHover.borderRadius
+      const sendActiveRadius = sendActive.borderRadius
+      const radiusOk = sendRestRadius === sendHoverRadius && sendHoverRadius === sendActiveRadius
+      if (radiusOk) {
+        pass('发送按钮 · ' + scheme + ' 下圆角在常态/悬停/按下不变  [' + sendHoverRadius + ']')
+      } else {
+        fail('发送按钮 · ' + scheme + ' 下悬停或按下改变了圆角  [rest=' + sendRestRadius
+          + ' hover=' + sendHoverRadius + ' active=' + sendActiveRadius + ']')
+      }
       const staticOk = !sendAfter.content || sendAfter.content === 'none'
       const noAnim = sendActive.animationName === 'none' && sendHover.animationName === 'none'
       const noShift = sendActive.transform === 'none' && sendHover.transform === 'none'

@@ -679,3 +679,40 @@ switchItem:hover    { border-color:#fffa00; border-width:2px }
 
 > 本次拆解**只读取了 CSS 文本**，没有下载或内嵌该站的任何图片/字体/音效；
 > 上述 rem 数值保留原文，未做换算。
+
+### C4 列表行 / CTA（`listButton`）的完整词汇
+
+这是全站最接近「左侧栏列表行」的组件，可迁移的东西比圆形头像那列更多：
+
+```css
+.listButton {
+  width: max-content;
+  padding: 0 1.25rem 0 3.5rem;          /* 左侧留 3.5rem 给图标槽 */
+  height: 3.75rem;                       /* 60px 行高 */
+  border-radius: .3125rem;               /* 5px —— 见下面的注意 */
+  background-color: #383838;
+  background-image: linear-gradient(-45deg, transparent, transparent 16.16%, #424242 0, #424242 33.84%, transparent 0, transparent 66.16%, …);
+  transition: background-color .2s ease;
+}
+.listButton:hover  { background-color: #626262 }
+.listButton:active { background-color: #282828 }   /* 按下最暗 */
+.listButton:before {                     /* 左侧图标槽 */
+  width: 2.0625rem; height: 2.0625rem;
+  background-position: 50%; background-repeat: no-repeat; background-size: contain;
+}
+```
+
+四条可迁移结论：
+
+1. **行高 60px、圆角 5px**（`.3125rem`）——官网的列表行**不是**完全直角；
+   按视觉比例换到 DSH 的行高上约 2–3px。这一点与本主题的「全直角」是**有意的
+   分歧**（本主题选 0），但要说清是选择而不是照抄。
+2. **左内边距 3.5rem 的图标槽**：行内左侧固定留位放 2.06rem 的图标，
+   正文从 3.5rem 之后开始。这是「行 = 图标槽 + 文本」的固定网格。
+3. **45° 斜纹用百分比停靠**（`linear-gradient(-45deg, …)`，`#424242` 压在
+   `#383838` 上）——全站 `repeating-linear-gradient` 为 0，斜纹一律这样写，
+   且**静态**。
+4. **状态只有底色三档**（常态/悬停/按下 = `#383838`/`#626262`/`#282828`），
+   无描边、无位移、无圆角变化。
+
+> ⚠️ **仅读取 CSS 文本**：图标槽的 `url(...)` 只登记未下载，未内嵌任何官方素材。

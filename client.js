@@ -3577,6 +3577,117 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         }
       }
 
+      /* ================= 设置面板统一下拉（.endfield-select） =================
+         「终末地主题设置」里所有有值行的唯一控件。形制逐条量测自本应用自己的
+         下拉（2026-10，安装包 lib/*.css 一手取数），不是另起炉灶：
+
+           | 部位 | 应用原文 | 本组件 |
+           | --- | --- | --- |
+           | 菜单卡片 | Menu.module.css .list：padding 4px、top calc(100%+4px)、min-width 144px、z-index 100、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1 | 同尺寸；右对齐（行控件在右，alignEnd 语法） |
+           | 卡片表面 | MenuSurface .material：--dsw-menu-surface-fill（本主题已映射为不透明纸面 #f2f2ec/#1c1e1c） | 同令牌 |
+           | 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、悬停=focus=--dsw-alias-interactive-bg-hover | 同尺寸同令牌 |
+           | 选中态 | check 模式：透明底 + 尾随 14px 对勾；role=menuitemradio | 同结构——选中行由全局划词灰规则上色（与模型栏一致，本表上方「菜单当前项」段） |
+           | 触发器 | 模型位 _trigger / composer _select：28px 高、label-secondary、右侧 12px 山形箭头、悬停淡染 | 同结构，值文字用 label-primary（设置页语境里触发器承载当前值） |
+
+         直角/圆角跟随全局规则（本段不写 radius）；入场只动 opacity（.15s，
+         合成器属性，菜单 absolute 定位不参与布局，无重排），reduce 下关闭。 */
+      .endfield-select {
+        position: relative;
+        display: inline-flex;
+        flex: 0 0 auto;
+      }
+      .endfield-select-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 28px;
+        padding: 0 8px;
+        border: none;
+        cursor: pointer;
+        background: transparent;
+        color: var(--dsw-alias-label-primary);
+        font-size: 13px;
+        line-height: 20px;
+        white-space: nowrap;
+        transition: background-color .2s ease, color .2s ease;
+      }
+      .endfield-select-trigger:hover:not(:disabled),
+      .endfield-select-trigger:focus-visible,
+      .endfield-select.is-open .endfield-select-trigger {
+        background: var(--dsw-alias-interactive-bg-hover);
+        outline: none;
+      }
+      .endfield-select-trigger:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .endfield-select-trigger svg {
+        flex: none;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .endfield-select.is-open .endfield-select-trigger svg {
+        color: var(--dsw-alias-label-primary);
+      }
+      .endfield-select-value {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .endfield-select-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        right: 0;
+        z-index: 100;
+        box-sizing: border-box;
+        min-width: 160px;
+        max-width: 320px;
+        padding: 4px;
+        display: flex;
+        flex-direction: column;
+        background: var(--dsw-menu-surface-fill);
+        box-shadow: var(--dsw-elevation-prominent);
+        --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+        animation: endfield-select-in .15s ease 1 both;
+      }
+      @keyframes endfield-select-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .endfield-select-option {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        min-height: 34px;
+        padding: 6px 8px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: var(--dsw-alias-label-primary);
+        font-size: 13px;
+        line-height: 20px;
+        text-align: left;
+        white-space: nowrap;
+      }
+      .endfield-select-option:hover {
+        background: var(--dsw-alias-interactive-bg-hover);
+      }
+      .endfield-select-option-label {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .endfield-select-check {
+        flex: none;
+        width: 14px;
+        height: 14px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .endfield-select-menu { animation: none; }
+        .endfield-select-trigger { transition: none; }
+      }
+
       /* Square corners (default): zero EVERY classed element, then restore circles/pills below.
          body.theme-endfield-round disables all of this and restores app-native rounding. */
       body:not(.theme-endfield-round) button,
@@ -5159,8 +5270,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       groupFun: '娱乐',
       groupNotify: '通知',
       themeRow: '终末地主题',
-      themeOn: '开启主题',
-      themeOff: '关闭主题',
       paletteRow: '主题配色',
       paletteGray: '终末地灰',
       paletteValley: '谷地黄',
@@ -5172,8 +5281,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       radiusRound: '圆角',
       radiusSquare: '直角',
       watermarkRow: '背景水印',
-      watermarkOn: '开启水印',
-      watermarkOff: '关闭水印',
       wmPersistRow: '水印保持显示',
       wmPersistOn: '保持显示',
       wmPersistOff: '仅新建页',
@@ -5181,21 +5288,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       wmPersistHintOff: '仅在新建会话页显示水印',
       wmPersistNeedWm: '请先开启背景水印',
       loaderRow: '启动加载动画',
-      loaderOn: '开启动画',
-      loaderOff: '关闭动画',
       loaderHintOn: '刷新页面时播放 ENDFIELD 启动加载屏（左侧进度轨 + 百分比，跟随当前配色）',
       loaderHintOff: '默认关闭；开启后每次刷新页面播放一次',
       loaderNeed: '请先开启启动加载动画',
       preview: '预览',
       thunderRow: '雷霆大字',
-      thunderOn: '开启大字',
-      thunderOff: '关闭大字',
       thunderHintOn: '任务开始/结束时，在屏幕中央用白色粗体大字显示「任务开始」/「任务完成」，3 秒后自动隐藏；点击屏幕任意处可立即关闭',
       thunderHintOff: '默认关闭；开启后任务开始/结束时在屏幕中央显示「任务开始」/「任务完成」白色大字，3 秒后自动隐藏，点击任意处可立即关闭',
       thunderNeed: '请先开启雷霆大字',
       thunderAnimRow: '大字入场动画',
-      thunderAnimOn: '开启动画',
-      thunderAnimOff: '关闭动画',
       thunderAnimHintOn: '大字由大缩小砸入并淡出（关闭后为直接显示，仍保持 3 秒）',
       thunderAnimHintOff: '默认关闭；大字直接出现、3 秒后消失，不做缩放与淡入淡出',
       textureRow: '工业底纹',
@@ -5205,46 +5306,28 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       textureStandard: '完整（官网默认）',
       motionRow: '按钮动效',
       motionHint: '合并设计：新会话/审批按钮＝信号箭头滑入，侧边栏会话行＝四角工程角标；全局 .2s 颜色过渡、按下暗一档',
-      motionOn: '开启动效',
-      motionOff: '关闭动效',
       notifyRow: '工业风通知',
-      notifyOn: '开启通知',
-      notifyOff: '关闭通知',
       notifyHintOn: '任务完成自动消失；提问/索权常驻直到处理完成；音效跟随「音频通知」开关',
       notifyHintOff: '默认开启；右下角工业风卡片通知',
       notifyNeed: '请先开启通知',
       notifyDoneRow: '任务完成通知',
-      notifyDoneOn: '开启',
-      notifyDoneOff: '关闭',
       notifyDoneHint: '回合结束时弹出回执卡片，6 秒后自动消失',
       notifyQuestionRow: '提问通知',
-      notifyQuestionOn: '开启',
-      notifyQuestionOff: '关闭',
       notifyQuestionHint: '助手提问时弹出常驻卡片，回答后自动消失',
       notifyApproveRow: '索权通知',
-      notifyApproveOn: '开启',
-      notifyApproveOff: '关闭',
       notifyApproveHint: '操作授权与方案审阅时弹出常驻卡片，处理完自动消失',
       thunderAnimHintReduced: '系统已开启「减少动态效果」，当前直接显示',
       /* 音频通知：播放发生在宿主进程（lib/audio.js），所以这里的每一行都在
          说明「什么时候响」而不是「怎么响」；试听按钮走宿主真实播放链路。 */
       groupAudio: '音频',
       audioRow: '音频通知',
-      audioOn: '开启提示音',
-      audioOff: '关闭提示音',
       audioHintOn: '由宿主进程播放，页面最小化或切到别的应用时同样能听到',
       audioHintOff: '默认关闭；开启后按下面的开关出声（也可以只留想要的几个）',
       audioBootRow: '启动加载动画音',
-      audioBootOn: '开启',
-      audioBootOff: '关闭',
       audioBootHint: '播放 ENDFIELD 加载板时响一次；只认真正的页面加载，点「预览」重播不会响',
       audioStartRow: '任务开始音',
-      audioStartOn: '开启',
-      audioStartOff: '关闭',
       audioStartHint: '只在你从会话框提交指令后播放（后台唤醒、目标续跑不计）',
       audioDoneRow: '任务结束音',
-      audioDoneOn: '开启',
-      audioDoneOff: '关闭',
       audioDoneHint: '只在我产出最终结果后播放；中途报错或等待审批时不出声',
       audioVolumeRow: '音量',
       audioVolumeHint: '只缩放提示音本身，不改系统音量',
@@ -5273,8 +5356,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       audioHumanOnlyHintOn: '只认带提交凭据的用户消息，最不容易误触发',
       audioHumanOnlyHintOff: '任何用户来源消息都算（调试用，后台唤醒可能误响）',
       audioDiagRow: '诊断日志',
-      audioDiagOn: '开启',
-      audioDiagOff: '关闭',
       audioDiagHint: '在宿主控制台与 /theme-endfield/audio/state 记录每次事件判定',
       audioTest: '试听',
       audioTestPlaying: '播放中…',
@@ -5297,8 +5378,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       groupFun: 'ENTERTAINMENT',
       groupNotify: 'NOTIFY',
       themeRow: 'Endfield theme',
-      themeOn: 'Turn on',
-      themeOff: 'Turn off',
       paletteRow: 'Accent palette',
       paletteGray: 'Endfield Gray',
       paletteValley: 'Valley Yellow',
@@ -5310,8 +5389,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       radiusRound: 'Rounded',
       radiusSquare: 'Square',
       watermarkRow: 'Background wordmark',
-      watermarkOn: 'Turn on',
-      watermarkOff: 'Turn off',
       wmPersistRow: 'Keep wordmark visible',
       wmPersistOn: 'Keep visible',
       wmPersistOff: 'New session only',
@@ -5319,21 +5396,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       wmPersistHintOff: 'Shown only on the new-session screen',
       wmPersistNeedWm: 'Turn on the background wordmark first',
       loaderRow: 'Boot animation',
-      loaderOn: 'Turn on',
-      loaderOff: 'Turn off',
       loaderHintOn: 'Plays the ENDFIELD boot screen on reload (progress rail + percentage, following the palette)',
       loaderHintOff: 'Off by default; plays once on every page reload when enabled',
       loaderNeed: 'Turn on the boot animation first',
       preview: 'Preview',
       thunderRow: 'Task announcement',
-      thunderOn: 'Turn on',
-      thunderOff: 'Turn off',
       thunderHintOn: 'Slams 任务开始 / 任务完成 across the screen centre in heavy white type for 3s; click anywhere to dismiss',
       thunderHintOff: 'Off by default; shows 任务开始 / 任务完成 in heavy white type at the screen centre for 3s, dismissable by clicking anywhere',
       thunderNeed: 'Turn on the task announcement first',
       thunderAnimRow: 'Announcement entry animation',
-      thunderAnimOn: 'Animate',
-      thunderAnimOff: 'Turn off',
       thunderAnimHintOn: 'The word punches in from oversized and fades out (appears instantly when off, still held 3s)',
       thunderAnimHintOff: 'Off by default; the word appears instantly and leaves after 3s, with no scaling or fading',
       textureRow: 'Industrial texture',
@@ -5343,44 +5414,26 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       textureStandard: 'Full (official default)',
       motionRow: 'Button motion',
       motionHint: 'One merged design: signal arrow slides into the New-session/approve buttons, sidebar session rows gain corner brackets; .2s colour transitions everywhere, dim on press',
-      motionOn: 'Turn on',
-      motionOff: 'Turn off',
       notifyRow: 'Industrial notify',
-      notifyOn: 'Turn on',
-      notifyOff: 'Turn off',
       notifyHintOn: 'Task-done auto-dismisses; question/approval stay until resolved; sound follows the audio switches',
       notifyHintOff: 'On by default; industrial toast cards in the bottom-right corner',
       notifyNeed: 'Turn notifications on first',
       notifyDoneRow: 'Task done',
-      notifyDoneOn: 'Turn on',
-      notifyDoneOff: 'Turn off',
       notifyDoneHint: 'A receipt card on turn end; auto-dismisses after 6s',
       notifyQuestionRow: 'Question',
-      notifyQuestionOn: 'Turn on',
-      notifyQuestionOff: 'Turn off',
       notifyQuestionHint: 'A sticky card when the assistant asks; clears when answered',
       notifyApproveRow: 'Approval',
-      notifyApproveOn: 'Turn on',
-      notifyApproveOff: 'Turn off',
       notifyApproveHint: 'A sticky card for approvals and plan reviews; clears when decided',
       thunderAnimHintReduced: 'Your system asks for reduced motion, so it appears instantly',
       groupAudio: 'AUDIO',
       audioRow: 'Audio notifications',
-      audioOn: 'Turn on',
-      audioOff: 'Turn off',
       audioHintOn: 'Played by the host process, so a minimized page or another app in front still gets the sound',
       audioHintOff: 'Off by default; turning it on enables the slots below (keep only the ones you want)',
       audioBootRow: 'Boot animation sound',
-      audioBootOn: 'Turn on',
-      audioBootOff: 'Turn off',
       audioBootHint: 'Rings once when the ENDFIELD boot plate plays; a real page load only — the Preview button replays it silently',
       audioStartRow: 'Task-start sound',
-      audioStartOn: 'Turn on',
-      audioStartOff: 'Turn off',
       audioStartHint: 'Plays only after you submit from the composer (wakeups and goal continuations do not count)',
       audioDoneRow: 'Task-end sound',
-      audioDoneOn: 'Turn on',
-      audioDoneOff: 'Turn off',
       audioDoneHint: 'Plays only after the final answer; interrupted turns and approval waits stay silent',
       audioVolumeRow: 'Volume',
       audioVolumeHint: 'Rescales only the notification sound, never the system volume',
@@ -5409,8 +5462,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       audioHumanOnlyHintOn: 'Requires the submission credential a real prompt carries — least likely to misfire',
       audioHumanOnlyHintOff: 'Any user-source message counts (debugging; background wakeups may misfire)',
       audioDiagRow: 'Diagnostics',
-      audioDiagOn: 'Turn on',
-      audioDiagOff: 'Turn off',
       audioDiagHint: 'Logs every event verdict to the host console and /theme-endfield/audio/state',
       audioTest: 'Preview',
       audioTestPlaying: 'Playing…',
@@ -5676,12 +5727,13 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             setWmOn(next)
             syncWatermarkVisibility()
           }
-          /* 按钮动效开关：写 'signal'（开，历史字面量）或 'off'。 */
+          /* 按钮动效下拉：'signal'（开，历史字面量）或 'off'。 */
           const motionOn = motion !== 'off'
-          const toggleMotion = () => {
-            const next = motionOn ? 'off' : 'signal'
-            prefsSet(MOTION_KEY, next)
-            setMotion(next)
+          const setMotionValue = (value) => {
+            if (value !== 'signal' && value !== 'off') return
+            if (value === readMotion()) return
+            prefsSet(MOTION_KEY, value)
+            setMotion(value)
             syncMotion()
           }
           /* Persist as a select (was a two-value cycle button): same pattern. */
@@ -5854,6 +5906,32 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             prefsSet(AUDIO_SOUND_DIR_KEY, text)
             refreshHostState()
           }
+          /* 布尔行的下拉写法：与既有 toggle 共用一条路径，仅当值真的变化时才写。
+             isOn 读 STORE（与 toggle 的判定源一致）。 */
+          const boolSelect = (toggleFn, isOn) => (value) => {
+            const next = value === '1'
+            if (next === isOn()) return
+            toggleFn()
+          }
+          /* ---------- 下拉用的值写入器：全部走上面既有的 toggle/setter ----------
+             每个 toggle 保留自己的副作用（挂载/卸载、预览、重挂监听器……），
+             这里只做「值没变就不动」的门卫。 */
+          const setThemeValue = boolSelect(toggleTheme, isEnabled)
+          const setWmValue = boolSelect(toggleWm, isWatermarkOn)
+          const setLoaderValue = boolSelect(toggleLoader, isLoaderOn)
+          const setThunderValue = boolSelect(toggleThunder, isThunderOn)
+          const setThunderAnimValue = boolSelect(toggleThunderAnim, isThunderAnimOn)
+          const setNotifyValue = boolSelect(toggleNotify, isNotifyOn)
+          const setNotifyDoneValue = boolSelect(toggleNotifyDone, isNotifyDoneOn)
+          const setNotifyQuestionValue = boolSelect(toggleNotifyQuestion, isNotifyQuestionOn)
+          const setNotifyApproveValue = boolSelect(toggleNotifyApprove, isNotifyApproveOn)
+          /* audio 系列的 toggle 读 React 状态（见各自定义），门卫用同一来源。 */
+          const setAudioValue = (value) => { if ((value === '1') !== audioOn) toggleAudio() }
+          const setAudioBootValue = (value) => { if ((value === '1') !== audioBoot) toggleAudioBoot() }
+          const setAudioStartValue = (value) => { if ((value === '1') !== audioStart) toggleAudioStart() }
+          const setAudioDoneValue = (value) => { if ((value === '1') !== audioDone) toggleAudioDone() }
+          const setAudioHumanValue = (value) => { if ((value === '1') !== audioHumanOnly) toggleAudioHumanOnly() }
+          const setAudioDiagValue = (value) => { if ((value === '1') !== audioDiag) toggleAudioDiag() }
           /** The host's view of one slot, or undefined while it has not answered. */
           const slotState = (slot) => {
             if (hostState === null || !Array.isArray(hostState.slots)) return undefined
@@ -5928,13 +6006,88 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           /** "<row label>: <on|off>" — one spelling for every status row. */
           const stateOf = (on) => t(on ? 'on' : 'off')
           const row = (key, last, children) => R.createElement('div', { key, style: last ? { ...rowStyle, borderBottom: 'none' } : rowStyle }, children)
+          /* ---------- 统一下拉（.endfield-select）：本面板所有「有值行」的唯一控件 ----------
+             2026-10 按用户要求把整个面板统一到应用自己的下拉语言。形制不是发明的，
+             是量测应用真实文件得来的（逐条对照写在样式表 .endfield-select 段）：
+             卡片/选项/对勾来自 ui-primitives 的 Menu + MenuSurface，28px 触发器
+             （值 + 12px 山形箭头）来自模型位触发器与 composer 的 effort select。
+
+             行为同样对齐应用菜单：role=menu 卡片 + role=menuitemradio 选项
+             （aria-checked 标当前值——主题的划词灰规则会自动给选中行与模型栏
+             一致的灰底墨字）、Escape 与点击面板外收起、选中即写值并收起。
+             打开态用 useState 存在本组件里；点外收起的监听器在打开时挂、
+             收起时摘，判定「还在本控件内」用 target.closest 对比自己的根
+             （R.useRef 特性检测——测试桩没有 ref 也能渲染，只是少了点外收起）。
+             theme OFF 时样式表整个卸载，触发器退回应用令牌的底/字色内联兜底
+             （与 btnStyleFor 的 !themed 分支同一策略），settings-off 的对比度
+             探针因此仍然成立。 */
+          const endfieldSelect = ({ value, options, ariaLabel, disabled, title, onChange }) => {
+            const [open, setOpen] = R.useState(false)
+            const rootRef = typeof R.useRef === 'function' ? R.useRef(null) : null
+            /* 事件处理器盒子：useState 的初始对象跨渲染是同一个引用（真 React
+               与有状态测试桩都如此），可当稳定的实例槽用。 */
+            const box = R.useState({ handler: null })[0]
+            const closeMenu = () => {
+              setOpen(false)
+              if (box.handler !== null && typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+                document.removeEventListener('click', box.handler)
+                box.handler = null
+              }
+            }
+            const openMenu = () => {
+              setOpen(true)
+              if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+                /* 打开发生在 trigger 的 click 处理器里；该 click 继续冒泡到
+                   document 时监听器已在场，但 target 在自己的根内，会被守卫
+                   放行——所以不需要 setTimeout 技巧。 */
+                box.handler = (ev) => {
+                  const root = rootRef ? rootRef.current : null
+                  const target = ev && ev.target
+                  if (root && target && typeof target.closest === 'function' && target.closest('.endfield-select') === root) return
+                  closeMenu()
+                }
+                document.addEventListener('click', box.handler)
+              }
+            }
+            const current = options.filter((o) => o.value === value)[0]
+            const chevron = R.createElement('svg', { key: 'chev', width: 12, height: 12, viewBox: '0 0 12 12', fill: 'none', 'aria-hidden': 'true' },
+              R.createElement('path', { d: 'M3 4.5L6 7.5L9 4.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }))
+            const trigger = R.createElement('button', {
+              key: 'trigger', type: 'button', className: 'endfield-select-trigger',
+              'aria-haspopup': 'menu', 'aria-expanded': open ? 'true' : 'false',
+              'aria-label': ariaLabel, disabled: disabled === true, title: title || '',
+              onClick: () => { if (disabled === true) return; if (open) closeMenu(); else openMenu() },
+              style: { color: 'var(--dsw-alias-label-primary)', background: enabled ? undefined : 'var(--dsw-alias-bg-layer-1)' },
+            }, R.createElement('span', { key: 'val', className: 'endfield-select-value' }, current ? current.label : ''), chevron)
+            const menu = (open && disabled !== true) ? R.createElement('div', {
+              key: 'menu', className: 'endfield-select-menu', role: 'menu', 'aria-label': ariaLabel,
+            }, options.map((o) => R.createElement('div', {
+              key: o.value, role: 'menuitemradio', 'aria-checked': o.value === value ? 'true' : 'false',
+              className: 'endfield-select-option',
+              onClick: () => { if (o.value !== value) onChange(o.value); closeMenu() },
+            },
+              R.createElement('span', { key: 'l', className: 'endfield-select-option-label' }, o.label),
+              (o.value === value ? R.createElement('svg', { key: 'c', className: 'endfield-select-check', width: 14, height: 14, viewBox: '0 0 14 14', fill: 'none', 'aria-hidden': 'true' },
+                R.createElement('path', { d: 'M2.5 7.5L5.5 10.5L11.5 3.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' })) : null)
+            ))) : null
+            return R.createElement('div', {
+              className: 'endfield-select' + (open ? ' is-open' : ''),
+              onKeyDown: (e) => { if (e && e.key === 'Escape' && open) closeMenu() },
+              ref: rootRef ? (el) => { rootRef.current = el } : undefined,
+            }, [trigger, menu])
+          }
+
           return R.createElement('div', { className: 'endfield-settings', style: pageStyle }, [
             /* --- 01 主题：总开关在最前，随后是配色与圆角 --- */
             R.createElement('div', { key: 'group-theme' }, [
               groupTitle('01', 'groupTheme', true),
               row('theme', false, [
-                R.createElement('span', { style: labelStyle }, t('themeRow') + t('sep') + stateOf(enabled)),
-                R.createElement('button', { type: 'button', onClick: toggleTheme, style: btnStyleFor(enabled) }, t(enabled ? 'themeOff' : 'themeOn'))
+                R.createElement('span', { style: labelStyle }, t('themeRow')),
+                endfieldSelect({
+                  value: enabled ? '1' : '0', ariaLabel: t('themeRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  onChange: setThemeValue,
+                })
               ]),
               row('palette', false, [
                 R.createElement('span', { style: labelStyle },
@@ -5943,65 +6096,69 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     t('paletteHint' + (palette === 'gray' ? 'Gray' : palette === 'wuling' ? 'Wuling' : 'Valley'))
                   )
                 ),
-                /* A select mirrors the glass row's pattern: the current value
-                   preselects, onChange writes through the store-derived handler. */
-                R.createElement('select', {
-                  'aria-label': t('paletteRow'), value: palette,
-                  onChange: (event) => setPaletteValue(event.target.value),
-                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
-                }, ['gray', 'valley', 'wuling'].map((value) => R.createElement('option', { key: value, value },
-                  t(value === 'gray' ? 'paletteGray' : value === 'valley' ? 'paletteValley' : 'paletteWuling')
-                )))
+                endfieldSelect({
+                  value: palette, ariaLabel: t('paletteRow'),
+                  options: [
+                    { value: 'gray', label: t('paletteGray') },
+                    { value: 'valley', label: t('paletteValley') },
+                    { value: 'wuling', label: t('paletteWuling') },
+                  ],
+                  onChange: setPaletteValue,
+                })
               ]),
               row('motion', false, [
-                /* 六方案下拉已在 2026-10 合并为单一设计，这行随之从 select 降为
-                   开关（与「背景水印」行同一模式：值随标签、按钮给反向动作）。 */
-                R.createElement('span', { style: labelStyle }, t('motionRow') + t('sep') + stateOf(motionOn),
+                R.createElement('span', { style: labelStyle }, t('motionRow'),
                   R.createElement('span', { style: hintStyle }, t('motionHint'))),
-                R.createElement('button', {
-                  type: 'button', onClick: toggleMotion, style: btnStyleFor(motionOn),
-                }, t(motionOn ? 'motionOff' : 'motionOn')),
+                endfieldSelect({
+                  value: motionOn ? 'signal' : 'off', ariaLabel: t('motionRow'),
+                  options: [{ value: 'signal', label: t('on') }, { value: 'off', label: t('off') }],
+                  onChange: setMotionValue,
+                })
               ]),
               row('glass', false, [
                 R.createElement('span', { style: labelStyle }, t('glassRow'),
                   R.createElement('span', { style: hintStyle }, t('glassHint'))),
-                R.createElement('select', {
-                  'aria-label': t('glassRow'), value: glass,
-                  onChange: (event) => setGlassValue(event.target.value),
-                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
-                }, GLASS_OPTIONS.map((value) => R.createElement('option', { key: value, value },
-                  t({ off: 'glassOff', subtle: 'glassSubtle', standard: 'glassStandard', strong: 'glassStrong' }[value]))))
+                endfieldSelect({
+                  value: glass, ariaLabel: t('glassRow'),
+                  options: GLASS_OPTIONS.map((value) => ({
+                    value, label: t({ off: 'glassOff', subtle: 'glassSubtle', standard: 'glassStandard', strong: 'glassStrong' }[value]),
+                  })),
+                  onChange: setGlassValue,
+                })
               ]),
               row('texture', false, [
                 R.createElement('span', { style: labelStyle }, t('textureRow'),
                   R.createElement('span', { style: hintStyle }, t('textureHint'))),
-                R.createElement('select', {
-                  'aria-label': t('textureRow'), value: texture,
-                  onChange: (event) => setTextureValue(event.target.value),
-                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
-                }, TEXTURE_OPTIONS.map((value) => R.createElement('option', { key: value, value },
-                  t(value === 'off' ? 'textureOff' : value === 'subtle' ? 'textureSubtle' : 'textureStandard'))))
+                endfieldSelect({
+                  value: texture, ariaLabel: t('textureRow'),
+                  options: TEXTURE_OPTIONS.map((value) => ({
+                    value, label: t(value === 'off' ? 'textureOff' : value === 'subtle' ? 'textureSubtle' : 'textureStandard'),
+                  })),
+                  onChange: setTextureValue,
+                })
               ]),
               row('radius', true, [
                 R.createElement('span', { style: labelStyle }, t('radiusRow')),
-                R.createElement('select', {
-                  'aria-label': t('radiusRow'), value: mode,
-                  onChange: (event) => setRadiusValue(event.target.value),
-                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
-                }, ['square', 'round'].map((value) => R.createElement('option', { key: value, value },
-                  t(value === 'square' ? 'radiusSquare' : 'radiusRound'))))
+                endfieldSelect({
+                  value: mode, ariaLabel: t('radiusRow'),
+                  options: [
+                    { value: 'square', label: t('radiusSquare') },
+                    { value: 'round', label: t('radiusRound') },
+                  ],
+                  onChange: setRadiusValue,
+                })
               ]),
             ]),
             /* --- 02 背景：水印，主开关在前、附属开关在后 --- */
             R.createElement('div', { key: 'group-bg' }, [
               groupTitle('02', 'groupBg', false),
               row('watermark', false, [
-                R.createElement('span', { style: labelStyle }, t('watermarkRow') + t('sep') + stateOf(wmOn)),
-                R.createElement('button', { type: 'button', onClick: toggleWm, style: btnStyleFor(wmOn) }, t(wmOn ? 'watermarkOff' : 'watermarkOn'))
+                R.createElement('span', { style: labelStyle }, t('watermarkRow')),
+                endfieldSelect({
+                  value: wmOn ? '1' : '0', ariaLabel: t('watermarkRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  onChange: setWmValue,
+                })
               ]),
               row('watermark-persist', true, [
                 R.createElement('span', { style: labelStyle },
@@ -6010,16 +6167,17 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     t(wmPersist ? 'wmPersistHintOn' : 'wmPersistHintOff')
                   )
                 ),
-                R.createElement('select', {
-                  'aria-label': t('wmPersistRow'), value: wmPersist ? '1' : '0',
-                  onChange: (event) => setWmPersistValue(event.target.value),
+                endfieldSelect({
+                  value: wmPersist ? '1' : '0', ariaLabel: t('wmPersistRow'),
+                  options: [
+                    { value: '0', label: t('wmPersistOff') },
+                    { value: '1', label: t('wmPersistOn') },
+                  ],
                   // The choice only has meaning while the watermark itself is on.
                   disabled: !wmOn,
                   title: wmOn ? '' : t('wmPersistNeedWm'),
-                  style: { color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-                    border: '1px solid var(--dsw-alias-border-l2)', padding: '6px 10px' },
-                }, [['0', 'wmPersistOff'], ['1', 'wmPersistOn']].map(([value, key]) =>
-                  R.createElement('option', { key, value }, t(key))))
+                  onChange: setWmPersistValue,
+                })
               ]),
             ]),
             /* --- 03 动画：启动加载动画 --- */
@@ -6027,12 +6185,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               groupTitle('03', 'groupAnim', false),
               row('loader', true, [
                 R.createElement('span', { style: labelStyle },
-                  t('loaderRow') + t('sep') + stateOf(loaderOn),
+                  t('loaderRow'),
                   R.createElement('span', { style: hintStyle },
                     t(loaderOn ? 'loaderHintOn' : 'loaderHintOff')
                   )
                 ),
-                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
+                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto', alignItems: 'center' } },
                   // Replay only makes sense while the feature is on; it lets the user
                   // re-watch the animation without reloading the page.
                   R.createElement('button', {
@@ -6045,7 +6203,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     disabled: !loaderOn || !enabled,
                     title: loaderOn ? '' : t('loaderNeed'),
                   }, t('preview')),
-                  R.createElement('button', { type: 'button', onClick: toggleLoader, style: btnStyleFor(loaderOn) }, t(loaderOn ? 'loaderOff' : 'loaderOn'))
+                  endfieldSelect({
+                    value: loaderOn ? '1' : '0', ariaLabel: t('loaderRow'),
+                    options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                    onChange: setLoaderValue,
+                  })
                 )
               ]),
             ]),
@@ -6054,12 +6216,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               groupTitle('04', 'groupFun', false),
               row('thunder', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('thunderRow') + t('sep') + stateOf(thunderOn),
+                  t('thunderRow'),
                   R.createElement('span', { style: hintStyle },
                     t(thunderOn ? 'thunderHintOn' : 'thunderHintOff')
                   )
                 ),
-                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
+                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto', alignItems: 'center' } },
                   // Same affordance as the boot animation: let the user see the
                   // effect now instead of waiting for the next task boundary.
                   R.createElement('button', {
@@ -6069,12 +6231,16 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     disabled: !thunderOn,
                     title: thunderOn ? '' : t('thunderNeed'),
                   }, t('preview')),
-                  R.createElement('button', { type: 'button', onClick: toggleThunder, style: btnStyleFor(thunderOn) }, t(thunderOn ? 'thunderOff' : 'thunderOn'))
+                  endfieldSelect({
+                    value: thunderOn ? '1' : '0', ariaLabel: t('thunderRow'),
+                    options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                    onChange: setThunderValue,
+                  })
                 )
               ]),
               row('thunder-anim', true, [
                 R.createElement('span', { style: labelStyle },
-                  t('thunderAnimRow') + t('sep') + stateOf(thunderAnim),
+                  t('thunderAnimRow'),
                   R.createElement('span', { style: hintStyle },
                     // Say so when the OS preference is overriding the switch, rather
                     // than letting it look like the toggle is broken.
@@ -6083,14 +6249,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                       : t(thunderAnim ? 'thunderAnimHintOn' : 'thunderAnimHintOff')
                   )
                 ),
-                R.createElement('button', {
-                  type: 'button',
-                  onClick: toggleThunderAnim,
-                  style: btnStyleFor(thunderAnim, !thunderOn),
+                endfieldSelect({
+                  value: thunderAnim ? '1' : '0', ariaLabel: t('thunderAnimRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
                   // Only meaningful while the announcement itself is on.
                   disabled: !thunderOn,
                   title: thunderOn ? '' : t('thunderNeed'),
-                }, t(thunderAnim ? 'thunderAnimOff' : 'thunderAnimOn'))
+                  onChange: setThunderAnimValue,
+                })
               ]),
             ]),
             /* --- 05 通知：工业风卡片，三触发 --- */
@@ -6098,46 +6264,55 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               groupTitle('05', 'groupNotify', false),
               row('notify', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('notifyRow') + t('sep') + stateOf(notifyOn),
+                  t('notifyRow'),
                   R.createElement('span', { style: hintStyle },
                     t(notifyOn ? 'notifyHintOn' : 'notifyHintOff')
                   )
                 ),
-                R.createElement('button', { type: 'button', onClick: toggleNotify, style: btnStyleFor(notifyOn) },
-                  t(notifyOn ? 'notifyOff' : 'notifyOn'))
+                endfieldSelect({
+                  value: notifyOn ? '1' : '0', ariaLabel: t('notifyRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  onChange: setNotifyValue,
+                })
               ]),
               row('notify-done', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('notifyDoneRow') + t('sep') + stateOf(notifyDone),
+                  t('notifyDoneRow'),
                   R.createElement('span', { style: hintStyle }, t('notifyDoneHint'))
                 ),
-                R.createElement('button', {
-                  type: 'button', onClick: toggleNotifyDone,
-                  style: btnStyleFor(notifyDone, !notifyOn), disabled: !notifyOn,
+                endfieldSelect({
+                  value: notifyDone ? '1' : '0', ariaLabel: t('notifyDoneRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  disabled: !notifyOn,
                   title: notifyOn ? '' : t('notifyNeed'),
-                }, t(notifyDone ? 'notifyDoneOff' : 'notifyDoneOn'))
+                  onChange: setNotifyDoneValue,
+                })
               ]),
               row('notify-question', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('notifyQuestionRow') + t('sep') + stateOf(notifyQuestion),
+                  t('notifyQuestionRow'),
                   R.createElement('span', { style: hintStyle }, t('notifyQuestionHint'))
                 ),
-                R.createElement('button', {
-                  type: 'button', onClick: toggleNotifyQuestion,
-                  style: btnStyleFor(notifyQuestion, !notifyOn), disabled: !notifyOn,
+                endfieldSelect({
+                  value: notifyQuestion ? '1' : '0', ariaLabel: t('notifyQuestionRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  disabled: !notifyOn,
                   title: notifyOn ? '' : t('notifyNeed'),
-                }, t(notifyQuestion ? 'notifyQuestionOff' : 'notifyQuestionOn'))
+                  onChange: setNotifyQuestionValue,
+                })
               ]),
               row('notify-approve', true, [
                 R.createElement('span', { style: labelStyle },
-                  t('notifyApproveRow') + t('sep') + stateOf(notifyApprove),
+                  t('notifyApproveRow'),
                   R.createElement('span', { style: hintStyle }, t('notifyApproveHint'))
                 ),
-                R.createElement('button', {
-                  type: 'button', onClick: toggleNotifyApprove,
-                  style: btnStyleFor(notifyApprove, !notifyOn), disabled: !notifyOn,
+                endfieldSelect({
+                  value: notifyApprove ? '1' : '0', ariaLabel: t('notifyApproveRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  disabled: !notifyOn,
                   title: notifyOn ? '' : t('notifyNeed'),
-                }, t(notifyApprove ? 'notifyApproveOff' : 'notifyApproveOn'))
+                  onChange: setNotifyApproveValue,
+                })
               ]),
             ]),
             /* --- 06 音频：两个生效槽位 + 两个预留槽位 ---
@@ -6148,19 +6323,23 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               groupTitle('06', 'groupAudio', false),
               row('audio', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioRow') + t('sep') + stateOf(audioOn),
+                  t('audioRow'),
                   R.createElement('span', { style: hintStyle },
                     t(audioOn ? 'audioHintOn' : 'audioHintOff')
                   )
                 ),
-                R.createElement('button', { type: 'button', onClick: toggleAudio, style: btnStyleFor(audioOn) }, t(audioOn ? 'audioOff' : 'audioOn'))
+                endfieldSelect({
+                  value: audioOn ? '1' : '0', ariaLabel: t('audioRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  onChange: setAudioValue,
+                })
               ]),
-              /* The boot row pairs two independent switches stacked on the right:
-                 the sound's own on/off, and the loader's preview button. They are
-                 separate switches because the loader can be on with no sound. */
+              /* The boot row pairs two independent controls stacked on the right:
+                 the loader's preview button, and the sound's own on/off select.
+                 They are separate because the loader can be on with no sound. */
               row('audio-boot', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioBootRow') + t('sep') + stateOf(audioBoot),
+                  t('audioBootRow'),
                   R.createElement('span', { style: hintStyle }, t('audioBootHint'))
                 ),
                 R.createElement('span', { style: { display: 'flex', flexDirection: 'column', gap: '6px', flex: '0 0 auto', alignItems: 'stretch' } },
@@ -6170,39 +6349,45 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
                     disabled: !loaderOn || !enabled,
                     title: loaderOn ? '' : t('loaderNeed'),
                   }, t('preview') + ' · ' + t('loaderRow')),
-                  R.createElement('button', {
-                    type: 'button', onClick: toggleAudioBoot,
-                    style: btnStyleFor(audioBoot, !audioOn), disabled: !audioOn,
+                  endfieldSelect({
+                    value: audioBoot ? '1' : '0', ariaLabel: t('audioBootRow'),
+                    options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                    disabled: !audioOn,
                     title: audioOn ? '' : t('audioNeedOn'),
-                  }, t(audioBoot ? 'audioBootOff' : 'audioBootOn'))
+                    onChange: setAudioBootValue,
+                  })
                 )
               ]),
               row('audio-start', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioStartRow') + t('sep') + stateOf(audioStart),
+                  t('audioStartRow'),
                   R.createElement('span', { style: hintStyle }, t('audioStartHint'))
                 ),
-                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
+                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto', alignItems: 'center' } },
                   audioTestButton('turn-start', 'audioSlotStart'),
-                  R.createElement('button', {
-                    type: 'button', onClick: toggleAudioStart,
-                    style: btnStyleFor(audioStart, !audioOn), disabled: !audioOn,
+                  endfieldSelect({
+                    value: audioStart ? '1' : '0', ariaLabel: t('audioStartRow'),
+                    options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                    disabled: !audioOn,
                     title: audioOn ? '' : t('audioNeedOn'),
-                  }, t(audioStart ? 'audioStartOff' : 'audioStartOn'))
+                    onChange: setAudioStartValue,
+                  })
                 )
               ]),
               row('audio-done', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioDoneRow') + t('sep') + stateOf(audioDone),
+                  t('audioDoneRow'),
                   R.createElement('span', { style: hintStyle }, t('audioDoneHint'))
                 ),
-                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto' } },
+                R.createElement('span', { style: { display: 'flex', gap: '8px', flex: '0 0 auto', alignItems: 'center' } },
                   audioTestButton('turn-done', 'audioSlotDone'),
-                  R.createElement('button', {
-                    type: 'button', onClick: toggleAudioDone,
-                    style: btnStyleFor(audioDone, !audioOn), disabled: !audioOn,
+                  endfieldSelect({
+                    value: audioDone ? '1' : '0', ariaLabel: t('audioDoneRow'),
+                    options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                    disabled: !audioOn,
                     title: audioOn ? '' : t('audioNeedOn'),
-                  }, t(audioDone ? 'audioDoneOff' : 'audioDoneOn'))
+                    onChange: setAudioDoneValue,
+                  })
                 )
               ]),
               row('audio-volume', false, [
@@ -6270,25 +6455,34 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
               ]),
               row('audio-human', false, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioHumanOnlyRow') + t('sep') + t(audioHumanOnly ? 'audioHumanOnlyOn' : 'audioHumanOnlyOff'),
+                  t('audioHumanOnlyRow'),
                   R.createElement('span', { style: hintStyle },
                     t(audioHumanOnly ? 'audioHumanOnlyHintOn' : 'audioHumanOnlyHintOff')
                   )
                 ),
-                R.createElement('button', {
-                  type: 'button', onClick: toggleAudioHumanOnly,
-                  style: btnStyleFor(audioHumanOnly, !audioOn), disabled: !audioOn,
+                endfieldSelect({
+                  value: audioHumanOnly ? '1' : '0', ariaLabel: t('audioHumanOnlyRow'),
+                  options: [
+                    { value: '1', label: t('audioHumanOnlyOn') },
+                    { value: '0', label: t('audioHumanOnlyOff') },
+                  ],
+                  disabled: !audioOn,
                   title: audioOn ? '' : t('audioNeedOn'),
-                }, t(audioHumanOnly ? 'audioHumanOnlyOff' : 'audioHumanOnlyOn'))
+                  onChange: setAudioHumanValue,
+                })
               ]),
               row('audio-diag', true, [
                 R.createElement('span', { style: labelStyle },
-                  t('audioDiagRow') + t('sep') + stateOf(audioDiag),
+                  t('audioDiagRow'),
                   R.createElement('span', { style: hintStyle },
                     previewNote !== '' ? previewNote : t('audioDiagHint')
                   )
                 ),
-                R.createElement('button', { type: 'button', onClick: toggleAudioDiag, style: btnStyleFor(audioDiag) }, t(audioDiag ? 'audioDiagOff' : 'audioDiagOn'))
+                endfieldSelect({
+                  value: audioDiag ? '1' : '0', ariaLabel: t('audioDiagRow'),
+                  options: [{ value: '1', label: t('on') }, { value: '0', label: t('off') }],
+                  onChange: setAudioDiagValue,
+                })
               ]),
             ]),
           ])

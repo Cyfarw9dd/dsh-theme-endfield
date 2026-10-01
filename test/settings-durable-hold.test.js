@@ -43,20 +43,34 @@ let failures = 0
 const fail = (m) => { console.error('FAIL  ' + m); failures++ }
 const pass = (m) => console.log('ok    ' + m)
 
-/* Recording React — useState returns the current session value (via the fake
-   binder's read) plus a setter that only forces a re-render (never used here:
-   each callable comes from a single synchronous render). */
-const makeReact = () => ({
-  useState(init) { return [typeof init === 'function' ? init() : init, () => {}] },
-  createElement(type, props, ...children) {
-    const kids = []
-    for (const c of children) {
-      if (Array.isArray(c)) kids.push(...c)
-      else if (c !== null && c !== undefined && c !== false) kids.push(c)
-    }
-    return { type, props: props || {}, children: kids }
-  },
-})
+/* Recording React — STATEFUL now: the panel's unified dropdowns keep their
+   open/close in React state, so the held-edit probes below (open the radius /
+   palette menu, click an option) need a setter that actually stores the write
+   and a slot counter that resets before each rendered() pass. */
+const makeReact = () => {
+  const state = []
+  let slot = 0
+  return {
+    __begin() { slot = 0 },
+    useState(init) {
+      const i = slot++
+      if (state.length <= i) state[i] = typeof init === 'function' ? init() : init
+      return [state[i], (next) => {
+        const value = typeof next === 'function' ? next(state[i]) : next
+        state[i] = value
+      }]
+    },
+    createElement(type, props, ...children) {
+      const kids = []
+      for (const c of children) {
+        if (Array.isArray(c)) kids.push(...c)
+        else if (c !== null && c !== undefined && c !== false) kids.push(c)
+      }
+      return { type, props: props || {}, children: kids }
+    },
+  }
+}
+const reactStub = makeReact()
 const textOf = (el) => {
   if (el === null || el === undefined || typeof el === 'boolean') return ''
   if (typeof el === 'string' || typeof el === 'number') return String(el)
@@ -143,7 +157,7 @@ const sandbox = {
     setTimeout: () => 0, clearTimeout() {},
   },
   document,
-  React: makeReact(),
+  React: reactStub,
   MutationObserver: function () { this.observe = () => {}; this.disconnect = () => {} },
   ResizeObserver: function () { this.observe = () => {}; this.disconnect = () => {} },
   requestAnimationFrame: () => 0, cancelAnimationFrame() {},
@@ -175,21 +189,35 @@ try { mod.apply(ctx) } catch (e) { fail('apply() threw: ' + e.message); process.
 pass('apply() completed with the namespace still unserved (unavailable, writable, host)')
 
 if (typeof rendered !== 'function') { fail('settings.section was never registered'); process.exit(1) }
+/* Wrap the render so the stub's hook slot counter resets before each pass. */
+const rawRendered = rendered
+rendered = () => { reactStub.__begin(); return rawRendered() }
 const tree = rendered()
 const buttons = walk(tree).filter((n) => n.type === 'button')
 const findBtn = (re) => buttons.find((b) => re.test(textOf(b)))
 
 /* The reported symptom was radius=round and palette=wuling. Toggle BOTH while
    the namespace is unserved; the old bug would fire scope.set for each. */
-/* The radius row is a select now (two named values beat a cycle button); the
-   held-edit scenario it drives is unchanged, the trigger is onChange. */
-const radiusSel = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题圆角')
-if (!radiusSel) { fail('no radius select rendered'); process.exit(1) }
-try { radiusSel.props.onChange({ target: { value: 'round' } }) } catch (e) { fail('radius select threw: ' + e.message) }
-
-const paletteRow = walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
-if (!paletteRow) { fail('no palette select rendered'); process.exit(1) }
-try { paletteRow.props.onChange({ target: { value: 'valley' } }) } catch (e) { fail('palette onChange threw: ' + e.message) }
+/* Every value row is the unified dropdown now: drive it the way a user does
+   (open the menu, click the option). The held-edit scenario is unchanged. */
+const driveSelect = (ariaLabel, optionText) => {
+  const t1 = rendered()
+  const trigger = walk(t1).find((n) => n.type === 'button' && n.props && n.props['aria-label'] === ariaLabel
+    && n.props['aria-haspopup'] === 'menu')
+  if (!trigger) return 'trigger'
+  trigger.props.onClick()
+  const t2 = rendered()
+  const menu = walk(t2).find((n) => n.props && n.props.role === 'menu' && n.props['aria-label'] === ariaLabel)
+  if (!menu) return 'menu'
+  const option = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && textOf(n) === optionText)
+  if (!option) return 'option:' + optionText
+  option.props.onClick()
+  return 'ok'
+}
+const radiusStep = driveSelect('主题圆角', '圆角')
+if (radiusStep !== 'ok') { fail('radius dropdown could not be driven: ' + radiusStep); process.exit(1) }
+const paletteStep = driveSelect('主题配色', '谷地黄')
+if (paletteStep !== 'ok') { fail('palette dropdown could not be driven: ' + paletteStep); process.exit(1) }
 
 /* Phase A: nothing durable yet, so NOTHING may reach the wire and both edits
    must be HELD (page-local) for the later replay. `section` in this fake always

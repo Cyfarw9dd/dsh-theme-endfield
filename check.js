@@ -319,4 +319,36 @@ if (failures) {
   console.error(`${failures} check(s) failed`)
   process.exit(1)
 }
+
+/* --- 5. the settings panel's unified dropdown must exist as CSS, not just JS ---
+   The panel builds .endfield-select elements in React; if the stylesheet rules
+   were dropped (or renamed on one side only), the control renders unstyled in
+   every row and only a screenshot would notice. The menu must draw on the app's
+   own menu-surface token, and the open animation may only touch opacity. */
+{
+  /* Re-derive the comment-stripped stylesheet: section 5 runs at top level,
+     outside the scope that owns the section-1 local. */
+  const s2 = src.replace(/\/\*[\s\S]*?\*\//g, '')
+  const need = [
+    ['.endfield-select-trigger', 'endfield-select-trigger rule missing — the row control renders unstyled'],
+    ['.endfield-select-menu', 'endfield-select-menu rule missing — opened menus render unstyled'],
+    ['.endfield-select-option', 'endfield-select-option rule missing — menu rows render unstyled'],
+  ]
+  for (const [needle, why] of need) {
+    if (src.includes(needle)) pass(needle.slice(1) + ' is defined in the stylesheet')
+    else fail(why)
+  }
+  const menuRule = /\.endfield-select-menu\s*\{([^}]*)\}/.exec(s2.replace(/\n\s*/g, ' '))
+  if (menuRule && /var\(--dsw-menu-surface-fill\)/.test(menuRule[1])) {
+    pass('endfield-select-menu draws on --dsw-menu-surface-fill (same surface as app menus)')
+  } else {
+    fail('endfield-select-menu must use var(--dsw-menu-surface-fill) — any other surface breaks the unified look')
+  }
+  const kf = /@keyframes\s+endfield-select-in\s*\{([\s\S]*?)\}\s*\}/.exec(s2)
+  if (kf && !/transform|width|top|left|right|bottom|margin|padding/.test(kf[1])) {
+    pass('endfield-select-in keyframes only animate opacity')
+  } else {
+    fail('endfield-select-in must only animate opacity (compositor-only, per docs/design-principles.md)')
+  }
+}
 console.log('all checks passed')

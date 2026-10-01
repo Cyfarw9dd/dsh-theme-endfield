@@ -266,21 +266,53 @@ function panelButtons(client) {
   if (!tree) return []
   return walk(tree).filter((n) => n.type === 'button')
 }
-/** Walk the panel tree and find the palette <select> by its aria-label. */
-function panelPaletteSelect(client) {
+/** The trigger of a row's unified dropdown: a button carrying the row's
+    aria-label; its visible text IS the current value. */
+function panelSelectTrigger(client, ariaLabel) {
   const tree = client.render()
   if (!tree) return null
-  return walk(tree).find((n) => n.type === 'select' && n.props && n.props['aria-label'] === '主题配色')
+  return walk(tree).find((n) => n.type === 'button' && n.props
+    && n.props['aria-label'] === ariaLabel && n.props['aria-haspopup'] === 'menu')
 }
+const panelPaletteSelect = (client) => panelSelectTrigger(client, '主题配色')
 const findButton = (buttons, re) => buttons.find((b) => re.test(textOf(b)))
-/** The radius row became a select (two named values beat a cycle button); this
-    test uses it as its write-probe across every transport scenario, so the
-    probe is the select's onChange now. */
+/** The radius row is this test's write-probe across every transport scenario.
+    Every value row is the unified dropdown now, so the probe drives it the way
+    a user does: open the menu, click the option. Returns 'ok' or the failing
+    step so each scenario can fail with the exact missing piece. */
+function panelRadiusWrite(client, optionText) {
+  const t1 = client.render()
+  if (!t1) return 'tree'
+  const trigger = walk(t1).find((n) => n.type === 'button' && n.props
+    && n.props['aria-label'] === '主题圆角' && n.props['aria-haspopup'] === 'menu')
+  if (!trigger) return 'trigger'
+  trigger.props.onClick()
+  const t2 = client.render()
+  const menu = walk(t2).find((n) => n.props && n.props.role === 'menu' && n.props['aria-label'] === '主题圆角')
+  if (!menu) return 'menu'
+  const option = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && textOf(n) === optionText)
+  if (!option) return 'option:' + optionText
+  option.props.onClick()
+  return 'ok'
+}
+/** Back-compat shim for the many scenarios below: they call
+    onChange({target:{value:'round'}}) as "the user picked 圆角". Route that
+    through the real menu path; a drive failure throws so the scenario fails
+    loudly instead of silently skipping its write. */
 function panelRadiusSelect(client) {
-  const tree = client.render()
-  if (!tree) return null
-  return walk(tree).find((n) => n.type === 'select'
-    && n.props && n.props['aria-label'] === '主题圆角')
+  const t1 = client.render()
+  if (!t1) return null
+  const trigger = walk(t1).find((n) => n.type === 'button' && n.props
+    && n.props['aria-label'] === '主题圆角' && n.props['aria-haspopup'] === 'menu')
+  if (!trigger) return null
+  return {
+    props: {
+      onChange: () => {
+        const step = panelRadiusWrite(client, '圆角')
+        if (step !== 'ok') throw new Error('radius dropdown could not be driven: ' + step)
+      },
+    },
+  }
 }
 
 async function main() {
@@ -595,12 +627,12 @@ async function main() {
       }
 
       // And the panel must now REFLECT the settled section — the actual
-      // regression, which the write-replay above does not prove. The select's
-      // value IS the state now, so after adopting a section whose radius is
-      // 'round' the value must read 'round'.
-      const readBack = panelRadiusSelect(client)
-      const label = readBack ? String(readBack.props.value) : 'no select'
-      if (label === 'round') {
+      // regression, which the write-replay above does not prove. The dropdown
+      // trigger's visible text IS the state now, so after adopting a section
+      // whose radius is 'round' it must read 圆角.
+      const readBack = panelSelectTrigger(client, '主题圆角')
+      const label = readBack ? textOf(readBack) : 'no select'
+      if (label.includes('圆角')) {
         pass('panel re-read the settled section after the loading -> ready transition')
       } else {
         fail('panel still on schema defaults after the section settled: value=' + JSON.stringify(label))
@@ -637,8 +669,8 @@ async function main() {
     // Boot render: the section is still in flight, so the panel shows defaults.
     const before = panelPaletteSelect(client)
     if (!before) fail('no palette select rendered (late-section read case)')
-    else if (before.props.value !== 'gray') {
-      fail('precondition: palette select should start on gray, got ' + before.props.value)
+    else if (!textOf(before).includes('终末地灰')) {
+      fail('precondition: palette trigger should start on 终末地灰, got ' + textOf(before))
     } else {
       pass('precondition: panel starts on the schema default while the section is in flight')
     }
@@ -661,20 +693,20 @@ async function main() {
     }
 
     const after = panelPaletteSelect(client)
-    // The select's VALUE reflects the settled palette (wuling), not the default.
-    if (after && after.props.value === 'wuling') {
+    // The trigger's visible text reflects the settled palette (武陵青), not the default.
+    if (after && textOf(after).includes('武陵青')) {
       pass('panel re-synced onto the late-served palette (wuling), not the default')
     } else {
-      fail('panel did NOT re-sync after the section settled — select value is '
-        + (after && after.props.value) + ' (this is the reported reset bug)')
+      fail('panel did NOT re-sync after the section settled — trigger shows '
+        + (after ? textOf(after) : '(none)') + ' (this is the reported reset bug)')
     }
 
-    // The served radius must show up too: the select's value mirrors the state.
-    const radius = panelRadiusSelect(client)
-    if (radius && String(radius.props.value) === 'round') {
+    // The served radius must show up too: the trigger text mirrors the state.
+    const radius = panelSelectTrigger(client, '主题圆角')
+    if (radius && textOf(radius).includes('圆角')) {
       pass('panel re-synced the radius switch onto the served section as well')
     } else {
-      fail('radius switch did not re-sync: ' + (radius ? JSON.stringify(String(radius.props.value)) : 'no select'))
+      fail('radius switch did not re-sync: ' + (radius ? JSON.stringify(textOf(radius)) : 'no select'))
     }
 
     // Adopting a served section must never be mistaken for a user edit.
@@ -721,15 +753,15 @@ async function main() {
     // Only now does the settings page mount (the user opens 设置).
     const toggle = panelPaletteSelect(client)
     if (!toggle) fail('no palette select rendered (post-settle mount case)')
-    else if (toggle.props.value === 'wuling') {
+    else if (textOf(toggle).includes('武陵青')) {
       pass('panel mounting after the section settled shows the stored palette, not the default')
     } else {
       fail('panel mounted after the section settled but still shows the default: '
-        + (toggle && toggle.props.value) + ' — this is the live boot-report defect')
+        + textOf(toggle) + ' — this is the live boot-report defect')
     }
 
-    const radius = panelRadiusSelect(client)
-    if (radius && String(radius.props.value) === 'round') {
+    const radius = panelSelectTrigger(client, '主题圆角')
+    if (radius && textOf(radius).includes('圆角')) {
       pass('panel mounting after the section settled shows the stored radius too')
     } else {
       fail('radius did not converge on a post-settle mount: '
@@ -770,9 +802,9 @@ async function main() {
     if (!toggle) {
       fail('no palette select rendered (stale-state case)')
     } else {
-      const before = toggle.props.value
-      // The panel was rendered during 'loading', so it shows the default (gray).
-      if (before === 'gray') pass('precondition: panel shows the schema default palette while the section is in flight')
+      const before = textOf(toggle)
+      // The panel was rendered during 'loading', so it shows the default (终末地灰).
+      if (before.includes('终末地灰')) pass('precondition: panel shows the schema default palette while the section is in flight')
       else pass('precondition: panel rendered during loading (shows ' + before + ')')
 
       // Now the Host serves the stored value. No re-sync pass has run for the
@@ -781,20 +813,35 @@ async function main() {
       stub.settle('theme-endfield')
       await drain()
 
-      toggle.props.onChange({ target: { value: 'gray' } })
+      /* Drive the dropdown through the real menu path: open it, pick 谷地黄.
+         (The stale display says 终末地灰; picking a DIFFERENT option is the only
+         reachable user action in this window, and it is the one that must write
+         the CHOSEN value — never a value derived from the stale React state.) */
+      const tOpen = client.render()
+      const trigOpen = walk(tOpen).find((n) => n.type === 'button' && n.props
+        && n.props['aria-label'] === '主题配色' && n.props['aria-haspopup'] === 'menu')
+      if (!trigOpen) fail('no palette trigger to open (stale-state case)')
+      else {
+        trigOpen.props.onClick()
+        const tMenu = client.render()
+        const menu = walk(tMenu).find((n) => n.props && n.props.role === 'menu' && n.props['aria-label'] === '主题配色')
+        const opt = menu ? walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && textOf(n) === '谷地黄') : null
+        if (!opt) fail('no 谷地黄 option in the palette menu (stale-state case)')
+        else opt.props.onClick()
+      }
       await drain()
 
-      // The stored value was wuling; a select writes the CHOSEN value. The
+      // The stored value was wuling; the dropdown writes the CHOSEN value. The
       // store-derived handler validates it, so a stale React state cannot
       // overwrite a real stored choice.
       const w = stub.writes
       if (w.length === 0) {
         fail('a palette selection against a settled section wrote nothing')
-      } else if (w[0].field === 'palette' && w[0].value === 'gray') {
-        pass('palette select wrote its chosen value (gray) from the store')
+      } else if (w[0].field === 'palette' && w[0].value === 'valley') {
+        pass('palette dropdown wrote its chosen value (valley) from the store')
       } else {
-        fail('palette select wrote from stale React state: wrote '
-          + JSON.stringify(w[0]) + ', expected {field:palette, value:gray}')
+        fail('palette dropdown wrote from stale React state: wrote '
+          + JSON.stringify(w[0]) + ', expected {field:palette, value:valley}')
       }
     }
   }
@@ -813,17 +860,22 @@ async function main() {
     await drain()
 
     /* Locate each row by the FIELD IT WRITES rather than by its rendered label.
-       Labels are not a reliable key here: several rows legitimately render the
-       same short string (the loader row and the thunder-animation row both read
-       'Turn on'), so a label match silently picks whichever button the walk
-       reaches first — which is how the first draft of this case "tested" the
-       loader while actually clicking the thunder row. Clicking every button and
-       grouping by the write it produces makes the assertion exact. */
+       Every value row is a dropdown now, so "the click" is: open the menu, pick
+       the option that is NOT aria-checked (the flip, exactly what the old toggle
+       button did), then group by the write it produces. Preview/test buttons
+       have no aria-haspopup and are skipped by the trigger filter. */
     const seen = {}
     for (const btn of panelButtons(client)) {
-      if (!btn.props || typeof btn.props.onClick !== 'function') continue
+      if (!btn.props || btn.props['aria-haspopup'] !== 'menu' || typeof btn.props.onClick !== 'function') continue
       stub.writes.length = 0
       btn.props.onClick()
+      const t2 = client.render()
+      const menu = walk(t2).find((n) => n.props && n.props.role === 'menu'
+        && n.props['aria-label'] === btn.props['aria-label'])
+      if (!menu) continue
+      const other = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && n.props['aria-checked'] !== 'true')
+      if (!other || typeof other.props.onClick !== 'function') continue
+      other.props.onClick()
       await drain()
       for (const w of stub.writes) if (seen[w.field] === undefined) seen[w.field] = w.value
     }

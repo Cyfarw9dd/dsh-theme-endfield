@@ -119,17 +119,46 @@ if (defaultMismatch.length === 0) {
 
 /* ---------------------------------------------------------------- harness -- */
 
-const makeReact = () => ({
-  useState(init) { return [typeof init === 'function' ? init() : init, () => {}] },
-  createElement(type, props, ...children) {
-    const kids = []
-    for (const c of children) {
-      if (Array.isArray(c)) kids.push(...c)
-      else if (c !== null && c !== undefined && c !== false) kids.push(c)
-    }
-    return { type, props: props || {}, children: kids }
-  },
-})
+/* Stateful stub (same shape as settings-rows): the panel's dropdowns keep
+   open/close in React state, so the menu only appears in the tree when the
+   setter actually stores the write. */
+const makeReact = () => {
+  const state = []
+  const dirty = []
+  let slot = 0
+  return {
+    __begin() { slot = 0 },
+    /* Each boot() is a fresh page: drop the previous scenario's panel state so
+       a later scenario re-seeds from its own prefs reads. */
+    __resetAll() { state.length = 0; dirty.length = 0; slot = 0 },
+    useState(init) {
+      const i = slot++
+      /* PRISTINE slots re-run their initializer on every render; WRITTEN slots
+         keep the stored value. That combines the two behaviours this suite
+         needs: pref-seeded state stays fresh until the mirror settles (the old
+         no-op stub got that by re-running everything), while a dropdown's
+         open/close — always reached through a setter — persists across the
+         rendered() passes that drive it. */
+      if (state.length <= i || !dirty[i]) {
+        state[i] = typeof init === 'function' ? init() : init
+      }
+      return [state[i], (next) => {
+        const value = typeof next === 'function' ? next(state[i]) : next
+        state[i] = value
+        dirty[i] = true
+      }]
+    },
+    createElement(type, props, ...children) {
+      const kids = []
+      for (const c of children) {
+        if (Array.isArray(c)) kids.push(...c)
+        else if (c !== null && c !== undefined && c !== false) kids.push(c)
+      }
+      return { type, props: props || {}, children: kids }
+    },
+  }
+}
+const reactStub = makeReact()
 const textOf = (el) => {
   if (el === null || el === undefined || typeof el === 'boolean') return ''
   if (typeof el === 'string' || typeof el === 'number') return String(el)
@@ -182,7 +211,7 @@ function boot(scope) {
       setTimeout: () => 0, clearTimeout() {},
     },
     document,
-    React: makeReact(),
+    React: reactStub,
     MutationObserver: function () { this.observe = () => {}; this.disconnect = () => {} },
     ResizeObserver: function () { this.observe = () => {}; this.disconnect = () => {} },
     requestAnimationFrame: () => 0, cancelAnimationFrame() {},
@@ -206,7 +235,10 @@ function boot(scope) {
     },
     effect: () => {},
   })
-  return { render: () => slots.render(), scope }
+  /* Fresh page per boot: clear the stub's stored state, then every render
+     resets just the slot counter (see makeReact). */
+  reactStub.__resetAll()
+  return { render: () => { reactStub.__begin(); return slots.render() }, scope }
 }
 
 /** Section keyed EXACTLY like the host's: declared fields only. */
@@ -229,13 +261,55 @@ function hostShapedSection(extra = {}) {
 const findRow = (tree, key) => walk(tree).find((n) => n.type === 'div' && n.props && n.props.key === key)
 const buttonsIn = (row) => (row ? walk(row).filter((n) => n.type === 'button') : [])
 const selectsIn = (row) => (row ? walk(row).filter((n) => n.type === 'select') : [])
-/* The persist row became a select: its STATE lives in props.value now, not in the
-   label text (both option labels always render). These sections assert FIELD
-   READING, so the state readout is the select value. */
+/* Every value row is the unified dropdown now: its STATE is the trigger's
+   visible text (the current option label). These sections assert FIELD READING,
+   so the readout maps that text back to the stored literal. */
+const rowTrigger = (tree, key) => {
+  const row = findRow(tree, key)
+  return row ? walk(row).find((n) => n.type === 'button' && n.props && n.props['aria-haspopup'] === 'menu') : null
+}
 const wmPersistValue = (tree) => {
-  const row = findRow(tree, 'watermark-persist')
-  const sel = selectsIn(row)[0]
-  return sel ? String(sel.props.value) : null
+  const trig = rowTrigger(tree, 'watermark-persist')
+  if (!trig) return null
+  return textOf(trig).includes('保持显示') ? '1' : '0'
+}
+/** The option label a stored literal renders as, per row. */
+const optionTextFor = (rowKey, value) => {
+  if (rowKey === 'radius') return value === 'round' ? '圆角' : '直角'
+  if (rowKey === 'watermark-persist') return value === '1' ? '保持显示' : '仅新建页'
+  return value === '1' ? '开启' : '关闭'
+}
+/** Drive a row's dropdown by flipping it: open the menu, click the option that
+    is NOT aria-checked (what the old toggle button's single click did). */
+const driveRowFlip = (getTree, rowKey) => {
+  const trigger = rowTrigger(getTree(), rowKey)
+  if (!trigger) return 'trigger'
+  if (typeof trigger.props.onClick !== 'function') return 'trigger-onClick'
+  trigger.props.onClick()
+  const row2 = findRow(getTree(), rowKey)
+  const menu = row2 ? walk(row2).find((n) => n.props && n.props.role === 'menu') : null
+  if (!menu) return 'menu'
+  const opt = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && n.props['aria-checked'] !== 'true')
+  if (!opt) return 'option:other'
+  if (typeof opt.props.onClick !== 'function') return 'option-onClick'
+  opt.props.onClick()
+  return 'ok'
+}
+/** Drive a row's dropdown the way a user does. getTree must return a FRESH
+    render — the menu only exists in the post-open tree. */
+const driveRowSelect = (getTree, rowKey, optionText) => {
+  const trigger = rowTrigger(getTree(), rowKey)
+  if (!trigger) return 'trigger'
+  if (typeof trigger.props.onClick !== 'function') return 'trigger-onClick'
+  trigger.props.onClick()
+  const row2 = findRow(getTree(), rowKey)
+  const menu = row2 ? walk(row2).find((n) => n.props && n.props.role === 'menu') : null
+  if (!menu) return 'menu'
+  const opt = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && textOf(n) === optionText)
+  if (!opt) return 'option:' + optionText
+  if (typeof opt.props.onClick !== 'function') return 'option-onClick'
+  opt.props.onClick()
+  return 'ok'
 }
 
 /* ======================================================================
@@ -250,11 +324,15 @@ const TOGGLES = [
   ['theme', 'dsh-theme-endfield-enabled', '0', 'enabled'],
   ['radius', 'dsh-theme-endfield-radius', 'round', 'radius'],
 
-  ['watermark', 'dsh-theme-endfield-watermark', '0', 'watermark'],
+  /* Order matters now that the drive is the real UI: the persist/anim sub-rows
+     are DISABLED while their parent is off, and each flip below turns the parent
+     OFF — so the sub-rows are driven first (watermark/thunder still at their
+     schema defaults of on here). */
   ['watermark-persist', 'dsh-theme-endfield-watermark-persist', '1', 'watermarkPersist'],
+  ['watermark', 'dsh-theme-endfield-watermark', '0', 'watermark'],
   ['loader', 'dsh-theme-endfield-loader', '1', 'loader'],
-  ['thunder', 'dsh-theme-endfield-thunder', '1', 'thunder'],
   ['thunder-anim', 'dsh-theme-endfield-thunder-anim', '1', 'thunderAnim'],
+  ['thunder', 'dsh-theme-endfield-thunder', '1', 'thunder'],
 ]
 
 /* Compound fields are the regression surface; the singles passed even with the
@@ -284,27 +362,21 @@ if (compoundCovered.length === COMPOUND.length) {
     }
     const row = findRow(tree, rowKey)
     if (!row) { fail('no panel row keyed ' + rowKey); continue }
-    /* radius and watermark-persist are selects now (two named values beat a cycle
-       button); the write-direction check is the same, the trigger is onChange. */
-    const sel = selectsIn(row).find((n) => n.props && typeof n.props.onChange === 'function')
-    const btns = buttonsIn(row).filter((b) => b.props && typeof b.props.onClick === 'function')
-    if (!sel && btns.length === 0) { fail('row ' + rowKey + ' has no clickable button or select'); continue }
+    /* Every value row is the unified dropdown: open its menu and pick the
+       option that renders the wanted literal. The write-direction check
+       below is unchanged. */
     const before = store.wire.length
-    if (sel) {
-      /* A select row writes the picked literal; the TOGGLES entry names it. */
-      try { sel.props.onChange({ target: { value } }) } catch (e) { fail(rowKey + ' select threw: ' + e.message); continue }
-    } else {
-      /* An option row picks the button labelled with the wanted value; a boolean
-         row's primary switch is its LAST button (rows lead with 预览/重播). */
-      const target = option
-        ? btns.find((b) => textOf(b) === option)
-        : btns[btns.length - 1]
-      if (!target) {
-        fail('row ' + rowKey + ' has no button labelled ' + JSON.stringify(option)
-          + '; labels = ' + JSON.stringify(btns.map(textOf)))
-        continue
-      }
-      try { target.props.onClick() } catch (e) { fail(rowKey + ' toggle threw: ' + e.message); continue }
+    /* The drive flips the row the way the old toggle did: pick the option that
+       is NOT aria-checked. (Picking the checked one is a no-op by design — the
+       matrix asserts the FIELD written, not the direction.) */
+    const step = driveRowFlip(() => render(), rowKey)
+    if (step !== 'ok') {
+      const dbgRow = findRow(render(), rowKey)
+      const dbgTrig = dbgRow ? walk(dbgRow).find((n) => n.type === 'button' && n.props && n.props['aria-haspopup'] === 'menu') : null
+      fail('row ' + rowKey + ' dropdown could not be driven: ' + step
+        + ' [disabled=' + (dbgTrig ? String(dbgTrig.props.disabled) : 'n/a')
+        + ' expanded=' + (dbgTrig ? String(dbgTrig.props['aria-expanded']) : 'n/a') + ']')
+      continue
     }
     const fired = store.wire.slice(before)
     if (fired.length === 0) { fail(rowKey + ' toggle wrote nothing at all'); continue }
@@ -364,7 +436,8 @@ if (compoundCovered.length === COMPOUND.length) {
   const { render } = boot({ bind: () => scope })
   const beforeTree = render()
   const textBefore = textOf(beforeTree)
-  if (/大字入场动画：关闭/.test(textBefore) && wmPersistValue(beforeTree) === '0') {
+  const animTrigBefore = rowTrigger(beforeTree, 'thunder-anim')
+  if (animTrigBefore && textOf(animTrigBefore).includes('关闭') && wmPersistValue(beforeTree) === '0') {
     pass('回归对照：未声明字段里的值不会被当成已声明字段读取（schema 默认值优先）')
   } else {
     fail('the panel must read the declared fields, not the stray keys, got ' + JSON.stringify(textBefore.slice(0, 220)))
@@ -413,9 +486,9 @@ if (compoundCovered.length === COMPOUND.length) {
     set(f, v) { wire.push([f, String(v)]); section[f] = String(v) },
   }
   const { render } = boot({ bind: () => scope })
-  const text = textOf(render())
-  if (/大字入场动画：开启/.test(text)) pass('用户显式写入的 thunderAnim=1 覆盖旧拼写里的 0')
-  else fail('a user-set declared value lost to a stray legacy key: ' + JSON.stringify(text.slice(0, 200)))
+  const trig = rowTrigger(render(), 'thunder-anim')
+  if (trig && textOf(trig).includes('开启')) pass('用户显式写入的 thunderAnim=1 覆盖旧拼写里的 0')
+  else fail('a user-set declared value lost to a stray legacy key: ' + (trig ? textOf(trig) : '(none)'))
   if (wire.length === 0) pass('这种情况不产生任何迁移写入')
   else fail('migration wrote although the user had set the field: ' + JSON.stringify(wire))
 }
@@ -436,14 +509,13 @@ if (compoundCovered.length === COMPOUND.length) {
     set(f, v) { /* the write is accepted but the served section is not updated yet */ global.__noEcho = [f, String(v)] },
   }
   const { render } = boot({ bind: () => scope })
-  const tree = render()
-  const row = findRow(tree, 'thunder-anim')
-  const btn = buttonsIn(row).find((b) => b.props && typeof b.props.onClick === 'function')
-  try { btn.props.onClick() } catch (e) { fail('thunder-anim toggle threw: ' + e.message) }
-  const after = textOf(render())
-  if (/大字入场动画：开启/.test(after)) pass('写入后面板立刻读到新值（不依赖宿主回相）')
-  else fail('with no host echo the panel still showed the old value: ' + JSON.stringify(after.slice(0, 200)))
-  if (/关闭动画/.test(after)) pass('按钮随之提供反向操作')
+  const step = driveRowFlip(() => render(), 'thunder-anim')
+  if (step !== 'ok') fail('thunder-anim dropdown could not be driven (no-echo case): ' + step)
+  const afterTree = render()
+  const afterTrig = rowTrigger(afterTree, 'thunder-anim')
+  if (afterTrig && textOf(afterTrig).includes('开启')) pass('写入后面板立刻读到新值（不依赖宿主回相）')
+  else fail('with no host echo the panel still showed the old value: ' + (afterTrig ? textOf(afterTrig) : '(none)'))
+  if (afterTrig && textOf(afterTrig).includes('开启')) pass('触发器随之显示新值（反向可供选择）')
   else fail('the row did not flip to the reverse affordance')
 }
 
@@ -473,15 +545,15 @@ if (compoundCovered.length === COMPOUND.length) {
     },
   }
   const { render } = boot({ bind: () => scope })
-  const row = findRow(render(), 'watermark-persist')
-  /* The row became a select (two named values beat a cycle button); the held-edit
-     mechanism it exercises is unchanged — the trigger is onChange now. */
-  const sel = selectsIn(row).find((n) => n.props && typeof n.props.onChange === 'function')
-  if (!sel) { fail('no watermark-persist select rendered'); process.exit(1) }
-  /* Derive the direction off the panel itself: the select's current value is the
-     state it is IN, so the change is to the other one. */
-  const nextValue = sel.props.value === '1' ? '0' : '1'
-  try { sel.props.onChange({ target: { value: nextValue } }) } catch (e) { fail('watermark-persist select threw: ' + e.message) }
+  /* Every value row is the unified dropdown; the held-edit mechanism it
+     exercises is unchanged — the drive is open-the-menu, pick-the-option. */
+  const beforeTrig = rowTrigger(render(), 'watermark-persist')
+  if (!beforeTrig) { fail('no watermark-persist dropdown trigger rendered'); process.exit(1) }
+  /* Derive the direction off the panel itself: the trigger's current text is
+     the state it is IN, so the change is to the other option. */
+  const nextValue = textOf(beforeTrig).includes('保持显示') ? '0' : '1'
+  const step = driveRowSelect(() => render(), 'watermark-persist', optionTextFor('watermark-persist', nextValue))
+  if (step !== 'ok') { fail('watermark-persist dropdown could not be driven: ' + step) }
   if (wire.length === 0) pass('未就绪时改回默认值：没有出线写入')
   else fail('a write leaked to the wire while the namespace was unserved: ' + JSON.stringify(wire))
 

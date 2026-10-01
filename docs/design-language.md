@@ -177,6 +177,23 @@ DSH 自带 DeepSeek 品牌蓝。主题把这些令牌整组重映射，否则会
 
 亮色与暗色的 α 不同：**在近黑底上叠加亮度，比在纸底上减去亮度显得响得多**。同一个 α 在暗色下更吵，所以暗色的半透明块普遍取更高的 α（因为强调色本身在暗色下要更突出），而装饰性图层（水印）在暗色下反而要**降低** α。
 
+### 设置面板统一下拉
+
+「终末地主题设置」的每一个有值行都用同一下拉（2026-10，用户指定「统一设计」）。形制不是发明，是量测**本应用自己的下拉**得来的（安装包 lib/*.css 一手取数）：
+
+| 部位 | 应用原文（量测） | 本主题落点 |
+| --- | --- | --- |
+| 菜单卡片 | Menu.module.css 的 .list：padding 4px、top calc(100% + 4px)、min-width 144px、z-index 100、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1 | 同尺寸；右对齐（行控件在右侧，alignEnd 语法） |
+| 卡片表面 | MenuSurface 的 .material：--dsw-menu-surface-fill（上游默认是 58%/45% 半透明配磨砂；本主题已映射为不透明纸面 #f2f2ec/#1c1e1c） | 同令牌，自动继承主题的菜单面色 |
+| 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、悬停 = focus-visible = --dsw-alias-interactive-bg-hover（fill 即焦点指示） | 同尺寸同令牌 |
+| 选中态 | check 模式：透明底 + 尾随 14px 对勾；role=menuitemradio + aria-checked | 同结构——选中行由全局「菜单当前项」划词灰规则上色，与模型栏/权限弹层一条规则 |
+| 触发器 | 模型位 _trigger / composer _select：28px 高、12px 山形箭头居右、悬停淡染 | 同结构；值文字用 label-primary（设置页语境里触发器承载当前值） |
+| 圆角 | 上游 radius-md/lg；本主题全局直角化接管 | 跟随全局直角/圆角模式，不单独声明 |
+
+行为同样照应用菜单：Escape 与点击面板外收起（监听器开时挂、收时摘，target.closest 对自己的根判定）；选中即写值并收起；重复点选当前项不写（与原生 select 的 change 语义一致）。**入场动画只动 opacity**（.15s；perf-motion 的静态守卫扫到本段，允许清单不变），prefers-reduced-motion 下关闭。主题关闭时样式表卸载，触发器退回应用令牌的内联兜底（与 btnStyleFor 的 !themed 分支同策略），settings-off 的按钮对比度探针因此继续成立。
+
+已知边界：菜单在行内绝对定位（不 portal）。设置页的行不裁剪溢出，正常显示；若日后某个宿主把设置页放进 overflow 容器，需要把菜单 portal 到 body（应用自己的菜单正是为此 portal 的）。
+
 ### 交互动效：合并设计
 
 > 2026-10 起动效是**一套固定设计**，由 `<body>` 属性 `data-endfield-motion` 的在场/缺席开关。它由六套可切换方案合并而来（用户决定）：**B 静默、C 冲压、F 盖章整体移除**，E 读数随主 CTA 归属信号而失去独立母题，两套幸存母题按角色分工——**信号**（新会话/审批按钮箭头滑入、表格行左缘细条）与**角标**（侧边栏会话行 + 搜索结果行四角 L 形角标）。共通底座：全局 `.2s` 颜色过渡 + 按下暗一档。

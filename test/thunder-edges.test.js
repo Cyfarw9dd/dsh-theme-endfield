@@ -230,23 +230,55 @@ const textOf = (el) => {
   if (typeof el === 'string' || typeof el === 'number') return String(el)
   return (el.children || []).map(textOf).join('')
 }
-const R = {
-  useState(init) { const v = typeof init === 'function' ? init() : init; return [v, () => {}] },
-  createElement(type, props, ...children) {
-    const kids = []
-    for (const c of children) {
-      if (Array.isArray(c)) kids.push(...c)
-      else if (c !== null && c !== undefined && c !== false) kids.push(c)
-    }
-    return { type, props: props || {}, children: kids }
-  },
-}
+/* Stateful React stub (pristine slots re-read, written slots persist) — the
+   panel's rows are unified dropdowns now, so enabling a feature means opening
+   its menu and clicking the option. */
+const R = (() => {
+  const state = []
+  const dirty = []
+  let slot = 0
+  return {
+    __begin() { slot = 0 },
+    useState(init) {
+      const i = slot++
+      if (state.length <= i || !dirty[i]) state[i] = typeof init === 'function' ? init() : init
+      return [state[i], (next) => {
+        state[i] = typeof next === 'function' ? next(state[i]) : next
+        dirty[i] = true
+      }]
+    },
+    createElement(type, props, ...children) {
+      const kids = []
+      for (const c of children) {
+        if (Array.isArray(c)) kids.push(...c)
+        else if (c !== null && c !== undefined && c !== false) kids.push(c)
+      }
+      return { type, props: props || {}, children: kids }
+    },
+  }
+})()
 sandbox.React = R
+const renderPanel = () => { R.__begin(); return rendered() }
 let tree
-try { tree = rendered() } catch (e) { fail('settings render threw: ' + e.message); process.exit(1) }
-const onBtn = walk(tree).filter((n) => n.type === 'button').find((b) => /开启大字/.test(textOf(b)))
-if (!onBtn) { fail('no 开启大字 button to click'); process.exit(1) }
-try { onBtn.props.onClick() } catch (e) { fail('开启大字 click threw: ' + e.message); process.exit(1) }
+try { tree = renderPanel() } catch (e) { fail('settings render threw: ' + e.message); process.exit(1) }
+const driveOn = (ariaLabel, optionText) => {
+  const t1 = renderPanel()
+  const trigger = walk(t1).find((n) => n.type === 'button' && n.props
+    && n.props['aria-label'] === ariaLabel && n.props['aria-haspopup'] === 'menu')
+  if (!trigger) return 'trigger'
+  trigger.props.onClick()
+  const t2 = renderPanel()
+  const menu = walk(t2).find((n) => n.props && n.props.role === 'menu' && n.props['aria-label'] === ariaLabel)
+  if (!menu) return 'menu'
+  const option = walk(menu).find((n) => n.props && n.props.role === 'menuitemradio' && textOf(n) === optionText)
+  if (!option) return 'option:' + optionText
+  option.props.onClick()
+  return 'ok'
+}
+{
+  const step = driveOn('雷霆大字', '开启')
+  if (step !== 'ok') { fail('开启雷霆大字 dropdown could not be driven: ' + step); process.exit(1) }
+}
 pass('通过设置行开启雷霆大字')
 
 /* Turning it on previews the word once, by design. Clear that before measuring
@@ -396,11 +428,11 @@ else fail('a background session announced: ' + shownWord())
        it read at render time with a no-op setter, so reusing one button element
        would re-run the same stale branch and toggle the theme off twice. */
 const clickByLabel = (re, what) => {
-  let t
-  try { t = rendered() } catch (e) { fail(what + ' re-render threw: ' + e.message); return false }
-  const btn = walk(t).filter((n) => n.type === 'button').find((b) => re.test(textOf(b)))
-  if (!btn || typeof btn.props.onClick !== 'function') { fail('no ' + what + ' button rendered'); return false }
-  try { btn.props.onClick() } catch (e) { fail(what + ' click threw: ' + e.message); return false }
+  /* The master switch is a dropdown now: drive its menu to the wanted option
+     (关闭/开启). The regex keeps the original intent readable at the call site. */
+  const optionText = /关闭/.test(what) ? '关闭' : '开启'
+  const step = driveOn('终末地主题', optionText)
+  if (step !== 'ok') { fail(what + ' dropdown could not be driven: ' + step); return false }
   return true
 }
 

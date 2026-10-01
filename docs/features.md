@@ -60,7 +60,7 @@
 
 2026-10 起，面板里**每一个「有值」的行**——配色、动效、玻璃、底纹、圆角、水印及其保持、加载动画、雷霆大字及入场动画、通知主开关与三触发、音频主开关与各槽位、开始音判定、诊断日志——都用同一下拉控件（endfield-select）；开/关语义的行就是「开启/关闭」两个选项。不参与统一的是**动作与读数**行：预览、试听、刷新按钮，音量滑杆，音效目录输入框，音源读出。
 
-控件不是发明的：形制逐条量测自本应用自己的下拉（dsh-client-ui-primitives 的 Menu/MenuSurface 与模型位触发器，量测表见 [design-language.md § 设置面板统一下拉](design-language.md#设置面板统一下拉)）。菜单卡片画在 --dsw-menu-surface-fill 上（主题已映射为不透明纸面），选项行 role=menuitemradio + aria-checked——**选中行的划词灰与模型栏同一规则自动生效**；悬停/聚焦黄淡染、Escape 与点外收起、选中即写值。入场只动 opacity（.15s，reduce 下关闭）。验证：node test/settings-rows.test.js（驱动路径=真实点击）、node check.js 第 5 节（CSS 存在性与令牌）。
+控件不是发明的：形制照抄官网 /operator 页的筛选下拉（官方 Dropdown 组件，量测对照表见 [design-language.md § 设置面板统一下拉](design-language.md#设置面板统一下拉)）——深色铭牌触发器（值 + 官方圆形箭头），卡片里每行只有文字，选中行亮起斜纹灰底与左缘紫/绿信号条（官方的值图块与行图标不做）。菜单卡片画在 --dsw-menu-surface-fill 上（主题已映射为不透明纸面），选项行 role=menuitemradio + aria-checked；Escape 与点外收起、选中即写值。入场只动 opacity + transform（.15s，reduce 下关闭）。验证：node test/settings-rows.test.js（驱动路径=真实点击）、node check.js 第 5 节（官方形制钉值）、node test/palette-contrast.test.js 10b 段（铭牌与选中行对比度）。
 
 ### 终末地主题（总开关）
 

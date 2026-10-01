@@ -179,18 +179,20 @@ DSH 自带 DeepSeek 品牌蓝。主题把这些令牌整组重映射，否则会
 
 ### 设置面板统一下拉
 
-「终末地主题设置」的每一个有值行都用同一下拉（2026-10，用户指定「统一设计」；同月二次核对后按应用真实值逐条校准）。形制不是发明，是量测**本应用自己的下拉**得来的（安装包 lib/*.css 一手取数，两处参考：primitives 的 Menu/MenuSurface 与 model-selection 的模型位菜单）：
+「终末地主题设置」的每一个有值行都用同一下拉（2026-10，用户指定「统一设计」）。初版照**本应用自己的下拉**（primitives 的 Menu/MenuSurface 与模型位菜单）量测实现，提交者自评「不满意」——它只是一个裸文字 + 小箭头，放进终末地主题里没有任何终末地的辨识度。随后仓库所有者指定**官网 /operator 页的筛选下拉**（「干员职业 / 属性」那两个）作为参考，形制改为逐条照抄官方 Dropdown 组件（CSS bundle `3a129342b9ac5e73.css`，一手取数）。官方铭牌右侧的分隔线 + 值图块、菜单行里的职业图标，按所有者要求**不做**——本面板的值本身就是文字，图块只是把文字再画一遍。官方以 rem 计，整体按 **1rem → 8px** 缩放：
 
-| 部位 | 应用原文（量测） | 本主题落点 |
+| 部位 | 官方原文 | 本主题落点 |
 | --- | --- | --- |
-| 菜单卡片 | Menu.module.css 的 .list：padding 4px、top calc(100% + 4px)、min-width 144px、max-width 360px、box-shadow --dsw-elevation-prominent、描边 --dsw-alias-border-l1；MenuSurface 的 .surface 圆角 --dsw-radius-lg | 同尺寸同圆角；右对齐（行控件在右侧，等价 .alignEnd） |
-| 卡片表面 | MenuSurface 的 .material：--dsw-menu-surface-fill（上游默认是 58%/45% 半透明配磨砂；本主题已映射为不透明纸面 #f2f2ec/#1c1e1c） | 同令牌，自动继承主题的菜单面色 |
-| 选项行 | .item：min-height 34px、padding 6px 8px、gap 6px、13px/20px、圆角 --dsw-radius-md、悬停 = focus-visible = --dsw-alias-interactive-bg-hover（fill 即焦点指示）、元素是 button[role=menuitem] | 同尺寸/圆角/令牌，元素同为可聚焦 button（role=menuitemradio） |
-| 选中态 | check 模式：透明底 + 尾随 14px 对勾（IconCheckOutlineRegular，16 viewBox / 1px 描边） | 同结构同路径——选中行由全局「菜单当前项」划词灰规则上色，与模型栏/权限弹层一条规则 |
-| 触发器 | 模型位 _trigger：28px 高、圆角 --dsw-radius-sm、label-secondary、gap 4px、padding 0 4px 0 8px、13px/400/20px、悬停淡染；_chevron：label-caption、transition transform .12s、展开态 rotate(180deg)；composer _select 的山形箭头是 12px / 1.5px 描边数据 URI | 同尺寸末梢：值文字 label-secondary、箭头 label-caption 且展开旋转 180°（箭头路径照抄 composer 的 12px 数据 URI） |
-| 圆角 | 上游 radius-sm/md/lg；本主题直角模式下全局 [class]{border-radius:0!important} 接管 | 三条 radius 明确写出——直角模式被全局规则覆盖，圆角模式则与应用原生菜单一致（不写的话圆角模式下只有本控件保持直角） |
+| 根 | `.Dropdown_root`：width 18.9375rem；disabled → opacity .45 | min-width 152px（= 18.9375 × 8）；更长的值（「完整（官网默认）」）向左长，右缘仍对齐；disabled 同 .45 |
+| 触发器（铭牌） | `.Dropdown_trigger`：4rem 高、padding 0 1.25rem、gap .5rem、radius .25rem、`#3a3a3a` 底、`#fff` 字 | 32px、0 10px、4px、2px（直角模式归零）、同色；悬停取官方暗按钮悬停 `#484848`（官方触发器的悬停只换了一条不存在的边框色） |
+| 圆形箭头 | `.Dropdown_arrow`：`arrow.png`、1.6875rem、margin-left 1rem、opacity .85、transform .2s、展开 rotate(180deg) | 原图字节内嵌（`--edge-dd-arrow`）、14px、同；官方箭头紧跟文字是因为右边还有分隔线与图块，去掉之后箭头靠右收尾 |
+| 卡片 | `.Dropdown_panel`：top 100%、与触发器等宽、padding .25rem 0、radius .25rem、box-shadow 0 0 1.25rem rgba(0,0,0,.25)；入场 opacity + translateY(-.25rem) .15s | 右对齐、至少与触发器等宽（长值向左长，不截断）、2px 0、2px、0 0 10px；入场同款（-2px）。底面仍是 `--dsw-menu-surface-fill`——暗色下不弹一块纯白 |
+| 选项行 | `.Dropdown_option`：4.5rem 高、padding-left 2.5rem、文字居中、hover rgba(0,0,0,.06)；图标 2rem 在 left 5.375rem | 36px、20px、居中、同色（暗色取白 .06）；不画图标 |
+| 选中行 | `.Dropdown_bg`：`#8f8f8f` + -45° 斜纹 `#8b8b8b`、.75rem 周期、opacity 0→1（.2s）；`::before` 左缘 .25rem 紫 `#ff00f0` / 绿 `#00ffa2` 各半；文字 `#fff` | 斜纹几何（11.74/38.26/61.74/88.26% 停靠）与周期比例照抄（6px）；底色压到 `#6a6a6a`、纹 `#666666`——官方白字在 `#8f8f8f` 上只有 3.2:1，`#6a6a6a` 是本主题的暗色划词灰，白字 5.4:1；左缘 2px 同色 |
 
-行为同样照应用菜单：Escape 与点击面板外收起（监听器开时挂、收时摘，target.closest 对自己的根判定）；选中即写值并收起；重复点选当前项不写（与原生 select 的 change 语义一致）。**入场动画只动 opacity**（.15s；perf-motion 的静态守卫扫到本段，允许清单不变），prefers-reduced-motion 下关闭菜单动画与箭头过渡（保留 180° 的状态翻转本身）。主题关闭时样式表卸载，触发器退回应用令牌的内联兜底（与 btnStyleFor 的 !themed 分支同策略），settings-off 的按钮对比度探针因此继续成立。
+颜色全部是**固定值**，不随调色板也不随亮暗：官网这里就是一块固定的深色铭牌；强调色只留给焦点环（全局规则）。对比度实测见 `test/palette-contrast.test.js` 10b 段（铭牌白字 11.4:1、悬停 9.2:1、选中行 5.4/5.7:1；铭牌对纸面 ≥ 9:1）。选中底是**预建几何、只切 opacity**（官方也是这么做的）：每一行都带那层斜纹 span，选中与否只差 opacity。全局「菜单当前项」划词灰规则对本控件开洞（`:not(.endfield-select-option)`），否则它的 `!important` 会把斜纹层刷成平灰。
+
+行为照应用菜单：Escape 与点击面板外收起（监听器开时挂、收时摘，target.closest 对自己的根判定）；选中即写值并收起；重复点选当前项不写（与原生 select 的 change 语义一致）。入场动画只动 opacity + transform（perf-motion 的静态守卫扫到本段，允许清单不变），prefers-reduced-motion 下关闭菜单动画与所有过渡（保留 180° 的状态翻转本身）。主题关闭时样式表卸载、铭牌与圆形箭头图无从显示，触发器退回「值 + 山形箭头」并用应用令牌内联兜底（与 btnStyleFor 的 !themed 分支同策略），settings-off 的按钮对比度探针因此继续成立。形制由 `check.js` 第 5 节钉住（铭牌色、圆形箭头图、斜纹选中层、紫绿信号条、开洞）。
 
 已知边界：菜单在行内绝对定位（不 portal）。设置页的行不裁剪溢出，正常显示，且 absolute 让菜单随页面滚动跟随触发器；若日后某个宿主把设置页放进 overflow 容器，需要把菜单 portal 到 body（应用自己的菜单正是为此 portal + fixed 的）。
 

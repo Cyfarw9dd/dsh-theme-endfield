@@ -314,17 +314,14 @@ if (src.includes("turnStatus")) {
   else fail('turn-status rules found but no background-image gradient — a plain color: cannot recolour gradient text')
 }
 
-console.log('')
-if (failures) {
-  console.error(`${failures} check(s) failed`)
-  process.exit(1)
-}
-
 /* --- 5. the settings panel's unified dropdown must exist as CSS, not just JS ---
    The panel builds .endfield-select elements in React; if the stylesheet rules
    were dropped (or renamed on one side only), the control renders unstyled in
    every row and only a screenshot would notice. The menu must draw on the app's
-   own menu-surface token, and the open animation may only touch opacity. */
+   own menu-surface token, the open animation may only touch opacity/transform,
+   and the shape is pinned to the official filter dropdown. This section runs
+   BEFORE the exit below — it used to sit after it, so its failures were printed
+   and then ignored (exit 0, "all checks passed"). */
 {
   /* Re-derive the comment-stripped stylesheet: section 5 runs at top level,
      outside the scope that owns the section-1 local. */
@@ -345,26 +342,41 @@ if (failures) {
     fail('endfield-select-menu must use var(--dsw-menu-surface-fill) — any other surface breaks the unified look')
   }
   const kf = /@keyframes\s+endfield-select-in\s*\{([\s\S]*?)\}\s*\}/.exec(s2)
-  if (kf && !/transform|width|top|left|right|bottom|margin|padding/.test(kf[1])) {
-    pass('endfield-select-in keyframes only animate opacity')
+  if (kf && !/width|height|top|left|right|bottom|margin|padding|inset/.test(kf[1])) {
+    pass('endfield-select-in keyframes only animate opacity/transform')
   } else {
-    fail('endfield-select-in must only animate opacity (compositor-only, per docs/design-principles.md)')
+    fail('endfield-select-in must only animate opacity/transform (compositor-only, per docs/design-principles.md)')
   }
-  /* 2026-10 二次核对把这几条量测值钉死：它们全部来自应用自己的下拉
-     （Menu/MenuSurface 与 model-selection 的模型位），改动它们等于把控件
-     从页面的统一语言里拉出来。 */
-  const triggerRule = /\.endfield-select-trigger\s*\{([^}]*)\}/.exec(s2.replace(/\n\s*/g, ' '))
+  /* 形制钉在官网 /operator 筛选下拉（官方 Dropdown 组件）上：铭牌色、圆形
+     箭头、斜纹选中底与紫/绿信号条都是官方 CSS 原值。改动它们等于
+     把控件从参考里拉出来——要改先改 docs/design-language.md 的对照表。 */
+  const flat = s2.replace(/\n\s*/g, ' ')
+  const ruleOf = (sel) => {
+    const m = new RegExp(sel.replace(/[.[\]'()]/g, (c) => '\\' + c) + '\\s*\\{([^}]*)\\}').exec(flat)
+    return m ? m[1] : ''
+  }
+  const trig = ruleOf('.endfield-select-trigger')
+  const optBg = ruleOf('.endfield-select-option-bg')
   const shapeChecks = [
-    [triggerRule && /border-radius:\s*var\(--dsw-radius-sm\)/.test(triggerRule[1]), 'trigger 圆角 = --dsw-radius-sm（应用 _trigger 同值）'],
-    [triggerRule && /color:\s*var\(--dsw-alias-label-secondary\)/.test(triggerRule[1]), 'trigger 文字 = --dsw-alias-label-secondary（应用 _trigger 同色）'],
-    [/\.endfield-select\.is-open\s+\.endfield-select-trigger\s+svg\s*\{[^}]*rotate\(180deg\)/.test(s2.replace(/\n\s*/g, ' ')), '展开时山形箭头 rotate(180deg)（应用 _chevronOpen 同款）'],
-    [/\.endfield-select-menu\s*\{[^}]*border-radius:\s*var\(--dsw-radius-lg\)/.test(s2.replace(/\n\s*/g, ' ')), '菜单卡片圆角 = --dsw-radius-lg（MenuSurface .surface 同值）'],
-    [/\.endfield-select-option\s*\{[^}]*border-radius:\s*var\(--dsw-radius-md\)/.test(s2.replace(/\n\s*/g, ' ')), '选项行圆角 = --dsw-radius-md（Menu .item 同值）'],
+    [/background-color:\s*#3a3a3a/.test(trig) && /color:\s*#ffffff/.test(trig), '铭牌 = 官方 #3a3a3a 底 + 白字'],
+    [/background:\s*var\(--edge-dd-arrow\)/.test(ruleOf('.endfield-select-arrow')), '圆形箭头 = 内嵌的官方 arrow.png（--edge-dd-arrow）'],
+    [/rotate\(180deg\)/.test(ruleOf('.endfield-select.is-open .endfield-select-arrow')), '展开时箭头 rotate(180deg)（官方 .Dropdown_open 同款）'],
+    [/opacity:\s*0/.test(optBg) && /linear-gradient\(-45deg/.test(optBg)
+      && /opacity:\s*1/.test(ruleOf(".endfield-select-option[aria-checked='true'] .endfield-select-option-bg")),
+      '选中底 = 预建斜纹层，只切 opacity（不创造几何）'],
+    [/#ff00f0 0, #ff00f0 50%, #00ffa2 0/.test(ruleOf('.endfield-select-option-bg::before')), '选中行左缘 = 官方紫 #ff00f0 / 绿 #00ffa2 各半'],
+    [/\[role='menuitemradio'\]\[aria-checked='true'\]:not\(\.endfield-select-option\)\s*,/.test(flat), '全局「菜单当前项」划词灰规则对本控件开洞（否则 !important 盖掉斜纹）'],
     [src.includes("R.createElement('button', {\n              key: o.value, type: 'button', role: 'menuitemradio'"), '选项是 button[role=menuitemradio]（可聚焦，同应用菜单元素）'],
   ]
   for (const [ok, what] of shapeChecks) {
     if (ok) pass('统一下拉形制 · ' + what)
     else fail('统一下拉形制丢失：' + what)
   }
+}
+
+console.log('')
+if (failures) {
+  console.error(`${failures} check(s) failed`)
+  process.exit(1)
 }
 console.log('all checks passed')

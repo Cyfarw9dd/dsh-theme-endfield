@@ -377,10 +377,11 @@ for (const [name, block] of Object.entries(palettes)) {
   for (const [needle, name] of hooks) {
     /* The explanatory COMMENT names these selectors verbatim, so indexOf alone
        would read the comment. Walk every occurrence and take the one that is a
-       RULE: followed by a declaration block within 300 chars. */
+       RULE: followed by a declaration block within 600 chars (the model-menu
+       selector list carries the settings-dropdown :not() carve-out). */
     let i = -1, body = ''
     for (let at = src.indexOf(needle); at >= 0; at = src.indexOf(needle, at + 1)) {
-      const candidate = src.slice(at, at + 400)
+      const candidate = src.slice(at, at + 600)
       if (candidate.includes('background-color')) { i = at; body = candidate; break }
     }
     if (i < 0) { fail('划词灰 · ' + name + ' 的规则不在样式表里'); continue }
@@ -408,6 +409,59 @@ for (const [name, block] of Object.entries(palettes)) {
     pass('划词灰 · 暗色「选中行反转」规则已为两处菜单面开洞（不会盖回强调黄）')
   } else {
     fail('划词灰 · 暗色反转规则未开洞，暗色下两处菜单仍会被涂成强调黄')
+  }
+}
+
+/* ---------- 10b. settings dropdown: the official filter-dropdown plate ----------
+   The control copies the official /operator Dropdown: a FIXED dark plate with
+   white text, and a hatched gray selected row with white text — the same in
+   both schemes and every palette. The official selected gray #8f8f8f only gives
+   white text ~3.2:1, so the row was lowered to this theme's dark selection gray;
+   these lines prove every text/fill pair the control paints clears AA, reading
+   the values out of the real rules. */
+{
+  const flat = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*/g, ' ')
+  const ruleOf = (sel) => {
+    const m = new RegExp(sel.replace(/[.[\]'()]/g, (c) => '\\' + c) + '\\s*\\{([^}]*)\\}').exec(flat)
+    return m ? m[1] : null
+  }
+  const decl = (body, prop) => {
+    if (body === null) return null
+    const m = new RegExp('(?:^|;)\\s*' + prop + ':\\s*(#[0-9a-f]{6})\\s*(?:;|$)', 'i').exec(body)
+    return m ? m[1] : null
+  }
+  const trig = ruleOf('.endfield-select-trigger')
+  const hover = ruleOf('.endfield-select-trigger:hover:not(:disabled)')
+  const optBg = ruleOf('.endfield-select-option-bg')
+  const selected = ruleOf(".endfield-select-option[aria-checked='true']")
+  /* the hatch stripe colour: the stop written as "<c> 0, <c> <pos>%" */
+  const stripe = optBg === null ? null : ((/(#[0-9a-f]{6}) 0, \1 [\d.]+%/i.exec(optBg) || [])[1] || null)
+  const pairs = [
+    ['铭牌白字 / 铭牌底', decl(trig, 'color'), decl(trig, 'background-color')],
+    ['铭牌白字 / 悬停底', decl(trig, 'color'), decl(hover, 'background-color')],
+    ['选中行白字 / 斜纹底色', decl(selected, 'color'), decl(optBg, 'background-color')],
+    ['选中行白字 / 斜纹线色', decl(selected, 'color'), stripe],
+  ]
+  for (const [name, fg, bg] of pairs) {
+    if (fg === null || bg === null) { fail('设置下拉 · ' + name + '：规则里读不到色值'); continue }
+    const r = ratio(hex(fg), hex(bg))
+    if (r >= 4.5) pass('设置下拉 · ' + name + '：' + fg + ' on ' + bg + ' = ' + r.toFixed(2) + ':1 (AA)')
+    else fail('设置下拉 · ' + name + ' is only ' + r.toFixed(2) + ':1 (' + fg + ' on ' + bg + ')')
+  }
+  /* The plate is the control's boundary, so on paper it must clear the 3:1
+     non-text floor against both surfaces it sits on. On near-black the plate is
+     the LIGHTER shape and the white value text carries the affordance; it only
+     has to read as a distinct plate there (>= 1.5:1). */
+  const plate = decl(trig, 'background-color')
+  if (plate === null) fail('设置下拉 · 铭牌底色读不到')
+  else {
+    for (const [scheme, bgs, floor] of [['亮色', LIGHT_BGS, 3], ['暗色', DARK_BGS, 1.5]]) {
+      for (const [bgName, bg] of Object.entries(bgs)) {
+        const r = ratio(hex(plate), bg)
+        if (r >= floor) pass('设置下拉 · 铭牌对' + scheme + ' ' + bgName + '：' + r.toFixed(2) + ':1 (>= ' + floor + ')')
+        else fail('设置下拉 · 铭牌在' + scheme + ' ' + bgName + ' 上读不出来：' + r.toFixed(2) + ':1')
+      }
+    }
   }
 }
 

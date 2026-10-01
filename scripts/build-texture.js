@@ -1,7 +1,7 @@
 'use strict'
 /**
- * scripts/build-texture.js — embed the official /operator background assets into
- * client.js as data URIs.
+ * scripts/build-texture.js — embed the official /operator background assets (and
+ * the round arrow of its filter dropdown) into client.js as data URIs.
  *
  * SOURCE OF THE ASSETS (provenance, do not lose):
  *   All three are the official Arknights: Endfield site's own page backgrounds,
@@ -16,6 +16,15 @@
  *   official filenames: block-bg.f05eda37.svg, wave-bg.8955885a.png,
  *                       tape-wave-bg.2bce9fc0.png
  *
+ *   Same CDN, same route, the /operator page's filter dropdown (official
+ *   Dropdown component, CSS bundle 3a129342b9ac5e73.css), downloaded 2026-10-01:
+ *
+ *     endfield-dropdown-arrow.png  34b1690c75f0da184f93a8af0bd60144c842036918157ca0cf8fe4bd79cd1db2
+ *
+ *   official filename: arrow.592963ed.png (the round chevron of .Dropdown_arrow)
+ *   Taken because the repository owner pointed at that dropdown as THE
+ *   reference for the settings panel's control (2026-10).
+ *
  *   The local download-source policy defaults to official channels only; these
  *   ARE official (the game's own site, its own CDN hosts no third-party code),
  *   and taking them was explicitly instructed by the repository owner
@@ -26,7 +35,8 @@
  * emblem uses so the two pipelines stay one shape. The two PNGs are embedded
  * BYTE-FOR-BYTE (no re-encoding, no quantization, no downscaling) — the point of
  * "沿用官方" is that what ships is exactly what the site ships, not a
- * re-compression of it. Sizes: 17,084 B and 37,025 B -> ~72KB base64 total.
+ * re-compression of it. Sizes: 17,084 B and 37,025 B -> ~72KB base64 total; the
+ * dropdown arrow adds 874 B.
  *
  * Markers, same splice contract as build-emblem.js:
  *   node scripts/build-texture.js          # rewrite the marked region in client.js
@@ -65,6 +75,13 @@ const ASSETS = [
     prop: '--edge-tex-tape',
     kind: 'png',
     note: '946x216 wave band, used as the centre strip',
+  },
+  {
+    file: 'endfield-dropdown-arrow.png',
+    sha256: '34b1690c75f0da184f93a8af0bd60144c842036918157ca0cf8fe4bd79cd1db2',
+    prop: '--edge-dd-arrow',
+    kind: 'png',
+    note: '97x96 round chevron of the official filter dropdown',
   },
 ]
 

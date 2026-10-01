@@ -2881,15 +2881,21 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          变化）。挂到根上，叠加层才在「根底色之上、正文之下」。isolation 建层叠
          上下文，保证 -1 伪元素不落到根自己背景的后面。侧栏与外框不挂纹理。
 
-         **hero 阶段例外（:not([data-phase='hero'])）**：hero 时水印挂在 body 上，
-         与 composerHero（z:1，包着 z:20 的下拉框）在同一个层叠上下文里比大小。
-         此时把根隔离会让整个根子树（含下拉框）变成一个 z:auto 单元，被 body 级
-         水印按 DOM 顺序压过——这正是水印自己修过的那类 bug（见
-         test/watermark-stacking.test.js 头注）。所以 hero 下不隔离，网格/斜纹
-         两个叠加层随之不可见（落在根底色后面）；波纹/光晕是元素的背景图层，
-         不建层叠上下文、hero 下照常安全。 */
-      body[data-endfield-texture='subtle'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero']),
-      body[data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero']) {
+         **选择器不要求直接子级**：会话 UI 经插槽挂载，centerCol 与 root 之间
+         可能有包装层（应用的 ui-slots 会包无类名 div），用 '>' 会整段静默失配
+         ——用户实测「看不到底纹」的根因之一。改用**后代 + [data-phase]**：
+         data-phase 只出现在 ConversationRoot 上（水印查找器 findConversationRoot
+         用的正是这个钩子），比标签后缀更精确。
+
+         **水印共存例外（:not(:has(> [data-endfield-watermark]))）**：水印挂 body
+         时（hero 页），隔离根会让整个根子树（含 z:20 的下拉框）变成一个
+         z:auto 单元，被 body 级水印按 DOM 顺序压过——水印自己修过的那类 bug
+         （见 test/watermark-stacking.test.js 头注）。所以**只在 body 直接挂着
+         水印时**不隔离；此时网格/斜纹两个叠加层随之不可见（落在根底色后面），
+         波纹/光晕是背景图层、不受影响。水印关闭或在会话内（挂根上）时，
+         hero 页也有完整底纹。这是水印 :has 条件隔离同一门派的用法。 */
+      body[data-endfield-texture='subtle']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase],
+      body[data-endfield-texture='standard']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase] {
         position: relative;
         isolation: isolate;
       }
@@ -2897,8 +2903,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* 网格：官方 decoFlag 的复刻。**颜色渐变自己带着那条 180° 淡出**（上半实、
          往下渐透明），SVG 遮罩只负责形状——两层职责分开，就不用碰多遮罩的合成
          语义（mask 列表默认 add=并集，并出来的结果是整面色块，实测过）。 */
-      body[data-endfield-texture='subtle'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero'])::before,
-      body[data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero'])::before {
+      body[data-endfield-texture='subtle']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase]::before,
+      body[data-endfield-texture='standard']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase]::before {
         content: '';
         position: absolute;
         inset: 0;
@@ -2917,8 +2923,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
       /* 斜纹：官方 shallowBg 的复刻——**底部一条带**（32.8125rem 高，窄视口收到
          45%），单一遮罩做 0° 淡出（底边最实、往上渐透明），纹路周期与停靠值照官方。 */
-      body[data-endfield-texture='subtle'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero'])::after,
-      body[data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root']:not([data-phase='hero'])::after {
+      body[data-endfield-texture='subtle']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase]::after,
+      body[data-endfield-texture='standard']:not(:has(> [data-endfield-watermark])) [class$='_centerCol'] [class$='_root'][data-phase]::after {
         content: '';
         position: absolute;
         left: 0;
@@ -2944,7 +2950,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* standard 档：再叠官方两级波纹与顶部光晕——作为列的背景图层，天然画在
          全部内容之下。波纹钉右上角；波纹带照官方放在中下部，no-repeat、超宽部分
          由列右缘裁掉（官方那条左缘渐隐的 mask 在这里由裁边代替）。 */
-      body[data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root'] {
+      body[data-endfield-texture='standard'] [class$='_centerCol'] [class$='_root'][data-phase] {
         background-image:
           var(--edge-tex-wave),
           /* 波纹带的顶边渐隐：官方给 decoTape 挂的是左缘 90 度 mask（宽列里从右侧
@@ -2968,7 +2974,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           50% 0;
         background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
       }
-      body[data-ds-dark-theme][data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root'] {
+      body[data-ds-dark-theme][data-endfield-texture='standard'] [class$='_centerCol'] [class$='_root'][data-phase] {
         background-image:
           var(--edge-tex-wave),
           linear-gradient(180deg, var(--dsw-alias-bg-base, #101110) 0, transparent 3.5rem),
@@ -3001,11 +3007,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          注意伪元素：列上的 background-image:none 只清背景图层，两个叠加层
          （::before 网格 / ::after 斜纹）必须各自 display:none。 */
       @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-        body[data-endfield-texture] [class$='_centerCol'] > [class$='_root'] {
+        body[data-endfield-texture] [class$='_centerCol'] [class$='_root'][data-phase] {
           background-image: none !important;
         }
-        body[data-endfield-texture] [class$='_centerCol'] > [class$='_root']::before,
-        body[data-endfield-texture] [class$='_centerCol'] > [class$='_root']::after {
+        body[data-endfield-texture] [class$='_centerCol'] [class$='_root'][data-phase]::before,
+        body[data-endfield-texture] [class$='_centerCol'] [class$='_root'][data-phase]::after {
           display: none !important;
         }
         .endfield-settings .endfield-settings-group-title:has(> span)::after {

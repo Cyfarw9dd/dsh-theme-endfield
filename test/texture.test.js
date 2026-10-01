@@ -70,8 +70,8 @@ const varIn = (block, name) => {
    the attribute's PRESENCE, and a stale 'off' value then painted the texture
    anyway (measured). The overlays are therefore gated on explicit values, and
    this assertion pins that: 'subtle' must name the overlay by value. */
-if (/body\[data-endfield-texture='subtle'\] \[class\$='_centerCol'\] > \[class\$='_root'\]:not\(\[data-phase='hero'\]\)::before/.test(src)) {
-  pass('subtle 档按值命中叠加层（网格 + 斜纹，无背景图层；残留 off 值不会画）')
+if (/body\[data-endfield-texture='subtle'\]:not\(:has\(> \[data-endfield-watermark\]\)\) \[class\$='_centerCol'\] \[class\$='_root'\]\[data-phase\]::before/.test(src)) {
+  pass('叠加层按值命中会话根（后代匹配，容忍插槽包装层；水印挂 body 时让位）')
 } else {
   fail('叠加层没有按值匹配——属性残留 off 时纹理仍会画（按存在匹配的老写法）')
 }

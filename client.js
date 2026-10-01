@@ -2945,18 +2945,24 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
          prefers-reduced-motion：A–F 的位移动画全部关掉，保留颜色过渡，见本节末尾。 */
 
-      /* ---------- 共通（signal + silent + impact）：全局颜色过渡 ---------- */
+      /* ---------- 共通（六套方案）：全局颜色过渡 ----------
+         只过渡「颜色类」属性。两个实测/证词都指向同一条：过渡属性越少越省。
+         · box-shadow / filter / width 在悬停按下时是**一次性**变化，本来不需要
+           过渡，写进 transition 只会让每次悬停多跑一遍栅格化或重排；
+         · border-radius 尤其贵——浏览器把它当「可触发重排」的属性处理，在长列表
+           上悬停会造成整屏布局失效（实测：把 border-radius 留在通用过渡里，
+           300 行扫描的 LayoutDuration 从 0 涨到 20ms/s）。所以它只在方案 A
+           这一条规则里单独过渡，不进通用规则。 */
       body[data-endfield-motion] button,
       body[data-endfield-motion] [role='button'],
       body[data-endfield-motion] [role='tab'],
       body[data-endfield-motion] [role='menuitem'],
       body[data-endfield-motion] [role='option'],
       body[data-endfield-motion] a {
-        transition: background-color .2s ease, color .2s ease, border-color .2s ease,
-          box-shadow .2s ease;
+        transition: background-color .2s ease, color .2s ease, border-color .2s ease;
       }
 
-      /* ---------- 共通（signal + silent + impact）：:active 按下暗一档 ---------- */
+      /* ---------- 共通（六套方案）：:active 按下暗一档 ---------- */
       body[data-endfield-motion] button:active:not(:disabled),
       body[data-endfield-motion] [role='button']:active:not(:disabled) {
         filter: brightness(.85);
@@ -3124,7 +3130,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-color: var(--edge-accent-onpaper, var(--edge-accent));
         -webkit-mask-repeat: no-repeat;
         mask-repeat: no-repeat;
-        animation: endfield-clamp-in .18s cubic-bezier(.16, 1, .3, 1) 1 both;
+        /* 入场只淡入，不缩放：opacity 与 transform 都在合成器上，但「只动 opacity」
+           让浏览器可以只做一次栅格化，之后每帧只合成——这是全站最省的一档动效，
+           官网 7 个关键帧也是这个写法。角标本就是细几何，缩放带来的观感收益
+           不值得多付一份逐帧重绘的代价。 */
+        animation: endfield-clamp-in .18s ease 1 both;
       }
       body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
       body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
@@ -3149,8 +3159,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
       }
       @keyframes endfield-clamp-in {
-        from { opacity: 0; transform: scale(.3); }
-        to { opacity: 1; transform: scale(1); }
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
       body[data-endfield-motion='clamp'] button,
       body[data-endfield-motion='clamp'] [role='button'],
@@ -3210,7 +3220,10 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
 
       /* E-2. 主 CTA：底部读数条 6% → 100%，按下瞬间炸成满条亮色。
-         读数条走 --edge-accent（实心信号），不是 onpaper 深一档的版本。 */
+         用 scaleX 而不是 width——官网自己的黄条揭示就是
+         transform-origin:left + scaleX(0→1)，并明确不写 width：
+         合成器能直接对已栅格化的图层做横向拉伸，width 则每帧都要重排重绘。
+         元素本身按 100% 宽静态存在（只栅格化一次），初始视觉宽度由 scaleX(.06) 给出。 */
       body[data-endfield-motion='meter'] [class$='_newSession'] {
         position: relative;
       }
@@ -3219,18 +3232,20 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         position: absolute;
         left: 0;
         bottom: 0;
+        width: 100%;
         height: 3px;
-        width: 6%;
         background-color: var(--edge-accent, currentColor);
-        transition: width .22s cubic-bezier(.16, 1, .3, 1), background-color .12s linear;
+        transform-origin: left center;
+        transform: scaleX(.06);
+        transition: transform .22s cubic-bezier(.16, 1, .3, 1), background-color .12s linear;
         pointer-events: none;
       }
       body[data-endfield-motion='meter'] [class$='_newSession']:hover:not(:disabled)::after,
       body[data-endfield-motion='meter'] [class$='_newSession']:focus-visible:not(:disabled)::after {
-        width: 100%;
+        transform: scaleX(1);
       }
       body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled)::after {
-        width: 100%;
+        transform: scaleX(1);
         background-color: var(--edge-accent-onpaper, var(--edge-accent));
       }
       body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled),
@@ -3238,26 +3253,32 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
 
-      /* E-3. 列表行 / 菜单项：悬停时文字前出现方括号（纯 ::before，无位移） */
-      body[data-endfield-motion='meter'] [role='menuitem']:hover,
-      body[data-endfield-motion='meter'] [role='option']:hover {
+      /* E-3. 列表行 / 菜单项：悬停时左缘出现信号色细条（淡入）。
+         细条走纯 background-image 的既存渐变，画在 ::before 里。两个避免点：
+         早先用 content:'[' / ']' 生成方括号，会让浏览器在悬停时**生成文本节点**
+         （文字布局）；早先把缩进做成 padding-left 过渡，则让悬停**触发行重排**。
+         现在行内边距是静态值，细条落在既有内边距里，悬停只引起一次重绘。 */
+      body[data-endfield-motion='meter'] [role='menuitem'],
+      body[data-endfield-motion='meter'] [role='option'] {
         position: relative;
+      }
+      body[data-endfield-motion='meter'] [role='menuitem']::before,
+      body[data-endfield-motion='meter'] [role='option']::before {
+        content: '';
+        position: absolute;
+        left: 3px;
+        top: 50%;
+        width: 2px;
+        height: 60%;
+        background-image: linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent)));
+        transform: translateY(-50%);
+        opacity: 0;
+        transition: opacity .18s ease;
+        pointer-events: none;
       }
       body[data-endfield-motion='meter'] [role='menuitem']:hover::before,
       body[data-endfield-motion='meter'] [role='option']:hover::before {
-        content: '[';
-        position: absolute;
-        left: 4px;
-        color: var(--edge-accent-onpaper, var(--edge-accent));
-        pointer-events: none;
-      }
-      body[data-endfield-motion='meter'] [role='menuitem']:hover::after,
-      body[data-endfield-motion='meter'] [role='option']:hover::after {
-        content: ']';
-        position: absolute;
-        right: 4px;
-        color: var(--edge-accent-onpaper, var(--edge-accent));
-        pointer-events: none;
+        opacity: 1;
       }
 
       /* ================= 方案F stamp：冲压盖章（落印母题） ================= */
@@ -3333,10 +3354,12 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           transition: none !important;
           transform: none !important;
         }
-        /* No sliding bar, no appearing brackets: the reveal is the motion. */
+        /* No sliding bar, no appearing brackets: the reveal IS the motion.
+           The shared transform:none rule above already returns the readout bar to
+           its 6% scale; this keeps its colour meaning static too. */
         body[data-endfield-motion='meter'] [class$='_newSession']::after {
           transition: none !important;
-          width: 100% !important;
+          transform: scaleX(.06) !important;
           background-color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
         }
         body[data-endfield-motion='clamp'] button:hover::after,
@@ -3345,9 +3368,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         body[data-endfield-motion='clamp'] [role='option']:hover::after,
         body[data-endfield-motion='meter'] [class$='_iconButton']:hover::before,
         body[data-endfield-motion='meter'] [role='menuitem']:hover::before,
-        body[data-endfield-motion='meter'] [role='menuitem']:hover::after,
-        body[data-endfield-motion='meter'] [role='option']:hover::before,
-        body[data-endfield-motion='meter'] [role='option']:hover::after {
+        body[data-endfield-motion='meter'] [role='option']:hover::before {
           content: none !important;
         }
       }

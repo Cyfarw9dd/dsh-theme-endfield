@@ -91,7 +91,8 @@ node test/verify-shots.js            # 解码四张截图统计强调色像素
 ## 按钮动效
 
 ```bash
-node test/motion-check.js            # 真实浏览器 + 真实指针，验证 D/E/F 三套动效（22 项）
+node test/motion-check.js            # 真实浏览器 + 真实指针，验证 D/E/F 三套动效（24 项）
+node test/perf-motion.test.js        # 量「流畅」：静态守卫 + layout/帧间隔/主线程 + 停留不做事
 ```
 
 **`motion-check.js`** 把 `client.js` 里那一整条 `insertCss()` 模板字符串抽出来注入一张夹具页，再用 DevTools 协议的 `Input.dispatchMouseEvent` **真的把鼠标移到按钮上并按下**，然后读计算样式、必要时**解码截图数像素**。它守的是「选择器写了但没生效」这一类静默失败：
@@ -102,6 +103,16 @@ node test/motion-check.js            # 真实浏览器 + 真实指针，验证 D
 - 反面对照：`off` 必须什么都不剩（但共通的 `:active` 暗一档要在），`prefers-reduced-motion: reduce` 必须关掉位移/动画/揭示而**保留颜色反馈**——读数条在减效下降到满格（信息照给，滑动取消）。
 
 夹具里那一条对上游的假设（目标按钮带 `position: relative`）写在文件顶部注释里；上游若改掉，测试会红，而不是假装通过。
+
+**`perf-motion.test.js`** 回答另一个问题：这些动效**花掉多少**。它的方法是**同一次运行里的 A/B**——指针按同样的坐标、同样的节奏扫过 300 行 + 120 个按钮，唯一变量是 `<body>` 上的 `data-endfield-motion`，所以 `silent` 是同一轮里测得的地板。断言分四层：
+
+1. **静态守卫**（无需浏览器，秒级）：动效段只许过渡/关键帧 `transform`、`opacity` 与颜色；出现 `width`/`padding`/`box-shadow`/`filter`/`clip-path` 直接红。还断言没有常态 `will-change`。
+2. **layout 预算**：`LayoutDuration ≤ 16ms/s`。这个数字是量出来的上限而不是零——悬停时才生成的伪元素本身会带来 8–15ms/s。
+3. **帧间隔**：页面内 `requestAnimationFrame` 采样的 p95 ≤40ms、>32ms 帧占比 ≤5%。这才是「看起来顺不顺」的判据。
+4. **task 预算**：主线程 ≤250ms/s（≈每帧 ≤4ms）。**刻意用绝对值而不是「静默基线的 N 倍」**：silent 几乎什么都不做，一个每帧只花 0.15ms 的方案会被读成「基线的 6 倍」，比例在这里是误导。
+5. **停留不做事**：指针停在按钮上 1.6s，layout 必须 ≤4ms/s——代价只许发生在指针**移动**时。
+
+脚本会把整张测量表打印出来（layout / recalc / task / 帧 p50·p95·max / >32ms 占比），并在结尾跑第二次 `silent` 检查基线漂移；漂移 >50% 会明说本轮数字不可靠。
 
 ---
 

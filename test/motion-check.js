@@ -428,12 +428,22 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     const restE = await styleOf('newSession', '::after')
     await hover('newSession')
     const hovE = await styleOf('newSession', '::after')
-    const w = (s) => parseFloat(s.width)
-    if (w(restE) > 0 && w(restE) < 20 && w(hovE) > w(restE) * 10) {
-      pass('E meter · 读数条 6% → 100%  [' + restE.width + ' → ' + hovE.width + ']')
-    } else {
-      fail('E meter · 读数条应大幅展开  [' + restE.width + ' → ' + hovE.width + ']')
+    /* The bar is 100% wide at rest and SCALED to 6%: scaleX is compositor work,
+       width would re-layout every frame (the official site's own wipe does the
+       same thing — docs/notes/endfield-motion-research.md §5.1b). So the assertion
+       moved from width to transform, and width must stay full. */
+    const scaleX = (t) => {
+      const m = /matrix\(([-\d.]+)/.exec(String(t))
+      return m ? parseFloat(m[1]) : (String(t) === 'none' ? 1 : NaN)
     }
+    const w = (s) => parseFloat(s.width)
+    if (w(restE) > 100 && Math.abs(scaleX(restE.transform) - 0.06) < 0.01 && scaleX(hovE.transform) > 0.99) {
+      pass('E meter · 读数条 scaleX .06 → 1（宽度恒定 100%，不重排）  [' + restE.transform + ' → ' + hovE.transform + ']')
+    } else {
+      fail('E meter · 读数条应 scaleX .06 → 1 且宽度恒定  [w=' + restE.width + ' ' + restE.transform + ' → ' + hovE.transform + ']')
+    }
+    if (w(hovE) === w(restE)) pass('E meter · 展开前后元素宽度不变（证明没有动 width）  [' + w(restE) + 'px]')
+    else fail('E meter · 读数条宽度被改变了，说明仍在动 width  [' + w(restE) + ' → ' + w(hovE) + ']')
     const imgE = await shoot()
     const bNs = JSON.parse(await evaluate('JSON.stringify(window.__rect__("newSession"))'))
     const pxE = countNear(imgE, { x: bNs.x + bNs.w * 0.5, y: bNs.y + bNs.h - 5, w: bNs.w * 0.45, h: 5 }, '#fff500', 60)
@@ -449,6 +459,19 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     } else {
       fail('E meter · 准星刻度应为 8 层渐变  [' + layers + ' layers, bg=' + String(tickE.backgroundImage).slice(0, 60) + ']')
     }
+    /* E-3 used to be `content:'['` text nodes, which forces a text layout on
+       hover; it is now a pre-painted 2px rule toggled by opacity. */
+    const restRow = await styleOf('menuitem', '::before')
+    await hover('menuitem')
+    const hovRow = await styleOf('menuitem', '::before')
+    if (restRow.content !== 'none' && restRow.content !== '' && restRow.opacity === '0'
+      && hovRow.opacity === '1' && restRow.content !== "'['" && restRow.content !== '"["') {
+      pass('E meter · 菜单行指示条常态存在、悬停只切 opacity  [' + restRow.content + ' ' + restRow.opacity + ' → ' + hovRow.opacity + ']')
+    } else {
+      fail('E meter · 菜单行指示条应为常态存在 + opacity 切换  [content=' + restRow.content + ' opacity=' + restRow.opacity + ' → ' + hovRow.opacity + ']')
+    }
+    await park()
+
     const hold = await press('iconButton', { release: false })
     const pressE = await styleOf('iconButton')
     if (/matrix\(0\.92/.test(pressE.transform) || parseFloat(pressE.transform.split(',')[0].replace('matrix(', '')) < 0.95) {
@@ -550,13 +573,29 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     await cdp.call('Emulation.setEmulatedMedia', { features: [] })
 
     /* The meter readout bar is the other half of "no motion": sliding it from 6%
-       to 100% is motion even without a transform. Under reduce it must be pinned
-       at its full width, which is the information the bar carries anyway. */
+       to 100% is motion even with a compositor-only transform. Under reduce it must
+       stay at its 6% rest scale. */
+    /* Re-assert the emulated media: the probe above reads a media-sensitive rule,
+       and a silent re-navigation or a fresh document (the page reloads the fixture
+       between sections in some renderer builds) drops the override. Assert it is
+       actually in effect before judging the rule it gates. */
+    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    await sleep(120)
+    const rmActive = await evaluate("window.matchMedia('(prefers-reduced-motion: reduce)').matches")
+    if (rmActive !== true) fail('reduce-motion · 模拟的媒体查询没有生效，后续判定不算数')
+    /* ...and switch back to the scheme this assertion is about. It was left on
+       `stamp` by the previous block, which made the read return the wrong
+       pseudo-element (content:none, width:auto) instead of a failure of the CSS. */
     await setMotion('meter')
     await hover('newSession')
     const rmBar = await styleOf('newSession', '::after')
-    if (w(rmBar) > 100) pass('reduce-motion · 读数条直接满格（不滑动）  [' + rmBar.width + ']')
-    else fail('reduce-motion · 读数条应直接满格  [' + rmBar.width + ']')
+    if (Math.abs(scaleX(rmBar.transform) - 0.06) < 0.01 && w(rmBar) > 100) {
+      pass('reduce-motion · 读数条停在 6% 刻度（不滑动、宽度不变）  [' + rmBar.transform + ']')
+    } else {
+      fail('reduce-motion · 读数条应停在 6%  [transform=' + rmBar.transform + ' width=' + rmBar.width
+        + ' content=' + rmBar.content + ' attr=' + (await evaluate("document.body.getAttribute('data-endfield-motion')"))
+        + ' rect=' + (await evaluate("JSON.stringify(window.__rect__('newSession'))")) + ']')
+    }
     await park()
   } catch (e) {
     fail('harness error: ' + (e && e.message))

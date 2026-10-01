@@ -223,6 +223,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     <button class="RlGAzG_add" id="composerAdd" aria-label="+"><svg width="14" height="14"
       viewBox="0 0 16 16"><path fill="currentColor" d="M7 3h2v4h4v2H9v4H7V9H3V7h4z"/></svg></button>
   </div>
+  <div class="panel pI_x6G_centerCol">
+    <!-- The app's real tab rules (ui-conversation), verbatim, including the
+         active underline ::after the theme must clear. The SELECTED tab keeps
+         the app's class order 'wSkVaW_tab wSkVaW_tabActive' — the compound
+         suffix is exactly what silently killed the first :is()-less version. -->
+    <style>
+      .wSkVaW_tabs{gap:36px;margin-top:10px;padding-left:8px;display:flex;position:relative}
+      .wSkVaW_tab{color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;
+        padding:0 0 9px;font-size:13px;font-weight:500;line-height:16px;position:relative}
+      .wSkVaW_tab:after{content:"";background:0 0;border-radius:2px;height:2px;position:absolute;bottom:-1px;left:0;right:0}
+      .wSkVaW_tabActive{color:var(--dsw-alias-state-business-primary)}
+      .wSkVaW_tabActive:after{background:var(--dsw-alias-state-business-primary)}
+    </style>
+    <div class="wSkVaW_tabs">
+      <button class="wSkVaW_tab wSkVaW_tabActive" id="tabSel">对话</button>
+      <button class="wSkVaW_tab" id="tabIdle">轨迹</button>
+    </div>
+  </div>
   <script>window.__ModuleLoader__={load:(m)=>{window.__MOD__=m}}</script>
   <script src="./client.js"></script>
   <script>
@@ -246,6 +264,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     window.__style__=(id)=>{ const cs=getComputedStyle(document.getElementById(id))
       return {color:cs.color, rgb:(cs.color.match(/\\d+/g)||[]).slice(0,3).map(Number)} }
     window.__accent__=()=>getComputedStyle(document.body).getPropertyValue('--edge-accent').trim()
+    window.__pseudo__=(id,which,prop)=>getComputedStyle(document.getElementById(id),which)[prop]
   </script></body></html>`)
 
   const port = 9333 + Math.floor(Math.random() * 400)
@@ -402,6 +421,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
         }
       }
     }
+    /* ---- 对话/轨迹 tabs: the /news scrim treatment, pinned permanently ----
+       The first version of the tab rules silently matched nothing: the selected
+       tab's class string ends in '_tabActive', so [class$='_tab'] never hit it
+       and the ink underline survived pixel-perfect (a delegated review caught it
+       by element.matches). These assertions keep that regression from coming
+       back: rules must MATCH (via computed pseudos), the underline must be
+       cleared on the COMPOUND class order, and the hover scrim must flip. */
+    await evaluate("window.__setScheme__('light')"); await evaluate("window.__setPalette__('gray')")
+    await sleep(200)
+    const afterSel = await evaluate("window.__pseudo__('tabSel','::after','backgroundColor')")
+    if (/^rgba\(0, 0, 0, 0\)$/.test(afterSel)) pass('选中标签原生底线已清除（复合类序命中）  [' + afterSel + ']')
+    else fail('选中标签底线仍在——:is() 双后缀失效  [' + afterSel + ']')
+    const beforeIdleRest = await evaluate("window.__pseudo__('tabIdle','::before','opacity')")
+    if (beforeIdleRest === '0') pass('标签遮罩常态 opacity=0  [' + beforeIdleRest + ']')
+    else fail('标签遮罩常态应不可见  [opacity=' + beforeIdleRest + ']')
+    /* real pointer onto the SELECTED tab: the compound class must get the scrim too */
+    const rect = JSON.parse(await evaluate("JSON.stringify(window.__rect__('tabSel'))"))
+    await cdp.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(rect.x + rect.w / 2), y: Math.round(rect.y + rect.h / 2), buttons: 0 })
+    await sleep(260)
+    const beforeSelHover = await evaluate("window.__pseudo__('tabSel','::before','opacity')")
+    if (beforeSelHover === '1') pass('选中标签悬停遮罩点亮（复合类序同样命中）  [opacity=' + beforeSelHover + ']')
+    else fail('选中标签悬停无反馈——:is() 失效或遮罩规则被删  [opacity=' + beforeSelHover + ']')
+    await parkPointer()
+    await evaluate("window.__setScheme__('dark')"); await sleep(200)
+    const darkDisplay = await evaluate("window.__pseudo__('tabIdle','::before','display')")
+    if (darkDisplay === 'none') pass('暗色标签无遮罩（display=none，文字提亮承担悬停）')
+    else fail('暗色遮罩未禁用  [display=' + darkDisplay + ']')
+
     cdp.close()
   } finally {
     proc.kill()

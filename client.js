@@ -3008,27 +3008,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
       }
 
-      /* 主工作区顶部分划线：同一条三色线，放在会话 header 的底边（那里本来就有
-         0.5px 的应用自带分割线，这条 2px 三色线直接叠上去成为更强的分划）。
-         · 挂在 [class$='_header'] 的 ::before——应用的 bundle 不占用 header 的
-           伪元素（全量 grep 过），::after 也留给它以防万一；
-         · 后代匹配（不要求直接子级）——插槽包装层的教训见纹理锚点；
-         · 常态渲染，无动画无遮罩；hero/active 各阶段都在（它在根内部、
-           不依赖隔离，不与水印冲突）。 */
-      [class$='_centerCol'] [class$='_header'] {
-        position: relative;
-      }
-      [class$='_centerCol'] [class$='_header']::before {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 2px;
-        pointer-events: none;
-        background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
-      }
-
       /* 降级：要求减少透明/更高对比时整段让位（装饰不与无障碍偏好争）。
          注意伪元素：列上的 background-image:none 只清背景图层，两个叠加层
          （::before 网格 / ::after 斜纹）必须各自 display:none。 */
@@ -3041,9 +3020,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           display: none !important;
         }
         .endfield-settings .endfield-settings-group-title:has(> span)::after {
-          background-image: none !important;
-        }
-        [class$='_centerCol'] [class$='_header']::before {
           background-image: none !important;
         }
         [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::before {

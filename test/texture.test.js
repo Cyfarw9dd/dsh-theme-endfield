@@ -218,8 +218,8 @@ if (/prefers-reduced-transparency: reduce/.test(src) && /prefers-contrast: more/
   const official = 'linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0)'
   const compact = official.replace(/\s+/g, '')
   const found = src.replace(/\s+/g, '').split(compact).length - 1
-  if (found >= 2) pass('两条三色线（设置分组 + 工作区顶）都用官方比例停靠（绿占 2/3）')
-  else fail('三色线数量 ' + found + '（应为 2：设置分组标题 + 主工作区顶部分划线），或停靠值与官方比例不符')
+  if (found >= 1) pass('三色线（设置分组标题）用官方比例停靠（绿占 2/3）')
+  else fail('三色线数量 ' + found + '（应 ≥1：设置分组标题；工作区顶部分划线已按用户指示移除）')
   if (/11\.25\/67\.5/.test(src)) pass('比例换算的推导留在源码注释里')
   else fail('缺少 11.25/67.5 的换算推导注释——没人能再把比例改回均分而不被问')
 }

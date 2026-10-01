@@ -3135,8 +3135,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          Why not embed the artwork itself: it is a dark-page asset (its wordmark is
          #d2d3d4, which is 1.2:1 on this theme's cream paper). Painting the two
          shapes through masks lets each scheme carry a colour measured against the
-         surface it really lands on, and it is 20x smaller than the three-colour
-         vector (6.6KB of SVG against 197KB).
+         surface it really lands on, and it is 30x smaller than the three-colour
+         vector (5.7KB of minimized SVG against 197KB).
 
          The hatching is a gradient, not fifty traced bars, and its geometry is
          MEASURED off the artwork rather than eyeballed: the stripe boundaries are
@@ -3148,7 +3148,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          not px, keep the hatch exact at every size. */
       body {
         /* Light scheme, cream paper #e8e8e2. The wordmark carries the reading, so
-           it takes the theme ink (15.2:1); the arrow takes the measured on-paper
+           it takes the theme ink (15.38:1); the arrow takes the measured on-paper
            step of the signal hue (#6b5d00, 5.35:1 — the same value the palettes
            already use for signal-yellow text on paper). The artwork's own #ffe01d
            is 1.25:1 here, i.e. invisible, which is exactly why the source file
@@ -3159,7 +3159,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       }
       body[data-ds-dark-theme] {
         /* Dark scheme: the artwork's own colours, unchanged. Against the #101110
-           page they measure body 15.3:1 · hatch 13.3:1 · wordmark 10.9:1. */
+           page they measure body 14.36:1 · hatch 13.19:1 · wordmark 12.62:1. */
         --edge-hero-logo-body: #ffe01d;
         --edge-hero-logo-hatch: #f4d73e;
         --edge-hero-logo-ink: #d2d3d4;

@@ -22,6 +22,7 @@ dsh plugin --profile web rm dsh-theme-endfield
 
 - 主题总开关、终末地灰/谷地黄/武陵青三态配色（默认终末地灰：官网灰阶交互语法）、直角/圆角模式；
 - 背景水印（官方高清工业徽标：阈值重建的清晰倒三角标）及持续显示；
+- 新建会话页品牌标识（联名「终末地标识 3」贴在标题「探索未至之境」正上方，亮暗两套实测配色）；
 - 启动加载动画；
 - 雷霆大字及入场动画；
 - 工业风通知：任务完成回执（6 秒自动消失）、提问/索权常驻卡片（处理完自动消失），音效跟随音频通知开关；
@@ -66,8 +67,8 @@ client.js          Client 侧主题实现
 index.js           Host 侧：导出 volatile Config，声明设置命名空间
 lib/               音频通知：槽位定义、WAV 合成与播放运行时
 sounds/            生成的通知音（npm run sound:build 重新生成）
-assets/            水印徽标矢量源（endfield-industries.svg，Yue-plus/endfield_icons 重制，来源见 scripts/build-emblem.js）
-scripts/           构建脚本：音效合成、徽标矢量嵌入
+assets/            素材源：水印徽标矢量源（endfield-industries.svg）、新建会话页标识（hero-logo-3-summer.png 官方原图 + 两个 alpha 掩码 SVG）
+scripts/           构建脚本：音效合成、徽标矢量嵌入、新建会话页标识掩码嵌入
 cordis.patch.yml   Bundle 注入配置
 check.js           样式表静态校验
 selftest.js        校验器自检
@@ -81,6 +82,7 @@ docs/              设计、功能、工程与测试文档
 
 - 《明日方舟：终末地》（Arknights: Endfield）的游戏名称、标识、商标、官网视觉与设计语言及相关美术素材，版权归**鹰角网络（上海鹰角网络科技有限公司，Hypergryph Network Technology）**所有。
 - 背景纹理直接沿用官方站点自身的发布产物：`endfield-block-bg.svg`（工程网格）、`endfield-wave-bg.png`（右上波纹）、`endfield-tape-wave-bg.png`（中央波纹带），三者取自官方 CDN `web.hycdn.cn/endfield/official-v4/_next/static/media/` 的 `/operator` 路由发布文件，**以原始字节内嵌**（不做再压缩）。来源 URL、sha256 与构建方式见 [scripts/build-texture.js](scripts/build-texture.js) 头注；采用已获本仓库所有者明确指示（「沿用官方」）。
+- 新建会话页的品牌标识（`assets/hero-logo-body.svg` / `assets/hero-logo-ink.svg`）取自《明日方舟：终末地》× 优衣库 UTme! 联名活动页的「终末地标识 3」（定格今夏系列）贴图，**来源为活动页自身的官方承载域名** `www.bilibiliytoy.com`（页面 https://www.bilibili.com/toy/skland-uniqlo-2026/index.html 内嵌的 `assets/stickers/summer/logo-03.png`）；原始 1024×458 PNG 以原始字节保留在 `assets/hero-logo-3-summer.png`（sha256 `ee4fcfbd547e50202550d12bdd27934c608f3c8455d1242020b3e431c70dc966`），两个 SVG 是**在本地由该 PNG 分层描摹得到的形状掩码**（颜色由主题给出）。采用已获本仓库所有者明确指示（「把这个放到新会话的主界面」）；来源 URL、描摹步骤与斜纹几何测量见 [scripts/build-logo.js](scripts/build-logo.js) 头注。
 - 本仓库中的**部分素材**（如 `assets/` 下的界面截图，水印徽标矢量源 [endfield-industries.svg](assets/endfield-industries.svg)（[Yue-plus/endfield_icons](https://github.com/Yue-plus/endfield_icons) 对官方标识的矢量重制，采用已经本仓库所有者批准），以及主题中还原的 `ENDFIELD` 字标、信号黄配色与工业编辑风版式）源自或参考上述作品及其官网，仅用于**学习、展示与非商业用途**；其权利仍归鹰角网络所有，**不在本项目的 MIT 许可证覆盖范围内**。
 - 本项目的原创代码（`client.js`、`index.js`、`scripts/`、`test/` 等）以 MIT 许可证发布。
 - 若权利方认为本仓库中的任何素材使用不当，请通过 Issue 联系，我们会立即删除或替换相关内容。

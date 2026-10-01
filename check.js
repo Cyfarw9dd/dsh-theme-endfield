@@ -226,6 +226,14 @@ if (openIdx < 0) {
     } else {
       fail('--edge-emblem must be declared as: body { --edge-emblem: url("data:image/svg+xml;base64,...") } — run node scripts/build-emblem.js')
     }
+    // The hero brand mark carries TWO masks, and they must sit in ONE body{} rule
+    // for the same reason: two top-level declarations would each destroy the rule
+    // that follows them.
+    if (/body\s*\{\s*--edge-hero-logo-body-mask:\s*url\("data:image\/svg\+xml;base64,[A-Za-z0-9+/=]{100,}"\)\s*;\s*--edge-hero-logo-ink-mask:\s*url\("data:image\/svg\+xml;base64,[A-Za-z0-9+/=]{100,}"\)\s*;\s*\}/.test(stripped)) {
+      pass('hero logo masks are embedded inside one body rule (see scripts/build-logo.js)')
+    } else {
+      fail('the hero logo masks must be declared as: body { --edge-hero-logo-body-mask: url(...); --edge-hero-logo-ink-mask: url(...); } — run node scripts/build-logo.js')
+    }
 
     /* --- 7. the app's font TOKENS must not be redeclared anywhere ---
        Regression guard for a real shipped bug. The theme used to carry

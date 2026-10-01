@@ -100,7 +100,7 @@ node test/perf-motion.test.js        # 量「流畅」：静态守卫 + layout/�
 - 属性钩子：`data-endfield-motion` 是 `<body>` 上的一个值，写错值等于整套规则不存在；
 - 层叠：应用自己有 `button { transition: none !important }`，主题的过渡必须赢过它；
 - 伪元素生成：宿主元素不是 `position: relative` 时 `::after` 根本不生成——`clamp` 的四角角标就栽在这里，而且**遮罩图会按自身宽高比缩放**：把 24×24 的图设成 `mask-size:100% 100%`，形状会保持 1:1 居中，角标跑到按钮中间去。这条只有数像素能抓到，所以左上角 14×14 区域必须找到 ≥12 个 onpaper 色像素；
-- 反面对照：`off` 必须什么都不剩（但共通的 `:active` 暗一档要在），`prefers-reduced-motion: reduce` 必须关掉位移/动画/揭示而**保留颜色反馈**——读数条在减效下降到满格（信息照给，滑动取消）。
+- 反面对照：`off` 后主题**什么都不剩**——运行时在 off 时是**移除 `data-endfield-motion` 属性**（不是写 `'off'`），所以连共通的 `:active` 暗一档也一起消失，测试按真实行为断言；`prefers-reduced-motion: reduce` 必须关掉位移/动画/揭示而**保留颜色反馈**——读数条钉在 6% 刻度（`transform: scaleX(.06)`），角标两个都不生成（含像素验证）。
 
 夹具里那一条对上游的假设（目标按钮带 `position: relative`）写在文件顶部注释里；上游若改掉，测试会红，而不是假装通过。
 
@@ -109,8 +109,8 @@ node test/perf-motion.test.js        # 量「流畅」：静态守卫 + layout/�
 1. **静态守卫**（无需浏览器，秒级）：动效段里**每一条 `transition` 与每个 `@keyframes`** 的属性只许是 `transform`、`opacity`、颜色，外加方案 A 的 `border-radius`（官网也动画它）。还断言没有常态 `will-change`。**它抓不到「悬停时才生成几何」这一类**（没有 transition、没有关键帧的 `position`/`border`/伪元素创建）——那一类由 layout 预算兜住，这一点写在脚本注释里，不假装守卫比它实际更宽。
 2. **layout 预算**：`LayoutDuration ≤ 2ms/s`。六个方案实测都是 **0.00**，这个预算就是防回归的绊线——任何「悬停时才生成几何」（伪元素、border、position 变化）都会立刻把它顶红（实测一次 `position:absolute` 加在悬停规则里 = 29ms/s）。
 3. **帧间隔**：页面内 `requestAnimationFrame` 采样的 p95 ≤40ms、>32ms 帧占比 ≤5%。这才是「看起来顺不顺」的判据。
-4. **task 预算**：主线程 ≤250ms/s（≈每帧 ≤4ms）。**刻意用绝对值而不是「静默基线的 N 倍」**：silent 几乎什么都不做，一个每帧只花 0.15ms 的方案会被读成「基线的 6 倍」，比例在这里是误导。
-5. **停留不做事**：指针停在按钮上 1.6s，layout 必须 ≤4ms/s——代价只许发生在指针**移动**时。
+4. **task 预算**：主线程 ≤350ms/s（≈每帧 ≤5.8ms，不到半帧）。**刻意用绝对值而不是「静默基线的 N 倍」**：silent 几乎什么都不做，一个每帧只花 0.15ms 的方案会被读成「基线的 6 倍」，比例在这里是误导。
+5. **停留不做事**：指针停在按钮上 1.6s，layout 必须 ≤2ms/s——代价只许发生在指针**移动**时。
 
 脚本会把整张测量表打印出来（layout / recalc / task / 帧 p50·p95·max / >32ms 占比），并在结尾跑第二次 `silent` 检查基线漂移；漂移 >50% 会明说本轮数字不可靠。
 

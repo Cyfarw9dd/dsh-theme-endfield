@@ -75,7 +75,7 @@
 
 六套方案是六支**动效母题**而不是同一个效果的换色，各自落在不同按钮角色上——角标用在普通按钮与列表行、读数条用在主 CTA 与圆形图标按钮、落印用在批准/拒绝类按钮。逐条对照表、官网实测依据与两处有意分歧见 [design-language.md § 交互动效](design-language.md#交互动效六套母题)。
 
-`prefers-reduced-motion: reduce` 下位移、`@keyframes` 与揭示式动效全部关掉，只保留颜色反馈（读数条直接满格、角标不出现、落印不播放）。验证：`node test/motion-check.js`。
+`prefers-reduced-motion: reduce` 下位移、`@keyframes` 与揭示式动效全部关掉，只保留颜色反馈（读数条停在 6% 刻度、角标两个都不生成、落印不播放）。验证：`node test/motion-check.js`。
 
 ### 主题圆角
 

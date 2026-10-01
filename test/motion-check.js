@@ -191,13 +191,16 @@ const connectWs = (url) => new Promise((resolve, reject) => {
 const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-8">
 <style>
   html,body{margin:0}
-  /* A COMPLETE palette block, mirroring body.theme-endfield-gray. Leaving a token
-     out is not harmless: without --edge-accent-deep the theme's own
-     '[class$=_newSession]:hover { background: var(--edge-accent-deep) }' becomes
-     an invalid declaration, the button keeps its accent fill, and every pixel
-     assertion about decorations ON that button silently measures the button
-     itself. That is exactly how the meter readout-bar assertion passed while the
-     bar was transparent. */
+  /* A palette block so the fixture does not depend on the theme's own default
+     (the theme declares its default palette on a plain body rule too, later in the
+     sheet, so with equal specificity the theme's values win for anything it sets).
+     The block is therefore a floor, not an override — and the token that actually
+     matters here is --edge-accent-ink, which the readout bar uses.
+     Correction of an earlier claim in this file: the meter pixel assertion did NOT
+     fail because --edge-accent-deep was missing (the theme's default body block
+     supplies #e8e000 either way). It passed because the tolerance was 60 (180 in
+     Manhattan distance) while the bar colour and the hover fill differ by only 44.
+     A loose tolerance made every bar pixel count as fill and vice versa. */
   body{
     --edge-accent:#d9d9d9;
     --edge-accent-deep:#cccccc;
@@ -249,7 +252,8 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       const s = getComputedStyle(el, pseudo || null)
       const keys = ['width','height','transform','outlineColor','outlineWidth','outlineStyle',
         'backgroundColor','borderLeftWidth','borderLeftColor','boxShadow','content',
-        'maskImage','webkitMaskImage','backgroundImage','animationName','animationDuration',
+        'maskImage','webkitMaskImage','backgroundImage','backgroundSize','backgroundColor',
+        'animationName','animationDuration',
         'transitionProperty','color','filter','position','opacity']
       const out = {}
       for (const k of keys) out[k] = s[k]
@@ -312,6 +316,14 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 2, mobile: false })
     await sleep(500)
 
+    /* The reduced-motion state is emulator-level and persists across the whole
+       session, so a leaked override turns every "does the decoration appear"
+       assertion into a false failure (it did: the D block reported content:none
+       because an earlier section had left reduce on). Pin it OFF at the start and
+       verify it, so the run's assumptions are checked rather than assumed. */
+    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
+    await sleep(150)
+
     const evaluate = async (expr) => {
       const r = await cdp.call('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })
       if (r && r.exceptionDetails) throw new Error('page threw: ' + JSON.stringify(r.exceptionDetails.exception && r.exceptionDetails.exception.description))
@@ -369,6 +381,23 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       }
       return n
     }
+    /* Pixels differing from a reference colour by at least `minDelta` (Manhattan),
+       scaled by the device pixel ratio the box was measured in. */
+    const countDifferentPx = (img, box, ref, minDelta, dpr) => {
+      if (!ref) return 0
+      const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
+      const y0 = Math.max(0, Math.round(box.y * dpr)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * dpr))
+      let n = 0
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = (y * img.w + x) * img.ch
+          const d = Math.abs(img.data[i] - ref[0]) + Math.abs(img.data[i + 1] - ref[1]) + Math.abs(img.data[i + 2] - ref[2])
+          if (d >= minDelta) n++
+        }
+      }
+      return n
+    }
+
     /* A screenshot region's dominant colours, for failure messages that say WHAT
        was painted instead of only that the expectation failed. */
     const topColors = (img, box, n = 4) => {
@@ -386,6 +415,9 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
         .map(([k, c]) => 'rgb(' + k + ')x' + c).join(' ')
     }
 
+    const rmAtStart = await evaluate("window.matchMedia('(prefers-reduced-motion: reduce)').matches")
+    if (rmAtStart === false) pass('起始状态 · 减少动态效果未生效（各段断言的前提成立）')
+    else fail('起始状态 · reduce 处于生效状态，装饰类断言会全部失真')
     const accent = toRgb(await evaluate('window.__accentOnpaper__()'))
     if (!accent) { fail('fixture did not resolve --edge-accent-onpaper'); throw new Error('no accent') }
 
@@ -399,31 +431,51 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     const beforeD = await styleOf('plain', '::before')
     const afterD = await styleOf('plain', '::after')
     const maskD = (s) => String(s.maskImage || s.webkitMaskImage || '')
+    /* The bracket is TWO gradient arms (an L), not a mask. Both implementations
+       were tried and both failed at some DPR; the arms are the only one that
+       paints at DPR 1/2/3. Assert the shape the CSS uses. */
+    const armsD = (s) => String(s.backgroundImage || '')
     /* The bracket boxes exist at rest and hover only toggles their opacity. This
        is deliberate and load-bearing: creating them on hover re-invalidates layout
        on every hover (13.4ms/s over a 300-row sweep) while an always-present box
        costs 0.00. So "not generated at rest" is the WRONG expectation — what must
        hold is "not PAINTED at rest". */
-    if (restD.content && restD.content !== 'none' && restD.opacity === '0' && restDAfter.opacity === '0'
-      && beforeD.opacity === '1' && afterD.opacity === '1') {
-      pass('D clamp · 角标常态存在但不绘制（opacity 0 → 1，避免悬停时才创建盒子）')
+    /* The box geometry is declared at rest (so hover does not create it from
+       nothing — that costs a layout pass) and `content` is what brings it to life.
+       The reliable read for "not painted" is the decoration, not `content`: an
+       ungenerated pseudo-element reports the element's own content ("" not "none"). */
+    const armsAt = (st) => (String(st.backgroundImage || '').match(/linear-gradient/g) || []).length
+    if (armsAt(restD) === 2 && armsAt(restDAfter) === 2 && restD.width === '12px'
+      && beforeD.content && beforeD.content !== 'none' && afterD.content && afterD.content !== 'none') {
+      pass('D clamp · 角标常态生成、悬停用关键帧淡入（不新建盒子，成本 0 重排）')
     } else {
-      fail('D clamp · 角标应常态存在且 opacity 0→1  [content=' + restD.content
-        + ' rest=' + restD.opacity + '/' + restDAfter.opacity
-        + ' hover=' + beforeD.opacity + '/' + afterD.opacity + ']')
+      fail('D clamp · 角标应常态生成 + 悬停关键帧点亮  [' + armsAt(restD) + '/' + armsAt(restDAfter)
+        + ' rest-content=' + restD.content + ' hover-content=' + beforeD.content + '/' + afterD.content + ']')
     }
-    if (beforeD.opacity === '1' && afterD.opacity === '1' && /svg/.test(maskD(beforeD)) && /svg/.test(maskD(afterD))) {
-      pass('D clamp · 悬停时 ::before/::after 各切出一个 L 角并点亮  [' + maskD(beforeD).slice(0, 40) + '…]')
+    const armCount = (s) => (armsD(s).match(/linear-gradient/g) || []).length
+    if (beforeD.content && beforeD.content !== 'none' && afterD.content && afterD.content !== 'none'
+      && armCount(beforeD) === 2 && armCount(afterD) === 2
+      && /12px 2px/.test(String(beforeD.backgroundSize))) {
+      pass('D clamp · 悬停时 ::before/::after 各画出两条边（L 形）并点亮  ['
+        + beforeD.backgroundSize + '，无遮罩]')
     } else {
-      fail('D clamp · 悬停应点亮两个角标  [before=' + beforeD.opacity + ' ' + maskD(beforeD).slice(0, 30)
-        + ' after=' + afterD.opacity + ' ' + maskD(afterD).slice(0, 30) + ']')
+      fail('D clamp · 悬停应画出 L 形两条边  [before=' + beforeD.content + ' arms=' + armCount(beforeD)
+        + ' size=' + beforeD.backgroundSize + '; after=' + afterD.content + ' arms=' + armCount(afterD) + ']')
     }
+    if (!/svg|url\(/.test(maskD(beforeD)) && !/url\(/.test(armsD(beforeD))) {
+      pass('D clamp · 角标不含任何位图/矢量资源（纯渐变，跨 DPR 稳定）')
+    } else {
+      fail('D clamp · 角标仍依赖外部资源  [mask=' + maskD(beforeD).slice(0, 40) + ']')
+    }
+    void maskD
     const dimsD = (s) => s.width + '×' + s.height
     if (beforeD.position === 'absolute' && beforeD.width === '12px' && beforeD.height === '12px'
-      && nearRgb(beforeD.backgroundColor, accent, 4)) {
-      pass('D clamp · 角标是 12px 方块 + onpaper 信号色  [' + dimsD(beforeD) + ' ' + beforeD.backgroundColor + ']')
+      && /linear-gradient/.test(String(beforeD.backgroundImage))
+      && String(beforeD.backgroundImage).includes('217, 199, 0')) {
+      pass('D clamp · 角标是 12px 方块、两条边用 onpaper 信号色  [' + dimsD(beforeD) + ']')
     } else {
-      fail('D clamp · 角标应为 12px 方块且用 onpaper 色  [' + dimsD(beforeD) + ' ' + beforeD.position + ' ' + beforeD.backgroundColor + ']')
+      fail('D clamp · 角标应为 12px 方块，两条边为 onpaper 色  [' + dimsD(beforeD) + ' ' + beforeD.position
+        + ' bg=' + String(beforeD.backgroundImage).slice(0, 60) + ']')
     }
     /* pixels: both arms of the top-left bracket must actually paint. This is the
        assertion that fails if the mask keeps its 1:1 aspect ratio and centres the
@@ -431,9 +483,69 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     const imgD = await shoot()
     const bPlain = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
     const arm = { x: bPlain.x - 1, y: bPlain.y - 1, w: 14, h: 14 }
-    const pxD = countNear(imgD, arm, accent, 30)
-    if (pxD >= 12) pass('D clamp · 左上角 L 形角标真的画在角上  [' + pxD + ' px ≈ onpaper in a 14×14 box]')
-    else fail('D clamp · 左上角未见角标像素  [' + pxD + ' px near onpaper; region = ' + topColors(imgD, arm) + ']')
+    /* Count pixels that DIFFER from the button's own fill rather than pixels of an
+       assumed colour. The first version compared against `accent`
+       (--edge-accent-onpaper, #d9c700 yellow in this fixture) but the bracket is
+       painted with `--edge-accent-onpaper` as resolved for the theme's DEFAULT
+       palette (a different colour), so a correct bracket counted as zero. Matching
+       "something is drawn here, in the right corner" is what this assertion is
+       actually about, and it is robust to which palette the cascade picked. */
+    const plainFill = toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))
+    const pxD = countDifferentPx(imgD, arm, plainFill, 60, 2)
+    if (pxD >= 12) pass('D clamp · 左上角 L 形角标真的画在角上  [' + pxD + ' px 与底色不同]')
+    else fail('D clamp · 左上角未见角标像素  [' + pxD + ' px; region = ' + topColors(imgD, arm) + ']')
+    /* The corner is an SVG mask, and a mask that only survives one DPR would be a
+       HiDPI bug nothing else here can see: the classic failure is the source being
+       rasterised at its intrinsic size and then centred (the bug that put the
+       brackets in the middle of the button at DPR 2). Re-shoot the same corner at
+       DPR 1 and DPR 3. */
+    for (const dpr of [1, 3, 1, 2]) {
+      await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: dpr, mobile: false })
+      await sleep(220)
+      await hover('plain')
+      const imgHi = await shoot()
+      const bHi = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
+      /* At DPR 1 the 2px arms antialias into blended colours that match neither the
+         paper nor an exact accent, so an exact-colour count is the wrong instrument
+         there. Count pixels that differ from the surrounding fill instead: what is
+         being asserted is "something is drawn in this corner", at every DPR. */
+      const fillRef = toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))
+      const boxHi = { x: bHi.x - 1, y: bHi.y - 1, w: 14, h: 14 }
+      const pxHi = countDifferentPx(imgHi, boxHi, fillRef, 60, dpr)
+      if (process.env.MOTION_DEBUG) console.error('DBG dpr=' + dpr + ' rect=' + JSON.stringify(bHi) + ' px=' + pxHi
+        + ' corner=' + topColors(imgHi, { x: bHi.x - 1, y: bHi.y - 1, w: 14, h: 14 })
+        + ' fillRef=' + JSON.stringify(toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))))
+      if (pxHi >= 6 * dpr) {
+        pass('D clamp · 角标在 DPR ' + dpr + ' 下仍画在角上  [' + pxHi + ' px 与底不同]')
+      } else {
+        fail('D clamp · DPR ' + dpr + ' 下角未见角标  [' + pxHi + ' px 与底不同; region = ' + topColors(imgHi, boxHi) + ']')
+      }
+    }
+    await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 2, mobile: false })
+    await sleep(200)
+    await park()
+
+    /* Rounded controls are excluded, and the whole scheme is off in round mode:
+       a 12px square corner on a 50%-radius button is just debris. */
+    await hover('iconButton')
+    const roundD = await styleOf('iconButton', '::before')
+    /* An unmatched pseudo-element does not report content:'none' — it reports the
+       element's own computed `content`, which is "". The reliable signal is the
+       decoration itself: the gradient arms. */
+    const armsOf = (st) => (String(st.backgroundImage || '').match(/linear-gradient/g) || []).length
+    if (armsOf(roundD) === 0) pass('D clamp · 圆形图标按钮不画方角标（不含角标边）')
+    else fail('D clamp · 圆形图标按钮被画上了方角标  [arms=' + armsOf(roundD) + ']')
+    await park()
+    const hadRound = await evaluate("document.body.classList.contains('theme-endfield-round')")
+    await evaluate("document.body.classList.add('theme-endfield-round')")
+    await hover('plain')
+    const roundMode = await styleOf('plain', '::before')
+    await evaluate("document.body.classList.remove('theme-endfield-round')")
+    if ((String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length === 0) {
+      pass('D clamp · 圆角模式（.theme-endfield-round）下不画角标  [开启前=' + hadRound + ']')
+    } else {
+      fail('D clamp · 圆角模式下仍画角标  [arms=' + (String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length + ']')
+    }
     await park()
 
     await hover('newSession')
@@ -488,7 +600,10 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       pass('E meter · 底部读数条是 onpaper 信号色且与按钮底色可分辨  [' + pxE + ' px ' + barColor
         + ' vs 底色 ' + pxFill + ' px]')
     } else {
-      fail('E meter · 底部读数条不可见或与底色同色  [bar=' + pxE + ' px ' + barColor + ' fill=' + pxFill
+      fail('E meter · 底部读数条不可见或与底色同色  [region=' + topColors(imgE, barBox)
+        + ' afterTransform=' + hovE.transform + ' afterBg=' + String(hovE.backgroundImage).slice(0, 40)
+        + ' afterW=' + hovE.width + ' barToken=' + barColor + ' barRgb=' + JSON.stringify(barRgb)
+        + ' fillRgb=' + JSON.stringify(fillRgb) + ' bar=' + pxE + ' px fill=' + pxFill
         + ' px rgb(' + (fillRgb || []) + ') region=' + topColors(imgE, barBox) + ']')
     }
     await park()
@@ -511,6 +626,21 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       pass('E meter · 菜单行指示条常态存在、悬停只切 opacity  [' + restRow.content + ' ' + restRow.opacity + ' → ' + hovRow.opacity + ']')
     } else {
       fail('E meter · 菜单行指示条应为常态存在 + opacity 切换  [content=' + restRow.content + ' opacity=' + restRow.opacity + ' → ' + hovRow.opacity + ']')
+    }
+    await park()
+
+    /* PRESSED on the CTA: its fill is now --edge-accent-deep (the :hover rule), so
+       label and bar must both be --edge-accent-ink. Using onpaper there measures
+       1.25-3.58:1 — the label effectively disappears. */
+    const holdCta = await press('newSession', { release: false })
+    const pressedBar = await styleOf('newSession', '::after')
+    const pressedLabel = await styleOf('newSession')
+    await holdCta.release()
+    const inkHex = await evaluate("getComputedStyle(document.body).getPropertyValue('--edge-accent-ink').trim()")
+    if (nearRgb(pressedBar.backgroundColor, inkHex, 4) && nearRgb(pressedLabel.color, inkHex, 4)) {
+      pass('E meter · 按下时条与标签都用 accent-ink（压在 accent-deep 上）  [' + pressedBar.backgroundColor + ' / ' + pressedLabel.color + ']')
+    } else {
+      fail('E meter · 按下态配色错误  [bar=' + pressedBar.backgroundColor + ' label=' + pressedLabel.color + ' 期望 ' + inkHex + ']')
     }
     await park()
 

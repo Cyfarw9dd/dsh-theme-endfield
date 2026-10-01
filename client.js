@@ -2975,15 +2975,17 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
       /* ================= 方案A signal：官网签名复刻 ================= */
 
-      /* A-1. 悬停圆角软化（仅直角模式）。官网上 border-radius 是被过渡的属性之一
-         （transition: color .2s, background-color .2s, border-radius .2s），
-         所以这里也给它一条自己的过渡；注意它**在共通过渡里**：border-radius 会被
-         浏览器当作可能触发重排的属性，放进全局规则会让长列表每次悬停整屏布局失效。 */
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:not(:disabled),
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:not(:disabled) {
-        transition: background-color .2s ease, color .2s ease, border-color .2s ease,
-          border-radius .2s ease;
-      }
+      /* A-1. 悬停圆角软化（仅直角模式）。
+         官网上 border-radius 是被过渡的属性之一（transition: color/background-color/
+         border-radius .2s），但**本主题给不了这个过渡**：应用自己有一条
+         'button, [role="button"] { transition: none !important }'（见下方
+         "Hover feedback should track the pointer immediately"），!important 无视
+         特异性——实测 signal 下真实 'button' 的 transitionProperty 是 none，
+         只有非 button 的角色（[role='menuitem'] 这类）拿得到颜色过渡。
+         曾在这里加过一条 transition: border-radius 想赢过它（见 e8216a8），实测无效，已删；
+         现在圆角在悬停时瞬跳，与按钮的其它状态变化一致，文档也照此修正。
+         （border-radius 也**不该**进共通过渡：浏览器把它当作可能触发重排的属性，
+         放进全局规则会让长列表每次悬停整屏布局失效。） */
       body[data-endfield-motion='signal']:not(.theme-endfield-round) button:hover:not(:disabled),
       body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:hover:not(:disabled) {
         border-radius: 6px !important;
@@ -3139,72 +3141,83 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          子串的图标按钮变体（走纸/危险态）同样是圆的——圆形按钮上放角标是错的。
          命中 4n+3 个类名：':not()' 自身不增加特异性，净特异性 = 元素 + 4 属性 +
          伪元素，高于应用的同名 hover 规则。 */
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]),
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]),
-      body[data-endfield-motion='clamp'] [role='tab'],
-      body[data-endfield-motion='clamp'] [role='menuitem'],
-      body[data-endfield-motion='clamp'] [role='option'] {
+      /* 圆角模式的守卫 + 圆形控件的排除，两者都是必需的：
+         · '.theme-endfield-round' 下上游所有圆角都保留，方括号会贴不上任何一条边；
+         · '_iconButton' 与带 actionButton 子串的变体被圆角恢复规则变回圆形，
+           '[role='tab']' 在本应用里虽然都是方角（cordis 的 sourceTab / schedule 的
+           detailTab），但它是**结构性角色**，将来可能出现圆角 tab，一并排除更稳。
+         排除写全后，命中的是真正方角的 button/role=button/menuitem/option。 */
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton']),
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton']),
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem'],
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option'] {
         position: relative;
       }
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::before,
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::after,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::before,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::after,
-      body[data-endfield-motion='clamp'] [role='tab']::before,
-      body[data-endfield-motion='clamp'] [role='tab']::after,
-      body[data-endfield-motion='clamp'] [role='menuitem']::before,
-      body[data-endfield-motion='clamp'] [role='menuitem']::after,
-      body[data-endfield-motion='clamp'] [role='option']::before,
-      body[data-endfield-motion='clamp'] [role='option']::after {
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']::after {
+        /* 盒子常态就存在（content/几何/颜色都在常态规则里），显隐只切 opacity。
+           三版实现里只有这一版同时做到「可见」与「0 重排」，实测：
+             · content 只写在 hover 规则里（悬停才生成盒子）→ 布局失效 29.2ms/s；
+             · content 在悬停、几何在常态 → 同样 29.2ms/s：代价来自「伪元素在常态
+               是否已存在」，不是 content 写在哪；
+             · 常态生成 + 只切 opacity → 0.00ms/s（见 test/perf-motion.test.js）。
+           入场用 @keyframes 而不是 transition：本仓库已实测 transition 在部分渲染
+           路径上根本不触发（见启动屏注释），而关键帧 + fill-mode:both 的终点是
+           确定的；opacity 单属性动画让浏览器只栅格化一次、之后每帧只合成。 */
         content: '';
         position: absolute;
         width: 12px;
         height: 12px;
         pointer-events: none;
         z-index: 2;
-        background-color: var(--edge-accent-onpaper, var(--edge-accent));
-        -webkit-mask-repeat: no-repeat;
-        mask-repeat: no-repeat;
-        /* 角标常态就存在、只由 opacity 控制显隐——这不是审美选择而是性能事实：
-         「悬停时才生成盒子」会让每次悬停都走一遍布局失效，300 行扫掠实测
-         LayoutDuration 13.4ms/s；改成常态存在 + 只切 opacity 之后是 0.00ms/s
-         （同一夹具同一次运行；同轮的 meter 指示条与 impact 透明边条本来就
-         是常态存在的，也都是 0.00）。入场只淡入、不缩放，道理相同：opacity
-         单属性动画允许浏览器只栅格化一次，之后每帧只合成。 */
+        /* 两条渐变的边 = 一个 L。**不用 mask**：隔离页实测同一个 12px 方块上的
+           SVG 遮罩在 DPR 1 下整条不落笔、DPR 2/3 正常——选择器与计算样式全都对，
+           只有跨 DPR 截图才能发现。渐变边没有任何遮罩/位图依赖，DPR 1/2/3 都正常。 */
+        background-image:
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent))),
+          linear-gradient(var(--edge-accent-onpaper, var(--edge-accent)), var(--edge-accent-onpaper, var(--edge-accent)));
+        background-size: 12px 2px, 2px 12px;
+        background-repeat: no-repeat;
         opacity: 0;
-        transition: opacity .18s ease;
       }
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::before,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::before,
-      body[data-endfield-motion='clamp'] [role='tab']::before,
-      body[data-endfield-motion='clamp'] [role='menuitem']::before,
-      body[data-endfield-motion='clamp'] [role='option']::before {
-        left: -1px;
-        top: -1px;
-        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
-        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+      @keyframes endfield-clamp-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::after,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::after,
-      body[data-endfield-motion='clamp'] [role='tab']::after,
-      body[data-endfield-motion='clamp'] [role='menuitem']::after,
-      body[data-endfield-motion='clamp'] [role='option']::after {
-        right: -1px;
-        bottom: -1px;
-        -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
-        mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']::before {
+        left: 1px;
+        top: 1px;
+        background-position: left top, left top;
       }
-      body[data-endfield-motion='clamp'] button:hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] button:hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='button']:hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] [role='button']:hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
-      body[data-endfield-motion='clamp'] [role='option']:hover::before,
-      body[data-endfield-motion='clamp'] [role='option']:hover::after {
-        opacity: 1;
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:not(.actionButton):not([class*='actionButton' i]):not([class$='_iconButton'])::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']::after {
+        right: 1px;
+        bottom: 1px;
+        background-position: right bottom, right bottom;
+      }
+      /* 显隐切换必须排在基础规则之后：两条规则特异性相同，靠源码顺序决胜。
+         （这一条一度被排到基础 opacity:0 之前，于是角标永远不亮——而且只有
+         像素断言会发现，计算样式与选择器看起来都对。） */
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) button:hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='button']:hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']:hover::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='menuitem']:hover::after,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']:hover::before,
+      body[data-endfield-motion='clamp']:not(.theme-endfield-round) [role='option']:hover::after {
+        animation: endfield-clamp-in .18s ease 1 both;
       }
 
       /* D-2. 主 CTA：左缘边条 + 文字横移 2px（被标注框对齐）。
@@ -3288,13 +3301,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-endfield-motion='meter'] [class$='_newSession']:focus-visible:not(:disabled)::after {
         transform: scaleX(1);
       }
+      /* 按下时按钮自己的底是 --edge-accent-deep（:hover 规则），所以条与标签都必须
+         继续用 --edge-accent-ink——换成 onpaper 会在三套配色里同时失去对比度：
+         谷地黄 1.25:1 / 武陵青 1.28:1 / 终末地灰亮 3.58:1 / 灰暗 1.86:1。
+         ink 对 deep 是 7.72–16.50:1。这是同一类错误的第三次：**角色必须对它
+         实际压着的那个底配对**，而 :active 的底与常态/悬停都不一样。 */
       body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled)::after {
         transform: scaleX(1);
-        background-color: var(--edge-accent-onpaper, var(--edge-accent));
+        background-color: var(--edge-accent-ink, #101110);
       }
       body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled),
       body[data-endfield-motion='meter'] [class$='_newSession']:active:not(:disabled) * {
-        color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
+        color: var(--edge-accent-ink, #101110) !important;
       }
 
       /* E-3. 列表行 / 菜单项：悬停时左缘出现信号色细条（淡入）。

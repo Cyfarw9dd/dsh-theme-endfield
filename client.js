@@ -3029,35 +3029,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
       }
 
-      /* 对话/轨迹 标签（_tabs/_tab，在 header 里）的选中短划。原生是 2px 纯色
-         压在 header 底边上（bottom:-1px），亮色模式下主题把那枚令牌映射成
-         墨色 #101110，于是灰纸上是根生硬黑条，还正好把下面的三色分划线截断
-         （用户实测反馈）。
-
-         第一版改成三色线想「与分划线连成一条」，被定量评审否决（ds_review_tab）：
-         · 24px 宽的 tab 里三段只有 紫3/黄5/绿16px——读不出三段，是「带杂色头
-           的绿线」（可辨识需整线 ≥60px）；
-         · 两线**相位不同**（分划线按整行宽取样、底线按按钮宽取样），右端断缝
-           ΔRGB=369，选中处还叠出 3px 厚、与分划线错 1px；
-         · 亮米底上黄 1.11:1 绿 1.08:1 隐没、暗墨底上三色全 6-17:1 炸亮——同一
-           控件两种性格。
-         结构性结论：「与整行分划线融合」与「选中线可见」几何互斥。
-
-         采用评审方案：**短划上移**（bottom:-1px→5px，落进 tab 自己的 9px 下
-         padding、紧贴文字），与分划线脱开 ≥4px——读作「文字下的标注线」
-         （工程图纸语法），分划线保持整行连续。颜色走主题「选中=灰阶」语言：
-         亮色用与选中文字同色的墨 #101110（15:1），暗色用官网暗选中灰
-         #d9d9d9（13.4:1，docs/endfield-ui-research.md 的官网选中灰阶）——
-         暗色下选中文字 3.49:1 偏弱，正好由线扛显著性。三色线回归单一职责：
-         只做整行分划。轨迹页自己的 detailTab（大写 T 结尾）不受影响。 */
-      [class$='_centerCol'] [class$='_tabs'] [class$='_tabActive']::after {
-        bottom: 5px;
-        background: #101110;
-      }
-      body[data-ds-dark-theme] [class$='_centerCol'] [class$='_tabs'] [class$='_tabActive']::after {
-        background: #d9d9d9;
-      }
-
       /* 降级：要求减少透明/更高对比时整段让位（装饰不与无障碍偏好争）。
          注意伪元素：列上的 background-image:none 只清背景图层，两个叠加层
          （::before 网格 / ::after 斜纹）必须各自 display:none。 */
@@ -3074,6 +3045,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         }
         [class$='_centerCol'] [class$='_header']::before {
           background-image: none !important;
+        }
+        [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::before {
+          display: none !important;
         }
       }
 
@@ -3906,6 +3880,61 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       :is([role='tab'], [role='menuitem'], [role='option'], [role='link'], [role='treeitem'], [role='checkbox'], [role='switch'], [role='radio'], [role='combobox'], [class*='nav-item' i], [class*='menu-item' i], [class*='list-item' i], [class*='session-item' i], [class*='workspace-item' i], [class*='search-result' i], [class*='item' i], [class*='tab' i], [class*='card' i], [class*='row' i], [class*='tool' i], [class*='composer' i]):hover {
         color: var(--dsw-alias-label-primary) !important;
       }
+      /* 对话/轨迹 标签（_tabs/_tab，在 header 里）。注意复合类名：选中标签的
+         class 是 'wSkVaW_tab wSkVaW_tabActive'——[class$='_tab'] 要求整个 class
+         串以 _tab 结尾，选中标签不满足（评审 element.matches 实测三条规则全部
+         落空，原生墨条逐像素存活）。必须 :is([class$='_tab'],[class$='_tabActive'])
+         两种后缀都列，与类序无关。
+         历经四版选中表达——纯墨条
+         （截断分划线）、三色线（24px 里读不出三段、相位断缝，定量评审否决）、
+         短划上移（用户仍觉不好看）——最终照官方 /news 页的悬停语言重做：
+
+         · **去掉底线**（tab:after 置空）：分划线整行连续，选中/悬停不再与它
+           发生几何关系；
+         · **悬停 = 官方遮罩渐显（仅亮色）**：/news 的 imageWrapper 配方原样
+           照搬——::before 常态预建、rgba(0,0,0,.25) 遮罩、opacity 0、
+           transition: opacity .2s ease（官网时长/ease 对）、悬停只切 opacity。
+           官方有 @media(any-hover:hover) 守卫，本主题**有意不设**——这是仓库
+           已登记的分歧（官网 28 处守卫全部不设）：无头测试环境无法仿真
+           any-hover（setEmulatedMedia 不覆盖，matchMedia 恒 false），设了守卫
+           悬停行为就无法被像素测试钉住；触屏粘滞悬停作为已知代价接受。
+           bottom:5px（而非官方 inset:0）是有意的失真：实测它让遮罩盒止于
+           分划线上方，不盖整行三色线。
+           **暗色不用遮罩**：白 12% 对墨面只有 1.39:1（评审实测，调到 18% 也
+           才 1.71:1）——结构性不可见；暗色的悬停信号由既有的「文字提亮一档」
+           规则承担（17.3:1），这正是主题自己的暗色悬停语法。
+           伪元素自持 transition——应用的 button{transition:none} 管不到它；
+         · **选中 = 纯文字层级**：亮色沿用应用原生的强调文字色；暗色下原生
+           选中文字（gray 调色板 3.49:1）反而比未选中（5.62:1）暗——评审实测
+           指出的既有缺陷，这里强制提为 label-primary。轨迹页自己的
+           detailTab（大写 T 结尾）不受影响。 */
+      [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::after {
+        background: 0 0;
+      }
+      [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 5px;
+        background-color: rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        transition: opacity .2s ease;
+        pointer-events: none;
+      }
+      [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive']):hover::before {
+        opacity: 1;
+      }
+      /* 暗色无遮罩：白 12% 对墨面 1.39:1 结构性不可见（评审实测），黑 25% 更弱；
+         暗色的悬停信号 = 既有「文字提亮一档」规则。display:none 连盒子都不画。 */
+      body[data-ds-dark-theme] [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::before {
+        display: none;
+      }
+      body[data-ds-dark-theme] [class$='_centerCol'] [class$='_tabs'] [class$='_tabActive'] {
+        color: var(--dsw-alias-label-primary, #f5f5f0);
+      }
+
       /* ---------- Workspace browser rows (ui-sidebar) ---------- */
       /* Hash-free rebuild of the old .YDXeBa_* rules: those class names are
          '<hash>_suffix' CSS-module exports and 0.1.2-rc.1 rehashed every module,

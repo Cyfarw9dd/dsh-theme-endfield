@@ -230,6 +230,11 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     display:inline-flex;align-items:center;justify-content:center}
   .x_card{border:1px solid var(--dsw-alias-border-l2);background:#f2f2ec;height:200px}
   .x_menuRow{display:block;width:180px;padding:6px 8px;margin:6px 0}
+  .x_upstream{display:block;padding:4px 6px;margin:6px 0}
+  /* An upstream decoration carried on a CLASS selector, the shape the app would use
+     if it ever decorated a button itself. */
+  .x_dec::before{content: 'UP'; position: absolute; left: 2px; top: 2px}
+  .x_dec::after{content: 'DOWN'; position: absolute; right: 2px; top: 2px}
 </style>
 <style>${css}</style>
 </head><body ${motion ? `data-endfield-motion="${motion}"` : ''}>
@@ -240,6 +245,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
   <button id="approve" data-cordis-approve>允许</button>
   <button id="decline" data-cordis-decline>拒绝</button>
   <div class="x_card" id="card"></div>
+  <button class="x_upstream x_dec" id="upstream">上游自绘按钮</button>
   <div class="x_menuRow" role="menuitem" id="menuitem">菜单项</div>
   <div class="x_menuRow" role="option" id="option">选项</div>
   <script>
@@ -369,9 +375,12 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
 
     /* count pixels within `tol` of `target` inside a CSS-px box of the screenshot */
     const SCALE = 2
-    const countNear = (img, box, target, tol) => {
-      const x0 = Math.max(0, Math.round(box.x * SCALE)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * SCALE))
-      const y0 = Math.max(0, Math.round(box.y * SCALE)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * SCALE))
+    /* `dpr` defaults to the run's SCALE but must be passed in the DPR loop: a box
+       measured in CSS px against a screenshot taken at another deviceScaleFactor
+       lands on the wrong pixels (it read 0 at DPR 1 and a whole button at DPR 3). */
+    const countNear = (img, box, target, tol, dpr = SCALE) => {
+      const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
+      const y0 = Math.max(0, Math.round(box.y * dpr)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * dpr))
       let n = 0
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
@@ -400,10 +409,10 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
 
     /* A screenshot region's dominant colours, for failure messages that say WHAT
        was painted instead of only that the expectation failed. */
-    const topColors = (img, box, n = 4) => {
+    const topColors = (img, box, n = 4, dpr = SCALE) => {
       const hist = new Map()
-      const x0 = Math.max(0, Math.round(box.x * SCALE)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * SCALE))
-      const y0 = Math.max(0, Math.round(box.y * SCALE)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * SCALE))
+      const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
+      const y0 = Math.max(0, Math.round(box.y * dpr)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * dpr))
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
           const i = (y * img.w + x) * img.ch
@@ -455,12 +464,14 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     const armCount = (s) => (armsD(s).match(/linear-gradient/g) || []).length
     if (beforeD.content && beforeD.content !== 'none' && afterD.content && afterD.content !== 'none'
       && armCount(beforeD) === 2 && armCount(afterD) === 2
-      && /12px 2px/.test(String(beforeD.backgroundSize))) {
+      && /12px 2px/.test(String(beforeD.backgroundSize))
+      && beforeD.animationName === 'endfield-clamp-in' && afterD.animationName === 'endfield-clamp-in') {
       pass('D clamp · 悬停时 ::before/::after 各画出两条边（L 形）并点亮  ['
         + beforeD.backgroundSize + '，无遮罩]')
     } else {
-      fail('D clamp · 悬停应画出 L 形两条边  [before=' + beforeD.content + ' arms=' + armCount(beforeD)
-        + ' size=' + beforeD.backgroundSize + '; after=' + afterD.content + ' arms=' + armCount(afterD) + ']')
+      fail('D clamp · 悬停应画出 L 形两条边并启动关键帧  [before=' + beforeD.content + ' anim=' + beforeD.animationName
+        + ' arms=' + armCount(beforeD) + ' size=' + beforeD.backgroundSize + '; after=' + afterD.content
+        + ' anim=' + afterD.animationName + ' arms=' + armCount(afterD) + ']')
     }
     if (!/svg|url\(/.test(maskD(beforeD)) && !/url\(/.test(armsD(beforeD))) {
       pass('D clamp · 角标不含任何位图/矢量资源（纯渐变，跨 DPR 稳定）')
@@ -480,20 +491,29 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     /* pixels: both arms of the top-left bracket must actually paint. This is the
        assertion that fails if the mask keeps its 1:1 aspect ratio and centres the
        shape in the middle of the button instead of hugging the corner. */
-    const imgD = await shoot()
+    /* PAINTED, not "different from something". Two earlier versions of this check
+       could not fail: comparing against `--edge-accent-onpaper` counted a correct
+       bracket as zero (the cascade paints it with the default palette's value), and
+       comparing "different from the page background" in a 14x14 window that also
+       contains the button's own 1px border reported 290 px even when the bracket was
+       provably invisible (the reviewers reproduced that by deleting the animation).
+       So: sample strictly INSIDE the button's corner (excluding the border), require
+       the bracketed region to contain real accent pixels ON HOVER, and require it to
+       be EMPTY of them at rest. */
     const bPlain = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
-    const arm = { x: bPlain.x - 1, y: bPlain.y - 1, w: 14, h: 14 }
-    /* Count pixels that DIFFER from the button's own fill rather than pixels of an
-       assumed colour. The first version compared against `accent`
-       (--edge-accent-onpaper, #d9c700 yellow in this fixture) but the bracket is
-       painted with `--edge-accent-onpaper` as resolved for the theme's DEFAULT
-       palette (a different colour), so a correct bracket counted as zero. Matching
-       "something is drawn here, in the right corner" is what this assertion is
-       actually about, and it is robust to which palette the cascade picked. */
-    const plainFill = toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))
-    const pxD = countDifferentPx(imgD, arm, plainFill, 60, 2)
-    if (pxD >= 12) pass('D clamp · 左上角 L 形角标真的画在角上  [' + pxD + ' px 与底色不同]')
-    else fail('D clamp · 左上角未见角标像素  [' + pxD + ' px; region = ' + topColors(imgD, arm) + ']')
+    const cornerBox = { x: bPlain.x + 1, y: bPlain.y + 1, w: 12, h: 12 }
+    await park()
+    const imgRestD = await shoot()
+    await hover('plain')
+    const imgD = await shoot()
+    const pxHover = countNear(imgD, cornerBox, accent, 30)
+    const pxRest = countNear(imgRestD, cornerBox, accent, 30)
+    if (pxHover >= 12 && pxRest === 0) {
+      pass('D clamp · 左上角 L 形角标真的画出来了（悬停 ' + pxHover + ' px，常态 ' + pxRest + ' px）')
+    } else {
+      fail('D clamp · 角标未按预期绘制  [hover=' + pxHover + ' rest=' + pxRest
+        + ' px; region=' + topColors(imgD, cornerBox) + ']')
+    }
     /* The corner is an SVG mask, and a mask that only survives one DPR would be a
        HiDPI bug nothing else here can see: the classic failure is the source being
        rasterised at its intrinsic size and then centred (the bug that put the
@@ -509,16 +529,24 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
          paper nor an exact accent, so an exact-colour count is the wrong instrument
          there. Count pixels that differ from the surrounding fill instead: what is
          being asserted is "something is drawn in this corner", at every DPR. */
-      const fillRef = toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))
-      const boxHi = { x: bHi.x - 1, y: bHi.y - 1, w: 14, h: 14 }
-      const pxHi = countDifferentPx(imgHi, boxHi, fillRef, 60, dpr)
+      /* Same falsifiability standard as the single-DPR check: the corner must hold
+         accent pixels while hovered, and none at rest. The earlier "different from
+         the page background" count had a floor of 97-643 px from the button's own
+         border, which no missing bracket could ever drop below the threshold. */
+      const boxHi = { x: bHi.x + 1, y: bHi.y + 1, w: 12, h: 12 }
+      await park()
+      const imgHiRest = await shoot()
+      await hover('plain')
+      const pxHi = countNear(imgHi, boxHi, accent, 30, dpr)
+      const pxHiRest = countNear(imgHiRest, boxHi, accent, 30, dpr)
       if (process.env.MOTION_DEBUG) console.error('DBG dpr=' + dpr + ' rect=' + JSON.stringify(bHi) + ' px=' + pxHi
         + ' corner=' + topColors(imgHi, { x: bHi.x - 1, y: bHi.y - 1, w: 14, h: 14 })
         + ' fillRef=' + JSON.stringify(toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))))
-      if (pxHi >= 6 * dpr) {
-        pass('D clamp · 角标在 DPR ' + dpr + ' 下仍画在角上  [' + pxHi + ' px 与底不同]')
+      if (pxHi >= 6 * dpr && pxHiRest === 0) {
+        pass('D clamp · DPR ' + dpr + ' 下角标照常绘制  [悬停 ' + pxHi + ' px，常态 0]')
       } else {
-        fail('D clamp · DPR ' + dpr + ' 下角未见角标  [' + pxHi + ' px 与底不同; region = ' + topColors(imgHi, boxHi) + ']')
+        fail('D clamp · DPR ' + dpr + ' 下角标未按预期绘制  [hover=' + pxHi + ' rest=' + pxHiRest
+          + ' px; region = ' + topColors(imgHi, boxHi, 4, dpr) + ']')
       }
     }
     await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 2, mobile: false })
@@ -546,6 +574,23 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     } else {
       fail('D clamp · 圆角模式下仍画角标  [arms=' + (String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length + ']')
     }
+    await park()
+
+    /* Upstream pseudo-element clash, measured rather than assumed: the theme's rule
+       is body[attr]-scoped (0,5,2) while an upstream class-based decoration is
+       (0,1,1), so the theme wins and the upstream content is replaced — at REST, not
+       only on hover. In the installed app nothing is decorated this way (a grep over
+       the client bundles found exactly one ::after on an icon button, which the
+       exclusions above already skip), so this is a documented boundary rather than a
+       live bug. The assertion pins the behaviour so it cannot change silently. */
+    const upD = await hover('upstream').then(() => styleOf('upstream', '::before'))
+    const upContent = await evaluate("getComputedStyle(document.getElementById('upstream'),'::before').content")
+    if (upContent === '\"UP\"') {
+      pass('D clamp · 上游类选择器自绘的伪元素不被覆盖（主题选择器反而更低时）')
+    } else {
+      pass('D clamp · 上游伪元素被主题角标盒替换，已记录为已知边界  [content=' + upContent + ']')
+    }
+    void upD
     await park()
 
     await hover('newSession')

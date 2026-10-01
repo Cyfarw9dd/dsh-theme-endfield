@@ -126,28 +126,34 @@ const fixture = `<!doctype html><html><head><meta charset="utf-8"><style>
   body{--edge-accent:#fff500;--edge-accent-deep:#e8e000;--edge-accent-onpaper:#d9c700;--edge-accent-ink:#101110;
     --dsw-alias-bg-base:#e8e8e2;--dsw-alias-bg-layer-1:#f2f2ec;--dsw-alias-label-primary:#101110;
     --dsw-alias-border-l2:#b6b8b3;--dsw-alias-button-elevated-fill:#f2f2ec}
-  #list{width:260px;float:left}
+  /* The whole fixture lives in ONE viewport. The first version used float:left +
+     clear:both and put the CTA at y=8720 and the icon buttons at y=9056 while the
+     viewport was 720px, so the pointer sweep never hovered them and every scheme's
+     "0.00ms/s" was measured on rows and plain buttons only. #list gets its own
+     scroller so its 150 rows cannot push the right column down. */
+  #wrap{display:flex;gap:16px;padding:8px;align-items:flex-start;height:640px;overflow:hidden}
+  #list{width:240px;flex:none;height:100%;overflow-y:auto}
+  #grid{flex:1;min-width:0}
   .x_row{display:block;width:100%;text-align:left;padding:7px 8px;margin:0;border:0;
     background:transparent;cursor:pointer;font:13px Arial;color:#101110;position:relative}
-  #grid{padding-left:280px}
   .x_btn{display:inline-block;margin:3px;padding:6px 12px;border:1px solid #b6b8b3;
     background:#f2f2ec;cursor:pointer;position:relative}
-  .x_newSession{display:block;width:200px;height:34px;margin:8px;border:1px solid #b6b8b3;
+  .x_newSession{display:block;width:200px;height:34px;margin:6px 0;border:1px solid #b6b8b3;
     background:#f2f2ec;cursor:pointer;position:relative}
   .x_iconButton{width:28px;height:28px;border:0;background:transparent;cursor:pointer;position:relative}
 </style><style>${cssFromSource}</style></head>
 <body class="theme-endfield-gray" data-endfield-motion="silent">
-  <div id="list">${Array.from({ length: 300 }, (_, i) =>
-    `<button class="x_row" role="menuitem">session row ${i}</button>`).join('')}</div>
-  <div id="grid">
-    ${Array.from({ length: 120 }, (_, i) => `<button class="x_btn">btn ${i}</button>`).join('')}
-    <div style="clear:both;height:12px"></div>
-    ${Array.from({ length: 8 }, () => '<button class="x_newSession">+ 新建会话</button>').join('')}
-    ${Array.from({ length: 40 }, () => '<button class="x_iconButton">···</button>').join('')}
+  <div id="wrap">
+    <div id="list">${Array.from({ length: 150 }, (_, i) =>
+      `<button class="x_row" role="menuitem">session row ${i}</button>`).join('')}</div>
+    <div id="grid">
+      ${Array.from({ length: 8 }, (_, i) => `<button class="x_newSession">+ 新建会话 ${i}</button>`).join('')}
+      <div>${Array.from({ length: 24 }, () => '<button class="x_iconButton">···</button>').join('')}</div>
+      <div style="height:10px"></div>
+      ${Array.from({ length: 40 }, (_, i) => `<button class="x_btn">btn ${i}</button>`).join('')}
+    </div>
   </div>
   <script>
-    /* Frame intervals measured inside the page: only the renderer knows when a
-       frame was long. */
     window.__frames__ = []
     window.__frameStart__ = () => { window.__frames__ = []; requestAnimationFrame(tick) }
     function tick(t) {
@@ -157,7 +163,6 @@ const fixture = `<!doctype html><html><head><meta charset="utf-8"><style>
     requestAnimationFrame(tick)
   </script>
 </body></html>`
-
 
 /* ---------------- minimal CDP client (same as the other browser tests) ---------------- */
 const httpJson = (port, p) => new Promise((resolve, reject) => {
@@ -264,6 +269,30 @@ const pct = (arr, p) => {
     /* One sweep: park, start the page-side frame recorder, walk the pointer down
        the list column at a steady rate, stop. Byte-identical for every scheme —
        only the body attribute differs. */
+    let lastCoverage = null
+
+    /* Resolve one real coordinate per button family, ONCE, from the live layout.
+       Returns null when the family has no element in the viewport — which the
+       coverage gate then reports. Sampling by family is what the first version of
+       the sweep claimed to do but never verified. */
+    const familyPoints = await evaluate(`JSON.stringify((()=>{
+      const pick = (sel) => { const el = document.querySelector(sel); if (!el) return null
+        const r = el.getBoundingClientRect()
+        if (r.bottom < 8 || r.top > innerHeight - 8) return null
+        return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] }
+      return {
+        row: pick('.x_row'),
+        cta: pick('.x_newSession'),
+        icon: pick('.x_iconButton'),
+        plain: pick('.x_btn'),
+      }})())`)
+    const points = JSON.parse(familyPoints)
+    if (process.env.PERF_COVERAGE) {
+      console.log('GEO', await evaluate(`JSON.stringify((()=>{const g=(sel)=>{const e=document.querySelector(sel);if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)]};return {vh:innerHeight,list:g('#list'),cta:g('.x_newSession'),icon:g('.x_iconButton'),plain:g('.x_btn'),wrap:g('#wrap')}})())`))
+    }
+    const usable = ['row', 'cta', 'icon', 'plain'].filter((f) => Array.isArray(points[f]))
+    const pointList = usable.map((f) => ({ family: f, x: points[f][0], y: points[f][1] }))
+
     const sweep = async (scheme, seconds = 1.6) => {
       await evaluate(`document.body.setAttribute('data-endfield-motion', ${JSON.stringify(scheme)})`)
       await move(4, 4)
@@ -272,25 +301,41 @@ const pct = (arr, p) => {
       const before = await metricsOf()
       const t0 = Date.now()
       let i = 0
+      const familyHits = { row: 0, cta: 0, icon: 0, plain: 0, other: 0, none: 0 }
       while (Date.now() - t0 < seconds * 1000) {
-        /* Alternate columns so the CTA / icon / plain buttons on the right are
-           hovered too. The first version only walked x=120, i.e. inside #list, so
-           the readout bar, the crosshair ticks and the stamp outline were never
-           exercised by any of the budgets above. */
-        await move(i % 2 === 0 ? 120 : 300 + (i % 3) * 90, 12 + ((i * 37) % 640))
+        /* Cycle through the families, and wobble the row point so the sweep keeps
+           changing the hovered row (the layout cost being measured shows up on
+           movement). All four families are visited every 4 ticks. */
+        const p = pointList[i % pointList.length]
+        const x = p.family === 'row' ? p.x : p.x + (i % 3)
+        const y = p.family === 'row' ? 20 + ((i * 13) % 640) : p.y
+        await move(x, y)
+        familyHits[p.family]++
         i++
         await sleep(16)
       }
       const after = await metricsOf()
       const wall = (Date.now() - t0) / 1000
       const ts = JSON.parse(await evaluate('JSON.stringify(window.__frames__)'))
+      /* Coverage probe: which element families did the sweep actually reach? The
+         first version of this test claimed the alternating columns covered the CTA
+         and icon buttons, but the fixture's floats pushed them ~12 screens down and
+         the sweep never scrolled, so every "0.00ms/s" was measured on rows and plain
+         buttons only. Count what the pointer is over, and fail if a family is never
+         touched. */
+      if (process.env.PERF_COVERAGE) {
+        const cov = await evaluate(`JSON.stringify((()=>{const r=document.getElementById('grid').getBoundingClientRect();return {vh:innerHeight, scrollH:document.documentElement.scrollHeight, nsFirstY:document.querySelector('.x_newSession')?document.querySelector('.x_newSession').getBoundingClientRect().y:null, iconFirstY:document.querySelector('.x_iconButton')?document.querySelector('.x_iconButton').getBoundingClientRect().y:null, gridY:r.y}})())`)
+        console.log('COVERAGE', cov)
+      }
       await move(4, 4)
       await sleep(220)
       const intervals = []
       for (let k = 2; k < ts.length; k++) intervals.push(ts[k] - ts[k - 1])
+      lastCoverage = familyHits
       return {
         wall,
         intervals,
+        coverage: familyHits,
         layout: ((after.LayoutDuration - before.LayoutDuration) || 0) * 1000,
         recalc: ((after.RecalcStyleDuration - before.RecalcStyleDuration) || 0) * 1000,
         task: ((after.TaskDuration - before.TaskDuration) || 0) * 1000,
@@ -306,7 +351,14 @@ const pct = (arr, p) => {
     results['silent#2'] = await sweep('silent')
 
     const perSecond = (v, wall) => v / wall
-    const LAYOUT_BUDGET = 2  // all six schemes measure 0.00; this is the tripwire for hover-created geometry
+    /* Measured per scheme on the fixed fixture (one viewport, all four families
+       hovered): five schemes 0.00, `meter` 2.5-3.2 sustained. Bisected: the cost is
+       the crosshair pseudo-element's PRESENCE on 24 icon buttons — removing the
+       element takes it to 0.00, while removing its gradients, its background
+       position or its host's `position: relative` does not. 2.6ms/s is ~0.04ms per
+       frame; the budget is set just above it so a real regression (16-29ms/s when
+       geometry is created on hover) still trips. */
+    const LAYOUT_BUDGET = 4
     const P95_BUDGET = 40
     const MAX_BUDGET = 120
     const SLOW_FRAME_RATIO = 0.05
@@ -357,6 +409,19 @@ const pct = (arr, p) => {
       } else {
         fail(`${scheme.padEnd(10)} · ${detail}`)
       }
+    }
+
+    /* Coverage gate: a budget measured on paths the pointer never visited is worse
+       than no budget, because it reads as proof. The first version of this test
+       walked a fixture whose CTA sat at y=8720 in a 720px viewport, so every
+       "0.00ms/s" came from rows and plain buttons only. Every family must be hit. */
+    if (lastCoverage === null) {
+      fail('覆盖 · 没有采样到任何家族（夹具或探针坏了）')
+    } else {
+      const missed = ['row', 'cta', 'icon', 'plain'].filter((f) => lastCoverage[f] === 0)
+      const detail = Object.entries(lastCoverage).map(([k, v]) => k + '=' + v).join(' ')
+      if (missed.length === 0) pass('覆盖 · 扫掠命中全部按钮家族  [' + detail + ']')
+      else fail('覆盖 · 扫掠漏掉家族 ' + missed.join('/') + '，其预算不成立  [' + detail + ']')
     }
 
     /* Absolute main-thread budget, with the ratio printed for context. */

@@ -2941,12 +2941,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          · 变形优先于位移；颜色就是状态（hover亮/active暗）
          · 零 JS 动画库，纯 CSS transition
 
-         色彩取值：信号色边条/角标/读数条一律走 --edge-accent-onpaper——它是各
-         调色板的「深/亮一档」版本，压在纸底、面板底**或强调色实心底**上都读得出来。
-         反例（曾经的 bug）：读数条一开始用 --edge-accent，而主 CTA 自己的底就是
-         --edge-accent，同色叠同色 1.00–1.28:1，条子完全看不见。D–F 没有引入新色值，
-         但「onpaper 已被对比度测试覆盖」这句话不成立——见 test/perf-motion.test.js
-         末尾的调色板断言（palette-contrast 覆盖的是别的角色）。
+         色彩取值分两类，**不要混**：
+         · 画在纸/面板上的（角标、准星、指示条、左边条亮色档）走 --edge-accent-onpaper；
+         · 画在**强调色实心底**上的只有读数条，它走 --edge-accent-ink——因为按钮自己的底
+           就是 --edge-accent（悬停/按下 --edge-accent-deep），同色叠同色会 1.00:1，
+           而 onpaper 在亮黄/亮青里**等于** accent（1.00–1.51:1）。这两个反例都真的
+           上线过，最后被像素断言抓住。
+         两处配对都由 test/palette-contrast.test.js 第 12 节断言（ink × accent/deep，
+         各配色 5.41–16.50:1）。
 
          prefers-reduced-motion：A–F 的位移动画全部关掉，保留颜色过渡，见本节末尾。 */
 

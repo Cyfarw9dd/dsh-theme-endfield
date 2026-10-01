@@ -208,13 +208,20 @@ if (/prefers-reduced-transparency: reduce/.test(src) && /prefers-contrast: more/
   fail('缺少 prefers-reduced-transparency / prefers-contrast 降级')
 }
 
-/* ---------- 6. the tri-colour rule carries the OFFICIAL stops ---------- */
+/* ---------- 6. the tri-colour rules carry the OFFICIAL PROPORTIONS ----------
+   The official stops are ABSOLUTE (11.25rem / 22.5625rem) on a 67.5rem-wide
+   element, which makes green two thirds of the line. Copying the rem values
+   onto this theme's fluid-width lines rendered near-equal thirds (user report);
+   the stops are therefore the official ratio converted to percentages, and the
+   DERIVATION must stay in the source so nobody "simplifies" it back. */
 {
-  const official = '#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0'
+  const official = 'linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0)'
   const compact = official.replace(/\s+/g, '')
-  const found = src.replace(/\s+/g, '').includes(compact)
-  if (found) pass('三色信号线沿用官方 decoLine 原文停靠值')
-  else fail('三色信号线的停靠值与官方 decoLine 不一致（应为 ' + official + '）')
+  const found = src.replace(/\s+/g, '').split(compact).length - 1
+  if (found >= 2) pass('两条三色线（设置分组 + 工作区顶）都用官方比例停靠（绿占 2/3）')
+  else fail('三色线数量 ' + found + '（应为 2：设置分组标题 + 主工作区顶部分划线），或停靠值与官方比例不符')
+  if (/11\.25\/67\.5/.test(src)) pass('比例换算的推导留在源码注释里')
+  else fail('缺少 11.25/67.5 的换算推导注释——没人能再把比例改回均分而不被问')
 }
 
 console.log('')

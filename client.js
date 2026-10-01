@@ -2983,8 +2983,13 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
             rgba(var(--edge-accent-rgb, 126, 126, 126), var(--edge-glow-dark, 0.04)), transparent 70%);
       }
 
-      /* 三色信号线：官方 decoLine 原文（90deg,#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0）。
-         只用在主题自己的表面——设置页的分组标题——不覆盖任何应用元素。
+      /* 三色信号线：官方 decoLine。原文是绝对停靠（90deg,#ff00f0 11.25rem,
+         #fffa00 0,#fffa00 22.5625rem,#00ffa2 0），挂在 67.5rem 宽的容器上——
+         也就是 紫 11.25 : 黄 11.3125 : 绿 44.9375rem，**绿占三分之二**。绝对
+         停靠只在那一个宽度下成立：本主题的两条线宽度都随容器伸缩，照抄 rem
+         会让三条色带在窄容器上几乎均分（用户实测反馈与官方不符）。所以这里
+         换算成官方自己的比例停靠：11.25/67.5 = 16.6667%，22.5625/67.5 =
+         33.4259%，绿吃剩余 ——任何宽度下都是官方的紫:黄:绿观感。
 
          分组标题本身是 'display:flex'（标记块 + 中英文两行），所以这条线不能靠
          ::after 当 flex 子项（会被当成第三段文字挤在一行），必须绝对定位到标题底部
@@ -3000,7 +3005,28 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         right: 0;
         bottom: 0;
         height: 2px;
-        background-image: linear-gradient(90deg,#ff00f0 11.25rem,#fffa00 0,#fffa00 22.5625rem,#00ffa2 0);
+        background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
+      }
+
+      /* 主工作区顶部分划线：同一条三色线，放在会话 header 的底边（那里本来就有
+         0.5px 的应用自带分割线，这条 2px 三色线直接叠上去成为更强的分划）。
+         · 挂在 [class$='_header'] 的 ::before——应用的 bundle 不占用 header 的
+           伪元素（全量 grep 过），::after 也留给它以防万一；
+         · 后代匹配（不要求直接子级）——插槽包装层的教训见纹理锚点；
+         · 常态渲染，无动画无遮罩；hero/active 各阶段都在（它在根内部、
+           不依赖隔离，不与水印冲突）。 */
+      [class$='_centerCol'] [class$='_header'] {
+        position: relative;
+      }
+      [class$='_centerCol'] [class$='_header']::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        pointer-events: none;
+        background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
       }
 
       /* 降级：要求减少透明/更高对比时整段让位（装饰不与无障碍偏好争）。
@@ -3015,6 +3041,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
           display: none !important;
         }
         .endfield-settings .endfield-settings-group-title:has(> span)::after {
+          background-image: none !important;
+        }
+        [class$='_centerCol'] [class$='_header']::before {
           background-image: none !important;
         }
       }

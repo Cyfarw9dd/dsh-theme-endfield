@@ -2404,6 +2404,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         light: '#f2f2ec',
         dark: '#1c1e1c',
       },
+      /* 菜单/弹层面（@ 与 / 呼出的列表、模型选择、工作区菜单……）。
+         上游默认 --dsw-menu-surface-fill 是 **58%/45% alpha 的半透明**
+         (#f8f9fa94 / #43454a73)，设计上要配 --dsw-menu-backdrop-filter 的
+         blur(40px) 磨砂。本主题没有给菜单接磨砂（玻璃开关只覆盖输入卡与侧栏），
+         半透明就只是「透」：正文与背景纹理会从菜单底下渗上来（用户实测反馈）。
+         对齐到主题自己的浮层令牌——不透明、与纸面同族，配 0.5px 描边 + 阴影
+         分层。若日后玻璃开关要扩到菜单，应整组换（半透明 + backdrop-filter），
+         不能只留半透明。 */
+      '--dsw-menu-surface-fill': {
+        light: '#f2f2ec',
+        dark: '#1c1e1c',
+      },
       '--dsw-alias-border-l1': {
         light: '#d8d9d5',
         dark: '#343633',
@@ -3119,7 +3131,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          方案A signal（默认）：官网签名复刻
            · 全局 .2s 颜色过渡（hover 不再瞬变）
            · :active 按下 = 底色暗一档
-           · 悬停圆角软化 0 → 4px（仅直角模式）
            · 主 CTA / 新会话按钮：信号色箭头自左侧滑入
 
          方案B silent：极简克制
@@ -3195,25 +3206,14 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
       /* ================= 方案A signal：官网签名复刻 ================= */
 
-      /* A-1. 悬停圆角软化（仅直角模式）。
-         官网上 border-radius 是被过渡的属性之一（transition: color/background-color/
-         border-radius .2s），但**本主题给不了这个过渡**：应用自己有一条
-         'button, [role="button"] { transition: none !important }'（见下方
-         "Hover feedback should track the pointer immediately"），!important 无视
-         特异性——实测 signal 下真实 'button' 的 transitionProperty 是 none，
-         只有非 button 的角色（[role='menuitem'] 这类）拿得到颜色过渡。
-         曾在这里加过一条 transition: border-radius 想赢过它（见 e8216a8），实测无效，已删；
-         现在圆角在悬停时瞬跳，与按钮的其它状态变化一致，文档也照此修正。
-         （border-radius 也**不该**进共通过渡：浏览器把它当作可能触发重排的属性，
-         放进全局规则会让长列表每次悬停整屏布局失效。） */
-      /* 排除圆形控件与发送按钮：前者被圆角恢复规则变回圆，后者在直角化下是 0，
-         两者都不该在悬停瞬间长出 6px 倒角。用子串匹配：真实 bundle 里这些类常带
-         复合类名（iconButton 与 toggle 并存），后缀匹配会静默漏掉。 */
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:not([class*='_iconButton']):not([class*='actionButton' i]):not([class*='_primary']):hover:not(:disabled),
-      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:not([class*='_iconButton']):not([class*='actionButton' i]):not([class*='_primary']):hover:not(:disabled) {
-        border-radius: 6px !important;
-      }
-
+      /* A-1.（已删除）悬停圆角软化。
+         官网确实在 hover 里动圆角（2px→6px，调研 §4.2 原文），这里曾照做过一条
+         「直角模式下按钮悬停 border-radius:6px」。撤掉的原因是用户实测反馈定的
+         准则：**圆角全局恒定，不随状态变化**——悬停瞬间方角变圆角，再叠加排除
+         清单（图标/走纸/发送按钮不参与），呈现为「部分按钮、悬停时才变的不一致
+         倒角」。直角模式一律 0；圆角模式（theme-endfield-round）保持上游原样；
+         两种模式各自恒定。附带收益：border-radius 被浏览器按「可能触发重排」
+         处理，悬停改圆角在长列表上有实测成本（见性能段）。 */
       /* A-2. 主 CTA 箭头动效（新会话 / 审批 / 发送）。
          不做 clip-path 变形——两个 polygon 之间的点位插值在过渡期间产生
          自交形状（蝶形），视觉上闪烁扭曲。改为：形状固定为右指三角，
@@ -3275,7 +3275,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          · 发送是高频动作，箭头在每一次悬停都重放，属于噪音。
          现在发送按钮只保留全局的颜色过渡（背景/文字/边框），与其它按钮一致。 */
 
-      /* A-5. Sidebar session/search rows + menu/option items + table rows:
+      /* A-5. Sidebar session/search rows + table rows (+ settings buttons):
          left signal border on hover. Uses --edge-accent-onpaper (a DARK step
          that reads on both paper and panel) because --edge-accent alone is
          #d9d9d9 in the default gray palette — invisible on cream hover tints.
@@ -3285,11 +3285,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          every hovered row lay out again: measured over a 300-row sweep, the
          hover-created border cost 11.6ms/s of LayoutDuration against 0.00ms/s
          for the always-present version (the same reason the meter/menu rules
-         pre-paint their geometry). */
+         pre-paint their geometry).
+
+         菜单/列表框条目（[role='menuitem'] / [role='option']）**已移出**这条处理：
+         它们原生 border:none，在紧凑弹层里挂一条悬停才显色的左边框读起来是
+         「没闭合的边框」（用户实测反馈），且常态的 3px 透明预声明会把条目内容
+         右推 3px。弹层里的选中反馈交给应用自己的底色高亮。左边框只属于「行」
+         语境：侧栏会话行、表格行、设置页按钮。 */
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow'],
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow'],
-      body[data-endfield-motion='signal'] [role='menuitem'],
-      body[data-endfield-motion='signal'] [role='option'],
       body[data-endfield-motion='signal'] tbody tr,
       body[data-endfield-motion='signal'] .endfield-settings button {
         border-left: 3px solid transparent !important;
@@ -3298,12 +3302,6 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow']:hover {
-        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
-      }
-      body[data-endfield-motion='signal'] [role='menuitem']:hover {
-        border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
-      }
-      body[data-endfield-motion='signal'] [role='option']:hover {
         border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
       /* Table row hover: same left border as sidebar rows. */

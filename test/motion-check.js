@@ -746,8 +746,9 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     }
     await park()
 
-    /* 圆形控件在悬停时也不得被方化：A-1 的 6px 与圆角恢复规则的顺序一度让
-       `_iconButton` 在悬停瞬间从 50% 变成 6px（默认方案 A 的回归）。 */
+    /* 圆角全局恒定：任何方案、任何状态都不改圆角。这条最初守的是 A-1 的
+       悬停 6px 软化把圆形按钮方化的回归；A-1 整条删除后，准则升级为
+       「悬停/按下不得改变任何按钮的圆角」（用户实测反馈）。 */
     await setMotion('signal')
     await park()
     const iconRest = await styleOf('iconButton')
@@ -758,6 +759,12 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     } else {
       fail('圆形图标按钮 · 悬停改变了圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
     }
+    await park()
+    /* 方角按钮同理：直角模式下悬停必须仍是 0（A-1 曾在这里变 6px）。 */
+    await hover('plain')
+    const plainHoverR = (await styleOf('plain')).borderRadius
+    if (plainHoverR === '0px') pass('方角按钮 · 悬停仍是直角  [' + plainHoverR + ']')
+    else fail('方角按钮 · 悬停长出了倒角  [' + plainHoverR + ']')
     await park()
 
     /* ============ 发送按钮：不得有任何动效 ============

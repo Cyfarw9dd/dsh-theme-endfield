@@ -389,12 +389,18 @@ const pct = (arr, p) => {
     }
     console.log('')
 
+    /* Sanity rail, not a tolerance: an order-of-magnitude change between two
+       identical `silent` sweeps means the machine (or the harness) is not in a
+       state to grade anything. A ±50% rail was tried first and tripped on
+       normal scheduling noise — `silent`'s task is small enough that 30-50ms/s of
+       jitter doubles it, while the scheme numbers it is compared against stay in
+       the same band across runs. */
     const drift = Math.abs(results.silent.task - results['silent#2'].task) / Math.max(results.silent.task, 1)
     const driftLayout = Math.abs(results.silent.layout - results['silent#2'].layout)
-    if (drift <= 0.5 && driftLayout <= 2) {
-      pass(`基线稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s`)
+    if (drift <= 1 && driftLayout <= 2) {
+      pass(`基线稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%（报警线 100%）、layout 相差 ${driftLayout.toFixed(2)}ms/s`)
     } else {
-      fail(`基线不稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s，本轮数字仅供参考`)
+      fail(`基线不稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s，本轮数字不可用于评分`)
     }
 
     for (const scheme of Object.keys(results)) {

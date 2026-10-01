@@ -1,20 +1,21 @@
 /**
- * perf-motion.test.js — measure what the button-motion schemes COST, not just what
- * they look like. "Smooth" is a number, so this script produces numbers.
+ * perf-motion.test.js — measure what the MERGED button-motion design COSTS, not
+ * just what it looks like. "Smooth" is a number, so this script produces numbers.
  *
- * Why it exists: the first cut of the D/E/F schemes animated `width` on the meter
- * readout bar and `padding-left` on hovered menu rows. Both look correct and both
- * force the renderer to re-run layout every frame — on a sidebar with a few hundred
- * rows that is the "hover feels sticky" class of bug no computed-style assertion can
- * see. This test drives a real pointer over a fixture of 300 rows plus buttons and
- * reads the renderer's own counters plus requestAnimationFrame deltas.
+ * Why it exists: an earlier scheme animated `width` on a readout bar and
+ * `padding-left` on hovered menu rows. Both looked correct and both forced the
+ * renderer to re-run layout every frame — on a sidebar with a few hundred rows
+ * that is the "hover feels sticky" class of bug no computed-style assertion can
+ * see. This test drives a real pointer over a fixture of 150 sidebar rows plus
+ * buttons and reads the renderer's own counters plus requestAnimationFrame deltas.
  *
- * Method — an A/B with the harness held constant. Every sweep moves the pointer over
- * the exact same coordinates at the same rate; the ONLY thing that changes between
- * sweeps is `data-endfield-motion` on <body>. The `silent` scheme (a colour
- * transition and nothing else) is therefore the floor of the same run, and each
- * scheme is judged against it: the sweep's own CDP round-trips cost more than the
- * animations do, so an absolute task threshold would measure the harness instead.
+ * Method — an A/B with the harness held constant. Every sweep moves the pointer
+ * over the exact same coordinates at the same rate; the ONLY thing that changes
+ * between sweeps is `data-endfield-motion` on <body>. The OFF state (attribute
+ * removed, exactly what syncMotion writes) is the floor of the same run, and the
+ * merged design ('signal') is judged against it: the sweep's own CDP round-trips
+ * cost more than the animations do, so an absolute task threshold would measure
+ * the harness instead.
  *
  * Asserted:
  *   1. STATIC GUARD (no browser needed) — the allowlist of every transition and of
@@ -79,8 +80,8 @@ const motionSection = (() => {
   const end = cssFromSource.indexOf('Square corners (default)')
   return cssFromSource.slice(from, end)
 })()
-if (!/data-endfield-motion='stamp'/.test(motionSection)) {
-  console.error('FAIL  static guard: could not locate the motion section')
+if (!/endfield-clamp-in/.test(motionSection) || !/_newSession'\]::after/.test(motionSection)) {
+  console.error('FAIL  static guard: could not locate the merged motion section')
   process.exit(1)
 }
 {
@@ -134,18 +135,19 @@ const fixture = `<!doctype html><html><head><meta charset="utf-8"><style>
   #wrap{display:flex;gap:16px;padding:8px;align-items:flex-start;height:640px;overflow:hidden}
   #list{width:240px;flex:none;height:100%;overflow-y:auto}
   #grid{flex:1;min-width:0}
-  .x_row{display:block;width:100%;text-align:left;padding:7px 8px;margin:0;border:0;
-    background:transparent;cursor:pointer;font:13px Arial;color:#101110;position:relative}
+  .x_sessionRow{display:block;width:100%;text-align:left;padding:7px 8px;margin:0;border:0;
+    background:transparent;cursor:pointer;font:13px Arial;color:#101110}
+  .x_sessionRow:hover{background:var(--dsw-alias-interactive-bg-hover)}
   .x_btn{display:inline-block;margin:3px;padding:6px 12px;border:1px solid #b6b8b3;
     background:#f2f2ec;cursor:pointer;position:relative}
   .x_newSession{display:block;width:200px;height:34px;margin:6px 0;border:1px solid #b6b8b3;
     background:#f2f2ec;cursor:pointer;position:relative}
   .x_iconButton{width:28px;height:28px;border:0;background:transparent;cursor:pointer;position:relative}
 </style><style>${cssFromSource}</style></head>
-<body class="theme-endfield-gray" data-endfield-motion="silent">
+<body class="theme-endfield-gray">
   <div id="wrap">
-    <div id="list">${Array.from({ length: 150 }, (_, i) =>
-      `<button class="x_row" role="menuitem">session row ${i}</button>`).join('')}</div>
+    <div id="list" class="x_sidebarCol">${Array.from({ length: 150 }, (_, i) =>
+      `<div class="x_sessionRow" role="treeitem" aria-selected="false">session row ${i}</div>`).join('')}</div>
     <div id="grid">
       ${Array.from({ length: 8 }, (_, i) => `<button class="x_newSession">+ 新建会话 ${i}</button>`).join('')}
       <div>${Array.from({ length: 24 }, () => '<button class="x_iconButton">···</button>').join('')}</div>
@@ -281,7 +283,7 @@ const pct = (arr, p) => {
         if (r.bottom < 8 || r.top > innerHeight - 8) return null
         return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] }
       return {
-        row: pick('.x_row'),
+        row: pick('.x_sessionRow'),
         cta: pick('.x_newSession'),
         icon: pick('.x_iconButton'),
         plain: pick('.x_btn'),
@@ -294,7 +296,8 @@ const pct = (arr, p) => {
     const pointList = usable.map((f) => ({ family: f, x: points[f][0], y: points[f][1] }))
 
     const sweep = async (scheme, seconds = 1.6) => {
-      await evaluate(`document.body.setAttribute('data-endfield-motion', ${JSON.stringify(scheme)})`)
+      if (scheme === 'off') await evaluate("document.body.removeAttribute('data-endfield-motion')")
+      else await evaluate(`document.body.setAttribute('data-endfield-motion', ${JSON.stringify(scheme)})`)
       await move(4, 4)
       await sleep(260)
       await evaluate('window.__frameStart__()')
@@ -342,13 +345,13 @@ const pct = (arr, p) => {
       }
     }
 
-    const schemes = ['silent', 'signal', 'impact', 'clamp', 'meter', 'stamp']
+    const modes = ['off', 'signal']
     const results = {}
-    for (const scheme of schemes) results[scheme] = await sweep(scheme)
-    /* A second `silent` pass runs LAST to expose drift (GC, thermals). If the two
-       silent passes disagree badly, the run is not trustworthy and says so instead
-       of quietly grading other schemes against a moving floor. */
-    results['silent#2'] = await sweep('silent')
+    for (const mode of modes) results[mode] = await sweep(mode)
+    /* A second `off` pass runs LAST to expose drift (GC, thermals). If the two
+       floor passes disagree badly, the run is not trustworthy and says so instead
+       of quietly grading the design against a moving floor. */
+    results['off#2'] = await sweep('off')
 
     const perSecond = (v, wall) => v / wall
     /* Measured per scheme on the fixed fixture (one viewport, all four families
@@ -400,12 +403,12 @@ const pct = (arr, p) => {
        normal scheduling noise — `silent`'s task is small enough that 30-50ms/s of
        jitter doubles it, while the scheme numbers it is compared against stay in
        the same band across runs. */
-    const drift = Math.abs(results.silent.task - results['silent#2'].task) / Math.max(results.silent.task, 1)
-    const driftLayout = Math.abs(results.silent.layout - results['silent#2'].layout)
+    const drift = Math.abs(results.off.task - results['off#2'].task) / Math.max(results.off.task, 1)
+    const driftLayout = Math.abs(results.off.layout - results['off#2'].layout)
     if (drift <= 1 && driftLayout <= 2) {
-      pass(`基线稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%（报警线 100%）、layout 相差 ${driftLayout.toFixed(2)}ms/s`)
+      pass(`基线稳定 · 两次 off 的 task 相差 ${(drift * 100).toFixed(0)}%（报警线 100%）、layout 相差 ${driftLayout.toFixed(2)}ms/s`)
     } else {
-      fail(`基线不稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s，本轮数字不可用于评分`)
+      fail(`基线不稳定 · 两次 off 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s，本轮数字不可用于评分`)
     }
 
     for (const scheme of Object.keys(results)) {
@@ -444,8 +447,8 @@ const pct = (arr, p) => {
          value silently tightened the budget by ~1.6x (the sweep length). */
       const perSecond = r.task / r.wall
       const perFrame = perSecond / 1000 * frameBudget
-      const ratio = perSecond / Math.max(results.silent.task / results.silent.wall, 1)
-      const detail = `${perSecond.toFixed(0)}ms/s ≈ ${perFrame.toFixed(3)}ms per frame（预算 ${TASK_BUDGET}ms/s；silent 的 ${ratio.toFixed(2)}×）`
+      const ratio = perSecond / Math.max(results.off.task / results.off.wall, 1)
+      const detail = `${perSecond.toFixed(0)}ms/s ≈ ${perFrame.toFixed(3)}ms per frame（预算 ${TASK_BUDGET}ms/s；off 的 ${ratio.toFixed(2)}×）`
       if (perSecond <= TASK_BUDGET) pass(`task 预算 · ${scheme.padEnd(10)} ${detail}`)
       else fail(`task 预算 · ${scheme.padEnd(10)} ${detail} 超预算`)
     }
@@ -458,7 +461,8 @@ const pct = (arr, p) => {
     await sleep(200)
     const t0Park = Date.now()
     for (const scheme of Object.keys(results)) {
-      await evaluate(`document.body.setAttribute('data-endfield-motion', ${JSON.stringify(scheme)})`)
+      if (scheme === 'off') await evaluate("document.body.removeAttribute('data-endfield-motion')")
+      else await evaluate(`document.body.setAttribute('data-endfield-motion', ${JSON.stringify(scheme)})`)
       await move(120, 60)
       await sleep(400)
       const beforePark = await metricsOf()

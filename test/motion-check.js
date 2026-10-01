@@ -1,35 +1,33 @@
 /**
- * motion-check.js — prove the D/E/F button-motion schemes (clamp / meter / stamp)
- * actually reach a real button in a real renderer, with a real pointer.
+ * motion-check.js — prove the MERGED button-motion design actually reaches real
+ * elements in a real renderer, with a real pointer.
  *
- * Why this exists: `data-endfield-motion` is a data attribute on <body> and every
- * scheme is gated on it. A rule that names the wrong attribute value, that loses
- * the cascade to the app's own `transition:none !important` button reset, or whose
- * pseudo-element never generates because the host element is not `position:
- * relative` — all of those are invisible to a grep-style test that only checks
- * that some selector text is present in the file. This script renders the REAL
- * stylesheet out of client.js into a mock page, drives the genuine :hover /
- * :active with Input.dispatchMouseEvent, and asserts on computed styles plus
- * corner PIXELS.
+ * Since 2026-10 the six selectable schemes (A signal / B silent / C impact /
+ * D clamp / E meter / F stamp) are collapsed into ONE design, gated only on the
+ * presence of data-endfield-motion:
  *
- * What each scheme is checked for:
+ *   signal motif  — arrow slides into the new-session CTA and the approve
+ *                   button on hover (transform + opacity only);
+ *                   tbody rows keep the 3px left signal rule on hover.
+ *   clamp motif   — sidebar session rows + search result rows gain 12px L
+ *                   corner brackets on hover (two gradient arms per corner,
+ *                   pre-created at rest, keyframed opacity).
  *
- *   D clamp  — the four-corner bracket is a single mask-image on ::after, coloured
- *              --edge-accent-onpaper; the newSession CTA gets a left signal rule
- *              and a 2px label shift. A masked pseudo-element is exactly the thing
- *              a "selector exists" test cannot falsify, so the bracket is also
- *              sampled as pixels in the button's top-left corner.
- *   E meter  — iconButton corners are eight background gradients (crosshair
- *              ticks); the newSession readout bar grows 6% -> 100% on hover and
- *              goes solid accent on press. Read on the COMPUTED width, i.e. after
- *              the app's own button reset has had its say.
- *   F stamp  — a paused 180ms keyframes animation on the primary button at press
- *              (the imprint), a translateX shake on decline, scale(.88) on
- *              iconButton, and a 2px accent outline on plain buttons.
+ * This script renders the REAL stylesheet out of client.js into a mock page,
+ * drives the genuine :hover / :active with Input.dispatchMouseEvent, and asserts
+ * on computed styles plus corner PIXELS. It also proves the two retargets that
+ * the merge shipped: plain/icon buttons must NOT carry brackets any more, and
+ * the sidebar rows must.
+ *
+ * The same fixture carries the 划词灰 (selection-gray) assertions — the model
+ * menu / permission popup current rows and the composer + hover all use the
+ * ::selection fill/ink pair, in both schemes and (for the value-level proof)
+ * under a palette where that gray differs from the accent.
  *
  * Plus two controls that keep the test honest:
- *   - `off` must produce NONE of it (the shared `:active` dim is still expected);
- *   - `prefers-reduced-motion: reduce` must kill the transform/animation while
+ *   - `off` (attribute removed, exactly what syncMotion does) must produce
+ *     NONE of it (the shared :active dim is still expected to disappear);
+ *   - prefers-reduced-motion: reduce must kill the transform/animation while
  *     leaving the colour transition alone.
  *
  * Usage: node test/motion-check.js
@@ -111,53 +109,34 @@ const httpJson = (port, p) => new Promise((resolve, reject) => {
   }).on('error', reject)
 })
 
-/* Tiny RFC6455 client: enough for CDP's text frames. Same approach as
-   hover-check.js — this package has no runtime dependencies and should keep it
-   that way. */
 const connectWs = (url) => new Promise((resolve, reject) => {
   const net = require('net')
   const crypto = require('crypto')
   const u = new URL(url)
-  const key = crypto.randomBytes(16).toString('base64')
   const sock = net.connect(Number(u.port), u.hostname, () => {
-    sock.write('GET ' + u.pathname + u.search + ' HTTP/1.1\r\n'
-      + 'Host: ' + u.host + '\r\n'
-      + 'Upgrade: websocket\r\nConnection: Upgrade\r\n'
-      + 'Sec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n')
+    sock.write('GET ' + u.pathname + u.search + ' HTTP/1.1\r\nHost: ' + u.host + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ' + crypto.randomBytes(16).toString('base64') + '\r\nSec-WebSocket-Version: 13\r\n\r\n')
   })
-  let buf = Buffer.alloc(0)
-  let open = false
+  let buf = Buffer.alloc(0), open = false, nextId = 1
   const waiters = new Map()
-  let nextId = 1
-  const emit = (msg) => {
-    if (msg.id !== undefined && waiters.has(msg.id)) { waiters.get(msg.id)(msg); waiters.delete(msg.id) }
-  }
+  const emit = (m) => { if (m.id !== undefined && waiters.has(m.id)) { waiters.get(m.id)(m); waiters.delete(m.id) } }
   const decodeFrames = () => {
     for (;;) {
       if (buf.length < 2) return
-      const len0 = buf[1] & 0x7f
-      let off = 2, len = len0
-      if (len0 === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4 }
-      else if (len0 === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10 }
+      const l0 = buf[1] & 0x7f; let off = 2, len = l0
+      if (l0 === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4 }
+      else if (l0 === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10 }
       if (buf.length < off + len) return
-      const payload = buf.slice(off, off + len)
-      buf = buf.slice(off + len)
-      try { emit(JSON.parse(payload.toString('utf8'))) } catch (e) { /* non-JSON frame */ }
+      const pl = buf.slice(off, off + len); buf = buf.slice(off + len)
+      try { emit(JSON.parse(pl.toString('utf8'))) } catch (e) { /* non-JSON frame */ }
     }
   }
-  sock.on('data', (chunk) => {
+  sock.on('data', (c) => {
     if (!open) {
-      buf = Buffer.concat([buf, chunk])
-      const i = buf.indexOf('\r\n\r\n')
-      if (i < 0) return
-      const head = buf.slice(0, i).toString('ascii')
-      if (!/101/.test(head)) { reject(new Error('ws upgrade failed: ' + head.split('\r\n')[0])); return }
-      buf = buf.slice(i + 4); open = true
-      resolve(api)
-      decodeFrames()
-      return
+      buf = Buffer.concat([buf, c]); const i = buf.indexOf('\r\n\r\n'); if (i < 0) return
+      if (!/101/.test(buf.slice(0, i).toString('ascii'))) { reject(new Error('ws upgrade failed: ' + buf.slice(0, i).toString().split('\r\n')[0])); return }
+      buf = buf.slice(i + 4); open = true; resolve(api); decodeFrames(); return
     }
-    buf = Buffer.concat([buf, chunk]); decodeFrames()
+    buf = Buffer.concat([buf, c]); decodeFrames()
   })
   sock.on('error', reject)
   const send = (obj) => {
@@ -183,24 +162,16 @@ const connectWs = (url) => new Promise((resolve, reject) => {
 
 /* ---------------- fixture ----------------
    Hash-free class names, because the theme's hooks are all suffix/substring
-   matches ('_newSession', "_iconButton"). The last rule in this <style> is the
-   one assumption this fixture makes about the host app: the target buttons carry
-   position:relative, which the theme's own D/E rules also assert (harmlessly, the
-   inline app declaration wins). Everything else — colours, sizes, the button
-   reset — is the app's own shape, recreated so the cascade under test is real. */
+   matches ('_newSession', '_sessionRow', '_optionLabel'). The app shapes below
+   are the ones the cascade has to win against: the workspace-browser sidebar
+   rows (div[role=treeitem] + a search row button, hover/selected fill from the
+   shared token), the model menu (menuitemradio buttons), a primitives-style
+   permission menu item, and the composer add button with its solid-hover
+   token. Everything else — colours, sizes, the button reset — is the app's own
+   shape, recreated so the cascade under test is real. */
 const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-8">
 <style>
   html,body{margin:0}
-  /* A palette block so the fixture does not depend on the theme's own default
-     (the theme declares its default palette on a plain body rule too, later in the
-     sheet, so with equal specificity the theme's values win for anything it sets).
-     The block is therefore a floor, not an override — and the token that actually
-     matters here is --edge-accent-ink, which the readout bar uses.
-     Correction of an earlier claim in this file: the meter pixel assertion did NOT
-     fail because --edge-accent-deep was missing (the theme's default body block
-     supplies #e8e000 either way). It passed because the tolerance was 60 (180 in
-     Manhattan distance) while the bar colour and the hover fill differ by only 44.
-     A loose tolerance made every bar pixel count as fill and vice versa. */
   body{
     --edge-accent:#d9d9d9;
     --edge-accent-deep:#cccccc;
@@ -212,14 +183,15 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     --dsw-alias-bg-layer-1:#f2f2ec;
     --dsw-alias-bg-layer-2:#dcddd6;
     --dsw-alias-label-primary:#101110;
+    --dsw-alias-label-secondary:#5a5d58;
     --dsw-alias-border-l1:#d8d9d5;
     --dsw-alias-border-l2:#b6b8b3;
     --dsw-alias-button-info-fill:#101110;
     --dsw-alias-button-elevated-fill:#f2f2ec;
+    --dsw-specific-selector:#e8e8e2;
     background:#e8e8e2;color:#101110;font:600 12px Arial;
     padding:24px;
   }
-  /* the host's own button reset, which the theme has to win against */
   button,[role='button']{font:inherit}
   button,[role='button']{position:relative}
   .x_newSession{display:block;width:180px;height:34px;margin:8px 0;border:1px solid var(--dsw-alias-border-l2);
@@ -227,15 +199,34 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
   .x_primary{width:120px;height:34px;margin:8px 0;border:none;
     background:#101110;color:#ffffff;cursor:pointer;display:inline-grid;place-items:center}
   .x_iconButton{width:28px;height:28px;border:none;background:transparent;cursor:pointer;
-    display:inline-flex;align-items:center;justify-content:center}
+    display:inline-flex;align-items:center;justify-content:center;border-radius:999px}
   .x_card{border:1px solid var(--dsw-alias-border-l2);background:#f2f2ec;height:200px}
   .x_composerSeat{padding:4px 0}
-  .x_menuRow{display:block;width:180px;padding:6px 8px;margin:6px 0}
-  .x_upstream{display:block;padding:4px 6px;margin:6px 0}
-  /* An upstream decoration carried on a CLASS selector, the shape the app would use
-     if it ever decorated a button itself. */
-  .x_dec::before{content: 'UP'; position: absolute; left: 2px; top: 2px}
-  .x_dec::after{content: 'DOWN'; position: absolute; right: 2px; top: 2px}
+  .x_row{display:block;width:180px;padding:6px 8px;margin:6px 0}
+  /* The workspace sidebar: rows are div[role=treeitem] in the real app, the
+     search rows are buttons; both take the shared hover/selected fill. */
+  .x_sidebarCol{width:260px;background:var(--dsw-alias-bg-layer-1);padding:6px 4px}
+  .x_sessionRow{min-height:34px;display:flex;align-items:center;padding:0 8px;cursor:pointer;user-select:none}
+  .x_sessionRow:hover,.x_sessionRow.x_selected{background:var(--dsw-alias-interactive-bg-hover)}
+  .x_searchResultRow{display:block;width:100%;min-height:48px;text-align:left;border:none;
+    background:transparent;cursor:pointer;padding:4px 8px}
+  .x_searchResultRow:hover,.x_searchResultRow.x_selected{background:var(--dsw-alias-interactive-bg-hover)}
+  table{border-collapse:collapse;margin:8px 0}
+  td{border:1px solid var(--dsw-alias-border-l2);padding:6px 10px;background:#f2f2ec}
+  /* model menu rows (dsh-client-ui-model-selection shape) */
+  .x_option{display:flex;align-items:center;gap:6px;width:220px;min-height:34px;padding:5px 7px;
+    border:none;background:transparent;text-align:left;cursor:pointer}
+  .x_option:hover{background:var(--dsw-alias-interactive-bg-hover)}
+  /* permission popup row (ui-primitives Menu shape) */
+  .x_item{display:flex;align-items:center;gap:6px;width:220px;min-height:34px;padding:5px 7px;
+    border:none;background:transparent;text-align:left;cursor:pointer}
+  .x_item:hover{background:var(--dsw-alias-interactive-bg-hover)}
+  .x_badge{color:var(--dsw-alias-label-secondary)}
+  /* composer add button (InputBar shape): round, selector fill at rest,
+     SOLID hover token — the exact cascade the gray has to beat. */
+  .x_add{width:28px;height:28px;border:none;border-radius:999px;cursor:pointer;
+    display:inline-grid;place-items:center;background:var(--dsw-specific-selector);color:var(--dsw-alias-label-primary)}
+  .x_add:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover-solid)}
 </style>
 <style>${css}</style>
 </head><body ${motion ? `data-endfield-motion="${motion}"` : ''}>
@@ -247,9 +238,25 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
   <button id="approve" data-cordis-approve>允许</button>
   <button id="decline" data-cordis-decline>拒绝</button>
   <div class="x_card" id="card"></div>
-  <button class="x_upstream x_dec" id="upstream">上游自绘按钮</button>
-  <div class="x_menuRow" role="menuitem" id="menuitem">菜单项</div>
-  <div class="x_menuRow" role="option" id="option">选项</div>
+  <div class="x_row" role="menuitem" id="menuRow">菜单项</div>
+  <div class="x_sidebarCol" id="sidebarCol">
+    <div class="x_sessionRow" id="sessionRow" role="treeitem" aria-selected="false">会话 A</div>
+    <div class="x_sessionRow x_selected" id="sessionRowSel" role="treeitem" aria-selected="true">会话 B（当前）</div>
+    <button class="x_searchResultRow" id="searchRow">搜索结果行</button>
+  </div>
+  <table id="tbl"><tbody><tr id="trow"><td>表格行</td><td>值</td></tr></tbody></table>
+  <div role="menu" id="modelMenu">
+    <button class="x_option x_modelOption x_selected" id="modelSel" role="menuitemradio" aria-checked="true">当前模型</button>
+    <button class="x_option x_modelOption" id="modelUnsel" role="menuitemradio" aria-checked="false">其它模型</button>
+  </div>
+  <div role="menu" id="permMenu">
+    <button class="x_item x_selected" id="permSel" role="menuitem">
+      <span class="x_itemLabel"><span class="x_optionLabel">工作区内修改</span></span>
+      <span class="x_check">✓</span>
+    </button>
+    <button class="x_item" id="permUnsel" role="menuitem"><span class="x_itemLabel"><span class="x_optionLabel">完全权限</span></span></button>
+  </div>
+  <div class="x_composerSeat" id="seat2"><button class="x_add" id="addBtn">+</button></div>
   <script>
     window.__rect__ = (id) => {
       const r = document.getElementById(id).getBoundingClientRect()
@@ -260,7 +267,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       const s = getComputedStyle(el, pseudo || null)
       const keys = ['width','height','borderRadius','transform','outlineColor','outlineWidth','outlineStyle',
         'backgroundColor','borderLeftWidth','borderLeftColor','boxShadow','content',
-        'maskImage','webkitMaskImage','backgroundImage','backgroundSize','backgroundColor',
+        'maskImage','webkitMaskImage','backgroundImage','backgroundSize',
         'animationName','animationDuration',
         'transitionProperty','color','filter','position','opacity']
       const out = {}
@@ -268,6 +275,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       return out
     }
     window.__accentOnpaper__ = () => getComputedStyle(document.body).getPropertyValue('--edge-accent-onpaper').trim()
+    window.__var__ = (name) => getComputedStyle(document.body).getPropertyValue(name).trim()
     window.__anims__ = (id) => document.getElementById(id).getAnimations().map((a) => ({
       name: a.animationName, playState: a.playState, duration: a.effect && a.effect.getTiming().duration,
     }))
@@ -279,21 +287,34 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
 
   /* Pull the LIVE stylesheet out of client.js: it is the single template literal
      handed to insertCss(), and nothing here re-types a byte of it. If this regex
-     ever stops matching, the test fails loudly rather than testing a fiction —
-     hence the stamp-rule assertion right below. */
+     ever stops matching, the test fails loudly rather than testing a fiction. */
   const cssFromSource = (() => {
     const m = /insertCss\(`([\s\S]*?)`\)/.exec(clientSrc)
     if (!m) throw new Error('could not locate the insertCss() stylesheet literal')
     return m[1]
   })()
 
-  if (!/data-endfield-motion='stamp'/.test(cssFromSource)) {
-    console.error('FAIL  the stylesheet under test has no stamp rules — extraction is wrong or the schemes are missing')
+  /* The merged design's own markers — and a guard that the removed schemes are
+     really gone, not just unreachable. */
+  if (!/\[class\$='_sessionRow'\]::before/.test(cssFromSource)
+    || !/data-endfield-motion\] \[class\$='_newSession'\]::after/.test(cssFromSource)) {
+    console.error('FAIL  the stylesheet under test has no merged motion rules — extraction is wrong or the rules are missing')
     process.exit(1)
   }
   pass('live stylesheet extracted from client.js (' + cssFromSource.length + ' chars)')
+  if (/endfield-stamp|motion='impact'|motion='meter'|motion='silent'/.test(cssFromSource)) {
+    fail('合并 · 已删除的方案（冲压/读数/静默）仍在样式表里留有规则')
+  } else {
+    pass('合并 · 冲压/静默/读数/盖章的规则已从样式表移除')
+  }
+  if (!/\[role='menuitemradio'\]\[aria-checked='true'\]/.test(cssFromSource)
+    || !/:has\(\[class\$='_optionLabel'\]\)/.test(cssFromSource)) {
+    fail('划词灰 · 模型菜单/权限弹层的选中规则缺失')
+  } else {
+    pass('划词灰 · 模型菜单与权限弹层的选中规则都在样式表里')
+  }
 
-  const html = fixture(cssFromSource, 'clamp')
+  const html = fixture(cssFromSource, 'signal')
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-'))
   const page = path.join(tmp, 'page.html')
   fs.writeFileSync(page, html)
@@ -302,7 +323,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
     '--remote-debugging-port=' + port,
     '--user-data-dir=' + path.join(tmp, 'profile'),
-    '--window-size=900,700',
+    '--window-size=900,900',
     'file://' + page,
   ], { stdio: ['ignore', 'ignore', 'pipe'] })
 
@@ -321,14 +342,12 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     cdp = await connectWs(target.webSocketDebuggerUrl)
     await cdp.call('Runtime.enable')
     await cdp.call('Page.enable')
-    await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 2, mobile: false })
+    await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 2, mobile: false })
     await sleep(500)
 
     /* The reduced-motion state is emulator-level and persists across the whole
        session, so a leaked override turns every "does the decoration appear"
-       assertion into a false failure (it did: the D block reported content:none
-       because an earlier section had left reduce on). Pin it OFF at the start and
-       verify it, so the run's assumptions are checked rather than assumed. */
+       assertion into a false failure. Pin it OFF at the start and verify it. */
     await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] })
     await sleep(150)
 
@@ -375,11 +394,7 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       return Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2]) <= tol * 3
     }
 
-    /* count pixels within `tol` of `target` inside a CSS-px box of the screenshot */
     const SCALE = 2
-    /* `dpr` defaults to the run's SCALE but must be passed in the DPR loop: a box
-       measured in CSS px against a screenshot taken at another deviceScaleFactor
-       lands on the wrong pixels (it read 0 at DPR 1 and a whole button at DPR 3). */
     const countNear = (img, box, target, tol, dpr = SCALE) => {
       const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
       const y0 = Math.max(0, Math.round(box.y * dpr)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * dpr))
@@ -392,25 +407,6 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       }
       return n
     }
-    /* Pixels differing from a reference colour by at least `minDelta` (Manhattan),
-       scaled by the device pixel ratio the box was measured in. */
-    const countDifferentPx = (img, box, ref, minDelta, dpr) => {
-      if (!ref) return 0
-      const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
-      const y0 = Math.max(0, Math.round(box.y * dpr)), y1 = Math.min(img.h - 1, Math.round((box.y + box.h) * dpr))
-      let n = 0
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
-          const i = (y * img.w + x) * img.ch
-          const d = Math.abs(img.data[i] - ref[0]) + Math.abs(img.data[i + 1] - ref[1]) + Math.abs(img.data[i + 2] - ref[2])
-          if (d >= minDelta) n++
-        }
-      }
-      return n
-    }
-
-    /* A screenshot region's dominant colours, for failure messages that say WHAT
-       was painted instead of only that the expectation failed. */
     const topColors = (img, box, n = 4, dpr = SCALE) => {
       const hist = new Map()
       const x0 = Math.max(0, Math.round(box.x * dpr)), x1 = Math.min(img.w - 1, Math.round((box.x + box.w) * dpr))
@@ -432,348 +428,295 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     const accent = toRgb(await evaluate('window.__accentOnpaper__()'))
     if (!accent) { fail('fixture did not resolve --edge-accent-onpaper'); throw new Error('no accent') }
 
-    /* ============ D clamp ============ */
-    await setMotion('clamp')
-    await park()
-
-    const restD = await styleOf('plain', '::before')
-    const restDAfter = await styleOf('plain', '::after')
-    await hover('plain')
-    const beforeD = await styleOf('plain', '::before')
-    const afterD = await styleOf('plain', '::after')
-    const maskD = (s) => String(s.maskImage || s.webkitMaskImage || '')
-    /* The bracket is TWO gradient arms (an L), not a mask. Both implementations
-       were tried and both failed at some DPR; the arms are the only one that
-       paints at DPR 1/2/3. Assert the shape the CSS uses. */
-    const armsD = (s) => String(s.backgroundImage || '')
-    /* The bracket boxes exist at rest and hover only toggles their opacity. This
-       is deliberate and load-bearing: creating them on hover re-invalidates layout
-       on every hover (13.4ms/s over a 300-row sweep) while an always-present box
-       costs 0.00. So "not generated at rest" is the WRONG expectation — what must
-       hold is "not PAINTED at rest". */
-    /* The box geometry is declared at rest (so hover does not create it from
-       nothing — that costs a layout pass) and `content` is what brings it to life.
-       The reliable read for "not painted" is the decoration, not `content`: an
-       ungenerated pseudo-element reports the element's own content ("" not "none"). */
-    const armsAt = (st) => (String(st.backgroundImage || '').match(/linear-gradient/g) || []).length
-    if (armsAt(restD) === 2 && armsAt(restDAfter) === 2 && restD.width === '12px'
-      && beforeD.content && beforeD.content !== 'none' && afterD.content && afterD.content !== 'none') {
-      pass('D clamp · 角标常态生成、悬停用关键帧淡入（不新建盒子，成本 0 重排）')
-    } else {
-      fail('D clamp · 角标应常态生成 + 悬停关键帧点亮  [' + armsAt(restD) + '/' + armsAt(restDAfter)
-        + ' rest-content=' + restD.content + ' hover-content=' + beforeD.content + '/' + afterD.content + ']')
-    }
-    const armCount = (s) => (armsD(s).match(/linear-gradient/g) || []).length
-    if (beforeD.content && beforeD.content !== 'none' && afterD.content && afterD.content !== 'none'
-      && armCount(beforeD) === 2 && armCount(afterD) === 2
-      && /12px 2px/.test(String(beforeD.backgroundSize))
-      && beforeD.animationName === 'endfield-clamp-in' && afterD.animationName === 'endfield-clamp-in') {
-      pass('D clamp · 悬停时 ::before/::after 各画出两条边（L 形）并点亮  ['
-        + beforeD.backgroundSize + '，无遮罩]')
-    } else {
-      fail('D clamp · 悬停应画出 L 形两条边并启动关键帧  [before=' + beforeD.content + ' anim=' + beforeD.animationName
-        + ' arms=' + armCount(beforeD) + ' size=' + beforeD.backgroundSize + '; after=' + afterD.content
-        + ' anim=' + afterD.animationName + ' arms=' + armCount(afterD) + ']')
-    }
-    if (!/svg|url\(/.test(maskD(beforeD)) && !/url\(/.test(armsD(beforeD))) {
-      pass('D clamp · 角标不含任何位图/矢量资源（纯渐变，跨 DPR 稳定）')
-    } else {
-      fail('D clamp · 角标仍依赖外部资源  [mask=' + maskD(beforeD).slice(0, 40) + ']')
-    }
-    void maskD
-    const dimsD = (s) => s.width + '×' + s.height
-    if (beforeD.position === 'absolute' && beforeD.width === '12px' && beforeD.height === '12px'
-      && /linear-gradient/.test(String(beforeD.backgroundImage))
-      && String(beforeD.backgroundImage).includes('217, 199, 0')) {
-      pass('D clamp · 角标是 12px 方块、两条边用 onpaper 信号色  [' + dimsD(beforeD) + ']')
-    } else {
-      fail('D clamp · 角标应为 12px 方块，两条边为 onpaper 色  [' + dimsD(beforeD) + ' ' + beforeD.position
-        + ' bg=' + String(beforeD.backgroundImage).slice(0, 60) + ']')
-    }
-    /* pixels: both arms of the top-left bracket must actually paint. This is the
-       assertion that fails if the mask keeps its 1:1 aspect ratio and centres the
-       shape in the middle of the button instead of hugging the corner. */
-    /* PAINTED, not "different from something". Two earlier versions of this check
-       could not fail: comparing against `--edge-accent-onpaper` counted a correct
-       bracket as zero (the cascade paints it with the default palette's value), and
-       comparing "different from the page background" in a 14x14 window that also
-       contains the button's own 1px border reported 290 px even when the bracket was
-       provably invisible (the reviewers reproduced that by deleting the animation).
-       So: sample strictly INSIDE the button's corner (excluding the border), require
-       the bracketed region to contain real accent pixels ON HOVER, and require it to
-       be EMPTY of them at rest. */
-    const bPlain = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
-    const cornerBox = { x: bPlain.x + 1, y: bPlain.y + 1, w: 12, h: 12 }
-    await park()
-    const imgRestD = await shoot()
-    await hover('plain')
-    const imgD = await shoot()
-    const pxHover = countNear(imgD, cornerBox, accent, 30)
-    const pxRest = countNear(imgRestD, cornerBox, accent, 30)
-    if (pxHover >= 12 && pxRest === 0) {
-      pass('D clamp · 左上角 L 形角标真的画出来了（悬停 ' + pxHover + ' px，常态 ' + pxRest + ' px）')
-    } else {
-      fail('D clamp · 角标未按预期绘制  [hover=' + pxHover + ' rest=' + pxRest
-        + ' px; region=' + topColors(imgD, cornerBox) + ']')
-    }
-    /* The corner is an SVG mask, and a mask that only survives one DPR would be a
-       HiDPI bug nothing else here can see: the classic failure is the source being
-       rasterised at its intrinsic size and then centred (the bug that put the
-       brackets in the middle of the button at DPR 2). Re-shoot the same corner at
-       DPR 1 and DPR 3. */
-    for (const dpr of [1, 3, 1, 2]) {
-      await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: dpr, mobile: false })
-      await sleep(220)
-      await hover('plain')
-      const imgHi = await shoot()
-      const bHi = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
-      /* At DPR 1 the 2px arms antialias into blended colours that match neither the
-         paper nor an exact accent, so an exact-colour count is the wrong instrument
-         there. Count pixels that differ from the surrounding fill instead: what is
-         being asserted is "something is drawn in this corner", at every DPR. */
-      /* Same falsifiability standard as the single-DPR check: the corner must hold
-         accent pixels while hovered, and none at rest. The earlier "different from
-         the page background" count had a floor of 97-643 px from the button's own
-         border, which no missing bracket could ever drop below the threshold. */
-      const boxHi = { x: bHi.x + 1, y: bHi.y + 1, w: 12, h: 12 }
-      await park()
-      const imgHiRest = await shoot()
-      await hover('plain')
-      const pxHi = countNear(imgHi, boxHi, accent, 30, dpr)
-      const pxHiRest = countNear(imgHiRest, boxHi, accent, 30, dpr)
-      if (process.env.MOTION_DEBUG) console.error('DBG dpr=' + dpr + ' rect=' + JSON.stringify(bHi) + ' px=' + pxHi
-        + ' corner=' + topColors(imgHi, { x: bHi.x - 1, y: bHi.y - 1, w: 14, h: 14 })
-        + ' fillRef=' + JSON.stringify(toRgb(await evaluate("getComputedStyle(document.getElementById('plain')).backgroundColor"))))
-      if (pxHi >= 6 * dpr && pxHiRest === 0) {
-        pass('D clamp · DPR ' + dpr + ' 下角标照常绘制  [悬停 ' + pxHi + ' px，常态 0]')
-      } else {
-        fail('D clamp · DPR ' + dpr + ' 下角标未按预期绘制  [hover=' + pxHi + ' rest=' + pxHiRest
-          + ' px; region = ' + topColors(imgHi, boxHi, 4, dpr) + ']')
-      }
-    }
-    await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 700, deviceScaleFactor: 2, mobile: false })
-    await sleep(200)
-    await park()
-
-    /* Rounded controls are excluded, and the whole scheme is off in round mode:
-       a 12px square corner on a 50%-radius button is just debris. */
-    await hover('iconButton')
-    const roundD = await styleOf('iconButton', '::before')
-    /* An unmatched pseudo-element does not report content:'none' — it reports the
-       element's own computed `content`, which is "". The reliable signal is the
-       decoration itself: the gradient arms. */
-    const armsOf = (st) => (String(st.backgroundImage || '').match(/linear-gradient/g) || []).length
-    if (armsOf(roundD) === 0) pass('D clamp · 圆形图标按钮不画方角标（不含角标边）')
-    else fail('D clamp · 圆形图标按钮被画上了方角标  [arms=' + armsOf(roundD) + ']')
-    await park()
-    const hadRound = await evaluate("document.body.classList.contains('theme-endfield-round')")
-    await evaluate("document.body.classList.add('theme-endfield-round')")
-    await hover('plain')
-    const roundMode = await styleOf('plain', '::before')
-    await evaluate("document.body.classList.remove('theme-endfield-round')")
-    if ((String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length === 0) {
-      pass('D clamp · 圆角模式（.theme-endfield-round）下不画角标  [开启前=' + hadRound + ']')
-    } else {
-      fail('D clamp · 圆角模式下仍画角标  [arms=' + (String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length + ']')
-    }
-    await park()
-
-    /* Upstream pseudo-element clash, measured rather than assumed: the theme's rule
-       is body[attr]-scoped (0,5,2) while an upstream class-based decoration is
-       (0,1,1), so the theme wins and the upstream content is replaced — at REST, not
-       only on hover. In the installed app nothing is decorated this way (a grep over
-       the client bundles found exactly one ::after on an icon button, which the
-       exclusions above already skip), so this is a documented boundary rather than a
-       live bug. The assertion pins the behaviour so it cannot change silently. */
-    const upD = await hover('upstream').then(() => styleOf('upstream', '::before'))
-    const upContent = await evaluate("getComputedStyle(document.getElementById('upstream'),'::before').content")
-    if (upContent === '\"UP\"') {
-      pass('D clamp · 上游类选择器自绘的伪元素不被覆盖（主题选择器反而更低时）')
-    } else {
-      pass('D clamp · 上游伪元素被主题角标盒替换，已记录为已知边界  [content=' + upContent + ']')
-    }
-    void upD
-    await park()
-
-    await hover('newSession')
-    const nsD = await styleOf('newSession')
-    if (nsD.borderLeftWidth === '3px' && nearRgb(nsD.borderLeftColor, accent, 4)) {
-      pass('D clamp · 新建会话悬停出现 3px 左缘信号边条  [' + nsD.borderLeftColor + ']')
-    } else {
-      fail('D clamp · 新建会话应有 3px onpaper 左缘边条  [' + nsD.borderLeftWidth + ' ' + nsD.borderLeftColor + ']')
-    }
-    await park()
-
-    /* ============ E meter ============ */
-    await setMotion('meter')
-    await park()
-    const restE = await styleOf('newSession', '::after')
-    await hover('newSession')
-    const hovE = await styleOf('newSession', '::after')
-    /* The bar is 100% wide at rest and SCALED to 6%: scaleX is compositor work,
-       width would re-layout every frame (the official site's own wipe does the
-       same thing — docs/notes/endfield-motion-research.md §5.1b). So the assertion
-       moved from width to transform, and width must stay full. */
-    const scaleX = (t) => {
-      const m = /matrix\(([-\d.]+)/.exec(String(t))
-      return m ? parseFloat(m[1]) : (String(t) === 'none' ? 1 : NaN)
-    }
-    const w = (s) => parseFloat(s.width)
-    if (w(restE) > 100 && Math.abs(scaleX(restE.transform) - 0.06) < 0.01 && scaleX(hovE.transform) > 0.99) {
-      pass('E meter · 读数条 scaleX .06 → 1（宽度恒定 100%，不重排）  [' + restE.transform + ' → ' + hovE.transform + ']')
-    } else {
-      fail('E meter · 读数条应 scaleX .06 → 1 且宽度恒定  [w=' + restE.width + ' ' + restE.transform + ' → ' + hovE.transform + ']')
-    }
-    if (w(hovE) === w(restE)) pass('E meter · 展开前后元素宽度不变（证明没有动 width）  [' + w(restE) + 'px]')
-    else fail('E meter · 读数条宽度被改变了，说明仍在动 width  [' + w(restE) + ' → ' + w(hovE) + ']')
-    const imgE = await shoot()
-    const bNs = JSON.parse(await evaluate('JSON.stringify(window.__rect__("newSession"))'))
-    /* The bar must be --edge-accent-ink: the CTA's own fill IS --edge-accent, so a
-       bar in accent (1.00:1) or in accent-onpaper (1.00-1.51:1 in the bright
-       palettes — it equals the accent there) is invisible. accent-ink is the token
-       paired with accent fills, and test/palette-contrast.test.js now asserts it
-       across all three palettes. Read both colours off the page. */
-    const barColor = await evaluate("getComputedStyle(document.body).getPropertyValue('--edge-accent-ink').trim()")
-    const barRgb = toRgb(barColor)
-    const fillRgb = toRgb(await evaluate("getComputedStyle(document.getElementById('newSession')).backgroundColor"))
-    const barBox = { x: bNs.x + bNs.w * 0.5, y: bNs.y + bNs.h - 5, w: bNs.w * 0.45, h: 5 }
-    /* Tight tolerance on purpose: the onpaper bar (217,199,0) and the hover fill
-       (232,224,0) are only 72 apart in Manhattan distance, so a loose tolerance
-       counts each as the other — the first version of this assertion had exactly
-       that bug (bar=1630 px, fill=1630 px, i.e. every pixel matched both). */
-    const pxE = countNear(imgE, barBox, barRgb, 8)
-    const pxFill = countNear(imgE, barBox, fillRgb, 8)
-    if (pxE >= 20 && pxE > pxFill) {
-      pass('E meter · 底部读数条是 onpaper 信号色且与按钮底色可分辨  [' + pxE + ' px ' + barColor
-        + ' vs 底色 ' + pxFill + ' px]')
-    } else {
-      fail('E meter · 底部读数条不可见或与底色同色  [region=' + topColors(imgE, barBox)
-        + ' afterTransform=' + hovE.transform + ' afterBg=' + String(hovE.backgroundImage).slice(0, 40)
-        + ' afterW=' + hovE.width + ' barToken=' + barColor + ' barRgb=' + JSON.stringify(barRgb)
-        + ' fillRgb=' + JSON.stringify(fillRgb) + ' bar=' + pxE + ' px fill=' + pxFill
-        + ' px rgb(' + (fillRgb || []) + ') region=' + topColors(imgE, barBox) + ']')
-    }
-    await park()
-
-    await hover('iconButton')
-    const tickE = await styleOf('iconButton', '::before')
-    const layers = String(tickE.backgroundImage || '').split('linear-gradient').length - 1
-    if (layers === 8 && /var|rgb/.test(tickE.backgroundImage)) {
-      pass('E meter · 图形按钮悬停出现 8 条准星刻度  [' + layers + ' gradients]')
-    } else {
-      fail('E meter · 准星刻度应为 8 层渐变  [' + layers + ' layers, bg=' + String(tickE.backgroundImage).slice(0, 60) + ']')
-    }
-    /* E-3 used to be `content:'['` text nodes, which forces a text layout on
-       hover; it is now a pre-painted 2px rule toggled by opacity. */
-    const restRow = await styleOf('menuitem', '::before')
-    await hover('menuitem')
-    const hovRow = await styleOf('menuitem', '::before')
-    if (restRow.content !== 'none' && restRow.content !== '' && restRow.opacity === '0'
-      && hovRow.opacity === '1' && restRow.content !== "'['" && restRow.content !== '"["') {
-      pass('E meter · 菜单行指示条常态存在、悬停只切 opacity  [' + restRow.content + ' ' + restRow.opacity + ' → ' + hovRow.opacity + ']')
-    } else {
-      fail('E meter · 菜单行指示条应为常态存在 + opacity 切换  [content=' + restRow.content + ' opacity=' + restRow.opacity + ' → ' + hovRow.opacity + ']')
-    }
-    await park()
-
-    /* PRESSED on the CTA: its fill is now --edge-accent-deep (the :hover rule), so
-       label and bar must both be --edge-accent-ink. Using onpaper there measures
-       1.25-3.58:1 — the label effectively disappears. */
-    const holdCta = await press('newSession', { release: false })
-    const pressedBar = await styleOf('newSession', '::after')
-    const pressedLabel = await styleOf('newSession')
-    await holdCta.release()
-    const inkHex = await evaluate("getComputedStyle(document.body).getPropertyValue('--edge-accent-ink').trim()")
-    if (nearRgb(pressedBar.backgroundColor, inkHex, 4) && nearRgb(pressedLabel.color, inkHex, 4)) {
-      pass('E meter · 按下时条与标签都用 accent-ink（压在 accent-deep 上）  [' + pressedBar.backgroundColor + ' / ' + pressedLabel.color + ']')
-    } else {
-      fail('E meter · 按下态配色错误  [bar=' + pressedBar.backgroundColor + ' label=' + pressedLabel.color + ' 期望 ' + inkHex + ']')
-    }
-    await park()
-
-    const hold = await press('iconButton', { release: false })
-    const pressE = await styleOf('iconButton')
-    if (/matrix\(0\.92/.test(pressE.transform) || parseFloat(pressE.transform.split(',')[0].replace('matrix(', '')) < 0.95) {
-      pass('E meter · 图形按钮按下 scale(.92)  [' + pressE.transform + ']')
-    } else {
-      fail('E meter · 按下应缩放  [' + pressE.transform + ']')
-    }
-    await hold.release()
-    await park()
-
-    /* ============ F stamp ============ */
-    await setMotion('stamp')
-    await park()
-    const holdF = await press('primary', { release: false })
-    const midF = await styleOf('primary')
-    const animsF = await evaluate('JSON.stringify(window.__anims__("primary"))')
-    await holdF.release()
-    if (/endfield-stamp/.test(animsF) && /matrix\(0\.99|matrix\(1\.0/.test(midF.transform + ' ' + animsF) === true) {
-      pass('F stamp · 主按钮按下运行落印动画  [' + animsF + ']')
-    } else if (/endfield-stamp/.test(animsF)) {
-      pass('F stamp · 主按钮按下运行落印动画  [' + animsF + ']')
-    } else {
-      fail('F stamp · 主按钮按下应有 endfield-stamp 动画  [' + animsF + ']')
-    }
-    if (/^rgb\(102, 102, 102\)$|rgb\(/.test(midF.boxShadow) && midF.boxShadow !== 'none') {
-      pass('F stamp · 落印时带信号色硬描边  [' + midF.boxShadow + ']')
-    } else {
-      fail('F stamp · 落印应有 outline 级硬阴影  [' + midF.boxShadow + ']')
-    }
-    await park()
-    await sleep(260)
-    const afterF = await styleOf('primary')
-    if (afterF.transform === 'none' || /matrix\(1, 0, 0, 1/.test(afterF.transform)) {
-      pass('F stamp · 松手后归位（无残留旋转）  [' + afterF.transform + ']')
-    } else {
-      fail('F stamp · 松手后应归位  [' + afterF.transform + ']')
-    }
-
-    const holdR = await press('decline', { release: false })
-    const animsR = await evaluate('JSON.stringify(window.__anims__("decline"))')
-    await holdR.release()
-    if (/endfield-stamp-refuse/.test(animsR)) pass('F stamp · 拒绝按钮按下改为水平抖动  [' + animsR + ']')
-    else fail('F stamp · 拒绝按钮应有 endfield-stamp-refuse  [' + animsR + ']')
-    await park()
-
-    await hover('plain')
-    const plainF = await styleOf('plain')
-    if (plainF.outlineStyle === 'solid' && parseFloat(plainF.outlineWidth) >= 2
-      && nearRgb(plainF.outlineColor, accent, 4)) {
-      pass('F stamp · 普通按钮悬停出现 2px 信号色外框  [' + plainF.outlineWidth + ' ' + plainF.outlineColor + ']')
-    } else {
-      fail('F stamp · 普通按钮悬停应有 2px onpaper 外框  [' + plainF.outlineWidth + ' ' + plainF.outlineStyle + ' ' + plainF.outlineColor + ']')
-    }
-    await park()
-
-    /* 圆角全局恒定：任何方案、任何状态都不改圆角。这条最初守的是 A-1 的
-       悬停 6px 软化把圆形按钮方化的回归；A-1 整条删除后，准则升级为
-       「悬停/按下不得改变任何按钮的圆角」（用户实测反馈）。 */
+    /* ============ 共通底座 ============ */
     await setMotion('signal')
     await park()
-    const iconRest = await styleOf('iconButton')
-    await hover('iconButton')
-    const iconHover = await styleOf('iconButton')
-    if (iconRest.borderRadius === iconHover.borderRadius && /50%|999px/.test(iconHover.borderRadius)) {
-      pass('圆形图标按钮 · 悬停不改圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
-    } else {
-      fail('圆形图标按钮 · 悬停改变了圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
-    }
-    await park()
-    /* 方角按钮同理：直角模式下悬停必须仍是 0（A-1 曾在这里变 6px）。 */
-    await hover('plain')
-    const plainHoverR = (await styleOf('plain')).borderRadius
-    if (plainHoverR === '0px') pass('方角按钮 · 悬停仍是直角  [' + plainHoverR + ']')
-    else fail('方角按钮 · 悬停长出了倒角  [' + plainHoverR + ']')
-    await park()
-
-    /* ============ 发送按钮：不得有任何动效 ============
-       用户在看过官方 /operator 右侧那列圆形按钮（只有 transform .3s 与
-       background-color .2s，无形变动效）之后，要求取消发送按钮上的动画。
-       这条断言把它钉死：两个方案 × 悬停/按下，都不能有伪元素、动画或位移。 */
-    for (const scheme of ['signal', 'stamp']) {
-      await setMotion(scheme)
+    {
+      /* Real <button>s are DELIBERATELY instant: the theme pins button transitions
+         to none (see the "track the pointer immediately" rule) — that pin is part
+         of the design, so it is asserted here rather than the colour transition.
+         The .2s colour transition still applies to the non-button interactive
+         roles, represented by the menuitem div. */
+      const t = await styleOf('plain')
+      if (t.transitionProperty === 'none') {
+        pass('共通 · 按钮 hover 即时响应（主题钉死 button 无过渡）  [' + t.transitionProperty + ']')
+      } else {
+        fail('共通 · 按钮被挂上了过渡  [' + t.transitionProperty + ']')
+      }
+      const m = await styleOf('menuRow')
+      if (/background-color/.test(m.transitionProperty) && /color/.test(m.transitionProperty)) {
+        pass('共通 · 非按钮交互角色带 .2s 颜色过渡  [' + m.transitionProperty + ']')
+      } else {
+        fail('共通 · 菜单行颜色过渡缺失  [' + m.transitionProperty + ']')
+      }
+      const hold = await press('plain', { release: false })
+      const act = await styleOf('plain')
+      await hold.release()
+      if (/brightness/.test(act.filter)) pass('共通 · 按下暗一档  [' + act.filter + ']')
+      else fail('共通 · 按下应有 brightness  [filter=' + act.filter + ']')
       await park()
+    }
+
+    /* ============ 信号母题 ============ */
+    {
+      const rest = await styleOf('newSession', '::after')
+      await hover('newSession')
+      const hov = await styleOf('newSession', '::after')
+      const inkHex = await evaluate("window.__var__('--edge-accent-ink')")
+      /* computed transforms are matrices, not the authored functions */
+      const tx = (tr) => { const mm = /matrix\(([-\d.]+), [-\d.]+, [-\d.]+, [-\d.]+, ([-\d.]+),/.exec(String(tr)); return mm ? { s: parseFloat(mm[1]), x: parseFloat(mm[2]) } : null }
+      const restM = tx(rest.transform), hovM = tx(hov.transform)
+      if (rest.opacity === '0' && hov.opacity === '1'
+        && restM && hovM && Math.abs(restM.x + 14) < 0.5 && Math.abs(restM.s - 0.4) < 0.01
+        && Math.abs(hovM.x) < 0.5 && Math.abs(hovM.s - 1) < 0.01
+        && nearRgb(hov.backgroundColor, inkHex, 4)) {
+        pass('信号 · 新会话箭头常态隐藏、悬停滑入点亮（transform+opacity，色=accent-ink）')
+      } else {
+        fail('信号 · 新会话箭头动效不符  [rest=' + rest.opacity + ' ' + rest.transform + ' → ' + hov.opacity + ' ' + hov.transform + ' bg=' + hov.backgroundColor + ']')
+      }
+      await park()
+      const restA = await styleOf('approve', '::after')
+      await hover('approve')
+      const hovA = await styleOf('approve', '::after')
+      if (restA.opacity === '0' && hovA.opacity === '1' && !/translateX\(-/.test(hovA.transform)) {
+        pass('信号 · 审批按钮同款箭头滑入  [' + restA.opacity + ' → ' + hovA.opacity + ']')
+      } else {
+        fail('信号 · 审批按钮箭头不符  [' + restA.opacity + ' → ' + hovA.opacity + ' ' + hovA.transform + ']')
+      }
+      await park()
+      const restT = await styleOf('trow')
+      await hover('trow')
+      const hovT = await styleOf('trow')
+      if (restT.borderLeftWidth === '3px' && /rgba\(0, 0, 0, 0\)/.test(restT.borderLeftColor)
+        && nearRgb(hovT.borderLeftColor, accent, 4)) {
+        pass('信号 · 表格行悬停左缘 3px 信号条（常态透明预声明）  [' + hovT.borderLeftColor + ']')
+      } else {
+        fail('信号 · 表格行左缘信号条不符  [' + restT.borderLeftWidth + ' ' + restT.borderLeftColor + ' → ' + hovT.borderLeftWidth + ' ' + hovT.borderLeftColor + ']')
+      }
+      await park()
+      /* 侧边栏行**不再**走左缘边条——那是合并前的方案A 行为。 */
+      const nsRow = await styleOf('sessionRow')
+      if (nsRow.borderLeftWidth === '0px') pass('信号 · 侧边栏会话行不再挂左缘边条（已让位给角标）')
+      else fail('信号 · 侧边栏会话行仍有左边条  [' + nsRow.borderLeftWidth + ']')
+    }
+
+    /* ============ 角标母题（侧边栏会话行） ============ */
+    {
+      const restB = await styleOf('sessionRow', '::before')
+      const restA = await styleOf('sessionRow', '::after')
+      await hover('sessionRow')
+      const hovB = await styleOf('sessionRow', '::before')
+      const hovA = await styleOf('sessionRow', '::after')
+      const armsAt = (st) => (String(st.backgroundImage || '').match(/linear-gradient/g) || []).length
+      /* The bracket boxes exist at rest and hover only toggles their opacity:
+         creating them on hover re-invalidates layout on every hover while an
+         always-present box costs 0.00 (perf-motion). */
+      if (armsAt(restB) === 2 && armsAt(restA) === 2 && restB.width === '12px'
+        && restB.content && restB.content !== 'none' && restA.content && restA.content !== 'none') {
+        pass('角标 · 会话行角标常态生成、悬停用关键帧淡入（不新建盒子，成本 0 重排）')
+      } else {
+        fail('角标 · 会话行角标应常态生成  [arms=' + armsAt(restB) + '/' + armsAt(restA) + ' w=' + restB.width
+          + ' content=' + restB.content + '/' + restA.content + ']')
+      }
+      if (hovB.animationName === 'endfield-clamp-in' && hovA.animationName === 'endfield-clamp-in'
+        && /12px 2px/.test(String(hovB.backgroundSize))) {
+        pass('角标 · 悬停时 ::before/::after 各画两条渐变边（L 形）并启动关键帧  [' + hovB.backgroundSize + ']')
+      } else {
+        fail('角标 · 悬停关键帧/渐变边不符  [anim=' + hovB.animationName + '/' + hovA.animationName + ' size=' + hovB.backgroundSize + ']')
+      }
+      if (!/svg|url\(/.test(String(hovB.backgroundImage)) && !/url\(/.test(String(restB.backgroundImage))) {
+        pass('角标 · 不含任何位图/矢量资源（纯渐变，跨 DPR 稳定）')
+      } else {
+        fail('角标 · 仍依赖外部资源  [bg=' + String(hovB.backgroundImage).slice(0, 40) + ']')
+      }
+      const accentTri = accent.join(', ')
+      if (hovB.position === 'absolute' && hovB.width === '12px' && hovB.height === '12px'
+        && String(hovB.backgroundImage).includes(accentTri)) {
+        pass('角标 · 12px 方块、两条边用 onpaper 信号色  [' + hovB.width + '×' + hovB.height + ']')
+      } else {
+        fail('角标 · 几何/颜色不符  [' + hovB.position + ' ' + hovB.width + ' bg=' + String(hovB.backgroundImage).slice(0, 60) + ']')
+      }
+      /* search rows are in scope too */
+      await park()
+      const sRest = await styleOf('searchRow', '::before')
+      await hover('searchRow')
+      const sHov = await styleOf('searchRow', '::before')
+      if ((String(sRest.backgroundImage || '').match(/linear-gradient/g) || []).length === 2
+        && sHov.animationName === 'endfield-clamp-in') {
+        pass('角标 · 搜索结果行同款角标  [anim=' + sHov.animationName + ']')
+      } else {
+        fail('角标 · 搜索结果行角标缺失  [arms=' + (String(sRest.backgroundImage || '').match(/linear-gradient/g) || []).length + ' anim=' + sHov.animationName + ']')
+      }
+      await park()
+
+      /* pixels: the top-left bracket must actually paint, and only on hover.
+         Sample strictly INSIDE the row's corner. */
+      const bRow = JSON.parse(await evaluate('JSON.stringify(window.__rect__("sessionRow"))'))
+      const cornerBox = { x: bRow.x + 1, y: bRow.y + 1, w: 12, h: 12 }
+      const imgRest = await shoot()
+      await hover('sessionRow')
+      const imgHov = await shoot()
+      const pxHover = countNear(imgHov, cornerBox, accent, 30)
+      const pxRest = countNear(imgRest, cornerBox, accent, 30)
+      if (pxHover >= 12 && pxRest === 0) {
+        pass('角标 · 左上角 L 形角标真的画出来了（悬停 ' + pxHover + ' px，常态 ' + pxRest + ' px）')
+      } else {
+        fail('角标 · 未按预期绘制  [hover=' + pxHover + ' rest=' + pxRest + ' region=' + topColors(imgHov, cornerBox) + ']')
+      }
+      /* DPR loop: a decoration that only survives one DPR is a HiDPI bug nothing
+         else can see. */
+      for (const dpr of [1, 3, 1, 2]) {
+        await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: dpr, mobile: false })
+        await sleep(220)
+        await hover('sessionRow')
+        const imgHi = await shoot()
+        const bHi = JSON.parse(await evaluate('JSON.stringify(window.__rect__("sessionRow"))'))
+        const boxHi = { x: bHi.x + 1, y: bHi.y + 1, w: 12, h: 12 }
+        await park()
+        const imgHiRest = await shoot()
+        await hover('sessionRow')
+        const pxHi = countNear(imgHi, boxHi, accent, 30, dpr)
+        const pxHiRest = countNear(imgHiRest, boxHi, accent, 30, dpr)
+        if (pxHi >= 6 * dpr && pxHiRest === 0) {
+          pass('角标 · DPR ' + dpr + ' 下照常绘制  [悬停 ' + pxHi + ' px，常态 0]')
+        } else {
+          fail('角标 · DPR ' + dpr + ' 下未按预期绘制  [hover=' + pxHi + ' rest=' + pxHiRest
+            + ' region=' + topColors(imgHi, boxHi, 4, dpr) + ']')
+        }
+      }
+      await cdp.call('Emulation.setDeviceMetricsOverride', { width: 900, height: 900, deviceScaleFactor: 2, mobile: false })
+      await sleep(200)
+      await park()
+
+      /* round mode guard: no brackets when the app keeps its rounding. */
+      const hadRound = await evaluate("document.body.classList.contains('theme-endfield-round')")
+      await evaluate("document.body.classList.add('theme-endfield-round')")
+      await hover('sessionRow')
+      const roundMode = await styleOf('sessionRow', '::before')
+      await evaluate("document.body.classList.remove('theme-endfield-round')")
+      if ((String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length === 0) {
+        pass('角标 · 圆角模式（.theme-endfield-round）下不画  [开启前=' + hadRound + ']')
+      } else {
+        fail('角标 · 圆角模式下仍画  [arms=' + (String(roundMode.backgroundImage || '').match(/linear-gradient/g) || []).length + ']')
+      }
+      await park()
+
+      /* RETARGET REGRESSION: the merged design brackets sidebar rows ONLY.
+         Plain buttons and icon buttons carried brackets in the old scheme D;
+         they must not any more. */
+      await hover('plain')
+      const plainB = await styleOf('plain', '::before')
+      await park()
+      await hover('iconButton')
+      const iconB = await styleOf('iconButton', '::before')
+      await park()
+      const armsPlain = (String(plainB.backgroundImage || '').match(/linear-gradient/g) || []).length
+      const armsIcon = (String(iconB.backgroundImage || '').match(/linear-gradient/g) || []).length
+      if (armsPlain === 0 && armsIcon === 0) {
+        pass('合并回归 · 普通按钮/图标按钮不再画角标（角标只属于侧边栏行）')
+      } else {
+        fail('合并回归 · 角标仍画在按钮上  [plain=' + armsPlain + ' icon=' + armsIcon + ']')
+      }
+    }
+
+    /* ============ 划词灰：模型栏 / 权限更改 / 添加按钮 ============ */
+    {
+      const readPair = async () => ({
+        fill: await evaluate("window.__var__('--edge-select-fill')"),
+        ink: await evaluate("window.__var__('--edge-select-ink')"),
+        accent: await evaluate("window.__var__('--edge-accent')"),
+      })
+      /* value-level proof under a palette where the gray differs from the
+         accent: valley's accent is #fff500, the selection gray stays #d9d9d9. */
+      await evaluate("document.body.classList.add('theme-endfield-valley')")
+      await sleep(120)
+      const pair = await readPair()
+      const selFill = toRgb(pair.fill), selInk = toRgb(pair.ink), accentV = toRgb(pair.accent)
+      const modelSel = await styleOf('modelSel')
+      const modelUnsel = await styleOf('modelUnsel')
+      const permSel = await styleOf('permSel')
+      const permUnsel = await styleOf('permUnsel')
+      if (nearRgb(modelSel.backgroundColor, selFill, 3) && nearRgb(modelSel.color, selInk, 3)
+        && !nearRgb(modelSel.backgroundColor, accentV, 30)) {
+        pass('划词灰 · 模型菜单当前项 = 选择灰底 + 墨字（≠强调黄）  [' + modelSel.backgroundColor + ' / ' + modelSel.color + ']')
+      } else {
+        fail('划词灰 · 模型菜单当前项不符  [bg=' + modelSel.backgroundColor + ' color=' + modelSel.color
+          + ' 期望 fill=' + pair.fill + ' ink=' + pair.ink + ']')
+      }
+      if (!nearRgb(modelUnsel.backgroundColor, selFill, 3)) {
+        pass('划词灰 · 未选中的模型行保持透明  [' + modelUnsel.backgroundColor + ']')
+      } else {
+        fail('划词灰 · 未选中模型行也被涂灰  [' + modelUnsel.backgroundColor + ']')
+      }
+      if (nearRgb(permSel.backgroundColor, selFill, 3) && nearRgb(permSel.color, selInk, 3)
+        && !nearRgb(permUnsel.backgroundColor, selFill, 3)) {
+        pass('划词灰 · 权限弹层当前项同款灰，未选中项不动  [' + permSel.backgroundColor + ']')
+      } else {
+        fail('划词灰 · 权限弹层不符  [sel=' + permSel.backgroundColor + ' unsel=' + permUnsel.backgroundColor + ']')
+      }
+      /* the pair must be EXACTLY the ::selection pair: same tokens, read from
+         the same page (the rule reuses --edge-select-fill/ink by construction,
+         so a drift here means someone hardcoded a hex). */
+      const selRule = await evaluate("JSON.stringify((()=>{const s=getComputedStyle(document.getElementById('modelSel'));return {bg:s.backgroundColor, fg:s.color}})())")
+      void selRule
+      await park()
+      /* add button: hover must be the selection gray, not the solid accent. */
+      await hover('addBtn')
+      const addHov = await styleOf('addBtn')
+      if (nearRgb(addHov.backgroundColor, selFill, 3) && nearRgb(addHov.color, selInk, 3)
+        && !nearRgb(addHov.backgroundColor, accentV, 30)) {
+        pass('划词灰 · 添加按钮悬停 = 选择灰底 + 墨字（≠实心强调黄）  [' + addHov.backgroundColor + ' / ' + addHov.color + ']')
+      } else {
+        fail('划词灰 · 添加按钮悬停不符  [bg=' + addHov.backgroundColor + ' color=' + addHov.color + ']')
+      }
+      await park()
+      /* the gray survives motion-off: it is a selection state, not a motion. */
+      await evaluate("document.body.removeAttribute('data-endfield-motion')")
+      await sleep(120)
+      const grayOff = await styleOf('modelSel')
+      if (nearRgb(grayOff.backgroundColor, selFill, 3)) {
+        pass('划词灰 · 关闭动效后选中灰仍在（选中是状态，不是动效）')
+      } else {
+        fail('划词灰 · 关闭动效后选中灰消失  [bg=' + grayOff.backgroundColor + ']')
+      }
+      await setMotion('signal')
+      /* dark scheme: the pair flips with the scheme, both spots follow. */
+      await evaluate("document.body.setAttribute('data-ds-dark-theme','')")
+      await sleep(120)
+      const pairD = await readPair()
+      const modelD = await styleOf('modelSel')
+      const permD = await styleOf('permSel')
+      if (nearRgb(modelD.backgroundColor, toRgb(pairD.fill), 3) && nearRgb(modelD.color, toRgb(pairD.ink), 3)
+        && nearRgb(permD.backgroundColor, toRgb(pairD.fill), 3)) {
+        pass('划词灰 · 暗色方案下两处选中跟随翻转  [' + modelD.backgroundColor + ' / ' + pairD.fill + ']')
+      } else {
+        fail('划词灰 · 暗色方案下未跟随  [model=' + modelD.backgroundColor + ' perm=' + permD.backgroundColor + ' 期望 ' + pairD.fill + ']')
+      }
+      await evaluate("document.body.removeAttribute('data-ds-dark-theme')")
+      await evaluate("document.body.classList.remove('theme-endfield-valley')")
+      await sleep(120)
+    }
+
+    /* ============ 圆角恒定 ============ */
+    {
+      const iconRest = await styleOf('iconButton')
+      await hover('iconButton')
+      const iconHover = await styleOf('iconButton')
+      if (iconRest.borderRadius === iconHover.borderRadius && /50%|999px/.test(iconHover.borderRadius)) {
+        pass('圆形图标按钮 · 悬停不改圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
+      } else {
+        fail('圆形图标按钮 · 悬停改变了圆角  [' + iconRest.borderRadius + ' → ' + iconHover.borderRadius + ']')
+      }
+      await park()
+      await hover('plain')
+      const plainHoverR = (await styleOf('plain')).borderRadius
+      if (plainHoverR === '0px') pass('方角按钮 · 悬停仍是直角  [' + plainHoverR + ']')
+      else fail('方角按钮 · 悬停长出了倒角  [' + plainHoverR + ']')
+      await park()
+    }
+
+    /* ============ 发送按钮：不得有任何动效 ============ */
+    {
       const sendRest = await styleOf('send')
       const sendAfter = await styleOf('send', '::after')
       await hover('send')
@@ -781,26 +724,15 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
       const holdSend = await press('send', { release: false })
       const sendActive = await styleOf('send')
       await holdSend.release()
-      const sendRestRadius = sendRest.borderRadius
-      const sendHoverRadius = sendHover.borderRadius
-      const sendActiveRadius = sendActive.borderRadius
-      const radiusOk = sendRestRadius === sendHoverRadius && sendHoverRadius === sendActiveRadius
-      if (radiusOk) {
-        pass('发送按钮 · ' + scheme + ' 下圆角在常态/悬停/按下不变  [' + sendHoverRadius + ']')
-      } else {
-        fail('发送按钮 · ' + scheme + ' 下悬停或按下改变了圆角  [rest=' + sendRestRadius
-          + ' hover=' + sendHoverRadius + ' active=' + sendActiveRadius + ']')
-      }
+      const radiusOk = sendRest.borderRadius === sendHover.borderRadius && sendHover.borderRadius === sendActive.borderRadius
       const staticOk = !sendAfter.content || sendAfter.content === 'none'
       const noAnim = sendActive.animationName === 'none' && sendHover.animationName === 'none'
       const noShift = sendActive.transform === 'none' && sendHover.transform === 'none'
-      if (staticOk && noAnim && noShift) {
-        pass('发送按钮 · ' + scheme + ' 下无伪元素动效、无动画、无位移  [after=' + sendAfter.content
-          + ' anim=' + sendActive.animationName + ' transform=' + sendActive.transform + ']')
+      if (radiusOk && staticOk && noAnim && noShift) {
+        pass('发送按钮 · 无伪元素动效、无动画、无位移、圆角恒定  [after=' + sendAfter.content + ']')
       } else {
-        fail('发送按钮 · ' + scheme + ' 下仍有动效  [after=' + sendAfter.content + ' anim=' + sendActive.animationName
-          + ' hover-transform=' + sendHover.transform + ' active-transform=' + sendActive.transform
-          + ' rest-transform=' + sendRest.transform + ']')
+        fail('发送按钮 · 仍有动效  [after=' + sendAfter.content + ' anim=' + sendActive.animationName
+          + ' transform=' + sendActive.transform + '/' + sendHover.transform + ']')
       }
       await park()
     }
@@ -811,108 +743,72 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
        ships. */
     await evaluate("document.body.removeAttribute('data-endfield-motion')")
     await sleep(120)
-    await hover('plain')
-    const offAfter = await styleOf('plain', '::after')
-    const offStyle = await styleOf('plain')
-    if ((offAfter.content === 'none' || !offAfter.content) && offStyle.outlineStyle !== 'solid') {
-      pass('off · 关闭后普通按钮无角标、无外框')
-    } else {
-      fail('off · 关闭后仍有动效残留  [content=' + offAfter.content + ' outline=' + offStyle.outlineStyle + ']')
+    {
+      await hover('sessionRow')
+      const offB = await styleOf('sessionRow', '::before')
+      const offRow = await styleOf('sessionRow')
+      const armsOff = (String(offB.backgroundImage || '').match(/linear-gradient/g) || []).length
+      await hover('newSession')
+      const offArrow = await styleOf('newSession', '::after')
+      if (armsOff === 0 && (!offArrow.content || offArrow.content === 'none')) {
+        pass('off · 关闭后会话行角标与 CTA 箭头全部消失')
+      } else {
+        fail('off · 关闭后仍有动效残留  [arms=' + armsOff + ' arrow=' + offArrow.content + ']')
+      }
+      void offRow
+      await park()
+      const holdOff = await press('primary', { release: false })
+      const offMid = await styleOf('primary')
+      await holdOff.release()
+      if (!/brightness/.test(offMid.filter)) {
+        pass('off · 属性移除后主题不再叠加任何按下反馈  [filter=' + offMid.filter + ']')
+      } else {
+        fail('off · 属性已移除但主题仍在施加 filter  [' + offMid.filter + ']')
+      }
+      await park()
     }
-    await park()
-    const holdOff = await press('primary', { release: false })
-    const offAnims = await evaluate('JSON.stringify(window.__anims__("primary"))')
-    const offMid = await styleOf('primary')
-    await holdOff.release()
-    if (!/endfield-stamp/.test(offAnims)) pass('off · 关闭后按下不再有落印动画')
-    else fail('off · 关闭后仍在播放落印动画  [' + offAnims + ']')
-    /* With the attribute gone the shared `:active` dim is gone too — that rule is
-       gated on the same attribute. So the expectation is NOT brightness; it is that
-       nothing the theme adds is left behind. */
-    if (!/brightness/.test(offMid.filter)) {
-      pass('off · 属性移除后主题不再叠加任何按下反馈  [filter=' + offMid.filter + ']')
-    } else {
-      fail('off · 属性已移除但主题仍在施加 filter  [' + offMid.filter + ']')
-    }
-    await park()
 
     /* ============ control: prefers-reduced-motion ============ */
     await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-    await setMotion('stamp')
-    await hover('plain')
-    const rmPlain = await styleOf('plain')
-    if (rmPlain.outlineStyle !== 'solid' || rmPlain.outlineColor === 'rgba(0, 0, 0, 0)') {
-      pass('reduce-motion · F 的悬停外框被关掉  [outline=' + rmPlain.outlineStyle + ' ' + rmPlain.outlineColor + ']')
-    } else {
-      fail('reduce-motion · F 的悬停外框应被关掉  [outline=' + rmPlain.outlineStyle + ' ' + rmPlain.outlineColor + ']')
-    }
-    await park()
-    const holdRm = await press('primary', { release: false })
-    const rmAnims = await evaluate('JSON.stringify(window.__anims__("primary"))')
-    const rmMid = await styleOf('primary')
-    await holdRm.release()
-    if (!/endfield-stamp/.test(rmAnims)) pass('reduce-motion · 落印动画不再播放')
-    else fail('reduce-motion · 落印动画仍在播放  [' + rmAnims + ']')
-    if (/brightness/.test(rmMid.filter) && rmMid.transform === 'none') {
-      pass('reduce-motion · 颜色反馈保留、位移取消  [filter=' + rmMid.filter + ' transform=' + rmMid.transform + ']')
-    } else {
-      fail('reduce-motion · 应保留颜色反馈且无位移  [filter=' + rmMid.filter + ' transform=' + rmMid.transform + ']')
+    await setMotion('signal')
+    {
+      await hover('sessionRow')
+      const rmBefore = await styleOf('sessionRow', '::before')
+      const rmAfter = await styleOf('sessionRow', '::after')
+      const bRm = JSON.parse(await evaluate('JSON.stringify(window.__rect__("sessionRow"))'))
+      const imgRm = await shoot()
+      const rmCorner = countNear(imgRm, { x: bRm.x - 1, y: bRm.y - 1, w: 14, h: 14 }, accent, 30)
+      await park()
+      await hover('newSession')
+      const rmArrow = await styleOf('newSession', '::after')
+      await park()
+      if ((rmBefore.content === 'none' || !rmBefore.content) && (rmAfter.content === 'none' || !rmAfter.content)
+        && rmCorner === 0 && (!rmArrow.content || rmArrow.content === 'none')) {
+        pass('reduce-motion · 两个角标与 CTA 箭头都不生成（含 ::before 与像素验证）')
+      } else {
+        fail('reduce-motion · 装饰仍有残留  [before=' + rmBefore.content + ' after=' + rmAfter.content
+          + ' corner px=' + rmCorner + ' arrow=' + rmArrow.content + ']')
+      }
+      const holdRm = await press('plain', { release: false })
+      const rmMid = await styleOf('plain')
+      await holdRm.release()
+      if (/brightness/.test(rmMid.filter) && rmMid.transform === 'none') {
+        pass('reduce-motion · 颜色反馈保留、位移取消  [filter=' + rmMid.filter + ' transform=' + rmMid.transform + ']')
+      } else {
+        fail('reduce-motion · 应保留颜色反馈且无位移  [filter=' + rmMid.filter + ' transform=' + rmMid.transform + ']')
+      }
     }
     await cdp.call('Emulation.setEmulatedMedia', { features: [] })
 
-    /* The meter readout bar is the other half of "no motion": sliding it from 6%
-       to 100% is motion even with a compositor-only transform. Under reduce it must
-       stay at its 6% rest scale. */
-    /* reduce × clamp: every decorative pseudo-element must be gone, on BOTH
-       corners. The earlier version of the reduced-motion block only killed
-       ::after, so the top-left bracket stayed painted and nothing failed. */
-    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-    await setMotion('clamp')
-    await hover('plain')
-    const rmBefore = await styleOf('plain', '::before')
-    const rmAfter = await styleOf('plain', '::after')
-    const bRm = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
-    const imgRm = await shoot()
-    const rmCorner = countNear(imgRm, { x: bRm.x - 1, y: bRm.y - 1, w: 14, h: 14 }, accent, 30)
-    if ((rmBefore.content === 'none' || !rmBefore.content) && (rmAfter.content === 'none' || !rmAfter.content)
-      && rmCorner === 0) {
-      pass('reduce-motion · clamp 两个角标都不生成（含 ::before 与像素验证）')
-    } else {
-      fail('reduce-motion · clamp 仍有角标  [before=' + rmBefore.content + ' after=' + rmAfter.content
-        + ' corner px=' + rmCorner + ']')
-    }
-    await park()
-
-    /* Re-assert the emulated media: the probe above reads a media-sensitive rule,
-       and a silent re-navigation or a fresh document (the page reloads the fixture
-       between sections in some renderer builds) drops the override. Assert it is
-       actually in effect before judging the rule it gates. */
-    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
-    await sleep(120)
-    const rmActive = await evaluate("window.matchMedia('(prefers-reduced-motion: reduce)').matches")
-    if (rmActive !== true) fail('reduce-motion · 模拟的媒体查询没有生效，后续判定不算数')
-    /* ...and switch back to the scheme this assertion is about. It was left on
-       `stamp` by the previous block, which made the read return the wrong
-       pseudo-element (content:none, width:auto) instead of a failure of the CSS. */
-    await setMotion('meter')
-    await hover('newSession')
-    const rmBar = await styleOf('newSession', '::after')
-    if (Math.abs(scaleX(rmBar.transform) - 0.06) < 0.01 && w(rmBar) > 100) {
-      pass('reduce-motion · 读数条停在 6% 刻度（不滑动、宽度不变）  [' + rmBar.transform + ']')
-    } else {
-      fail('reduce-motion · 读数条应停在 6%  [transform=' + rmBar.transform + ' width=' + rmBar.width
-        + ' content=' + rmBar.content + ' attr=' + (await evaluate("document.body.getAttribute('data-endfield-motion')"))
-        + ' rect=' + (await evaluate("JSON.stringify(window.__rect__('newSession'))")) + ']')
-    }
-    await park()
+    await evaluate("document.body.setAttribute('data-endfield-motion','signal')")
   } catch (e) {
-    fail('harness error: ' + (e && e.message))
+    console.error('ERROR ' + (e && e.stack || e))
+    failures++
   } finally {
     if (cdp) cdp.close()
-    try { proc.kill() } catch (e) { /* already gone */ }
+    try { proc.kill('SIGKILL') } catch (e) { /* already gone */ }
   }
 
-  console.log('')
-  if (failures > 0) { console.error(failures + ' check(s) failed'); process.exit(1) }
-  console.log('all motion checks passed')
+  console.log(failures === 0 ? '\nall motion checks passed' : '\n' + failures + ' motion check(s) failed')
+  process.exit(failures === 0 ? 0 : 1)
 })()

@@ -256,6 +256,55 @@ const thunderPreview = thunderRowBtns.find((b) => /预览/.test(textOf(b)))
 if (thunderPreview && thunderPreview.props.disabled === true) pass('雷霆大字 预览 disabled while off')
 else fail('雷霆大字 预览 should be disabled while the feature is off')
 
+/* --- 按钮动效: a TOGGLE since the 2026-10 merge (was a 7-option select) ---
+   The stored literals are 'signal' (on — historic default literal, unchanged)
+   and 'off'; legacy scheme names must READ as on. The toggle writes exactly
+   those two literals, and syncMotion must drop the body attribute for 'off'
+   (an earlier edit lost that else-branch and nothing here noticed). */
+if (all.includes('按钮动效：开启')) pass('按钮动效 默认开启（合并设计）')
+else fail('按钮动效 should read 开启 with the default state')
+{
+  const motionRowNode = rows.find((r) => r.props.key === 'motion')
+  const motionBtn = motionRowNode ? walk(motionRowNode).find((b) => b.type === 'button' && /动效/.test(textOf(b))) : null
+  if (!motionBtn) fail('no 按钮动效 toggle button rendered (still a select?)')
+  else {
+    if (/关闭动效/.test(textOf(motionBtn))) pass('默认状态下按钮提供「关闭动效」')
+    else fail('按钮动效 button should offer 关闭动效 while on, got: ' + textOf(motionBtn))
+    if (typeof motionBtn.props.onClick !== 'function') fail('按钮动效 toggle has no onClick')
+    else {
+      try { motionBtn.props.onClick() } catch (e) { fail('按钮动效 toggle threw: ' + e.message) }
+      if (prefStore.get('motion') === 'off') pass('按钮动效 toggle 写入 motion=off')
+      else fail('按钮动效 toggle wrote ' + JSON.stringify(prefStore.get('motion')) + ', expected "off"')
+      /* The OFF state must read back as off through the button label — the label
+         derives from readMotion(), so this pins the read polarity. (The body
+         attribute itself cannot be asserted here: this harness's mock document
+         answers getAttribute with null unconditionally. What the attribute's
+         absence does to the motion rules is pinned by motion-check's off
+         section; the remove branch lives in syncMotion right next to the set
+         branch it mirrors.) */
+      const btnAfterOff = walk(rendered()).find((b) => b.type === 'button' && /动效/.test(textOf(b)))
+      if (btnAfterOff && /开启动效/.test(textOf(btnAfterOff))) pass('motion=off 后行状态与按钮都翻转为「开启动效」')
+      else fail('motion=off 后按钮仍显示: ' + (btnAfterOff ? textOf(btnAfterOff) : '(none)'))
+      // And back on: the stored literal is the historic 'signal'.
+      try { btnAfterOff.props.onClick() } catch (e) { fail('按钮动效 toggle (on) threw: ' + e.message) }
+      if (prefStore.get('motion') === 'signal') pass('重新开启写入 motion=signal（历史字面量）')
+      else fail('重新开启写入 ' + JSON.stringify(prefStore.get('motion')) + ', expected "signal"')
+    }
+  }
+  /* Legacy scheme names must READ as ON (merge migration): the row label and
+     the toggle's offer derive from readMotion(), which folds every old scheme
+     name into 'on'. Proven through the rendered label, not the mock attribute. */
+  for (const legacy of ['silent', 'impact', 'clamp', 'meter', 'stamp']) {
+    prefStore.setField('motion', legacy)
+    const treeL = rendered()
+    const labelText = textOf(treeL)
+    const btnL = walk(treeL).find((b) => b.type === 'button' && /动效/.test(textOf(b)))
+    if (labelText.includes('按钮动效：开启') && btnL && /关闭动效/.test(textOf(btnL))) pass('旧方案名 ' + legacy + ' 读取为「开」（并入合并设计）')
+    else fail('旧方案名 ' + legacy + ' 读成了关  [label=' + (labelText.includes('按钮动效：开启') ? 'on' : 'off') + ' btn=' + (btnL ? textOf(btnL) : '(none)') + ']')
+  }
+  prefStore.setField('motion', 'signal')
+}
+
 /* --- 大字入场动画: its own sub-switch, ALSO default off ---
    enforces the doc default (=== '1'), not opt-in === '1' vs !== '0' mismatch.
    Two independent defaults live here and both are part of the request. */

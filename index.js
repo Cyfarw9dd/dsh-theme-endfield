@@ -108,7 +108,7 @@ const FIELD_DEFAULTS = {
   palette: 'gray',          // 主题配色 —— 终末地灰 (gray default; 官网灰阶交互语法)
   glass: 'off',             // optional local frost; original material by default
   texture: 'standard',      // 工业底纹 —— off/subtle/standard；默认 standard＝官网 /operator 那套
-  motion: 'signal',          // 按钮动效 —— signal/silent/impact/off; default A signal
+  motion: 'signal',          // 按钮动效 —— 合并设计（'signal'=开 / 'off'=关；旧方案名读取时并轨为开）
   radius: 'square',         // 主题圆角 —— 直角
   watermark: '1',           // 背景水印 —— default on
   watermarkPersist: '0',    // 水印保持显示 —— default off

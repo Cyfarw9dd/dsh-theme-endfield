@@ -290,10 +290,14 @@ if (ac !== null) {
   }
 }
 
-/* ---------- 12. the meter readout bar vs the FILL it is drawn on ----------
-   The meter scheme paints a 3px readout bar along the bottom of the new-session
-   button, whose own fill IS --edge-accent (hover --edge-accent-deep). The bar is
+/* ---------- 12. the signal arrow vs the FILL it is drawn on ----------
+   The merged motion design slides an accent-ink arrow into the new-session CTA,
+   whose own fill IS --edge-accent (hover --edge-accent-deep). The arrow is
    therefore a graphic ON a solid accent surface, and it must be checked THERE.
+   (This section originally guarded the meter readout bar — same surface, same
+   token, and the same two invisible versions shipped first: --edge-accent at
+   1.00:1, then --edge-accent-onpaper, which EQUALS the accent in both bright
+   palettes (1.00-1.51:1). The lesson carries over verbatim.)
    Its first version used --edge-accent (1.00:1 at rest — literally invisible) and
    the second used --edge-accent-onpaper, which is EQUAL to the accent in both
    bright palettes (1.00-1.51:1). The role that actually pairs with an accent fill
@@ -309,8 +313,8 @@ for (const [name, block] of Object.entries(palettes)) {
   for (const [label, fill] of [['强调实心底', accent], ['悬停加深底', deep]]) {
     if (fill === null) { fail(name + ': ' + label + ' 未定义'); continue }
     const r = ratio(hex(ink), hex(fill))
-    if (r >= 3) pass(name + ' 读数条(accent-ink) / ' + label + '：' + r.toFixed(2) + ':1 (>=3 非文本下限)')
-    else fail(name + ' readout bar on ' + label + ' is only ' + r.toFixed(2) + ':1 — the bar disappears')
+    if (r >= 3) pass(name + ' 信号箭头(accent-ink) / ' + label + '：' + r.toFixed(2) + ':1 (>=3 非文本下限)')
+    else fail(name + ' signal arrow on ' + label + ' is only ' + r.toFixed(2) + ':1 — the bar disappears')
   }
 }
 /* 终末地灰 owns both schemes: its ink flips (dark on the light fill, white on the
@@ -329,8 +333,82 @@ for (const [name, block] of Object.entries(palettes)) {
     const r = ratio(hex(ink), hex(fill))
     worst = Math.min(worst, r)
   }
-  if (worst >= 3) pass('终末地灰 读数条(accent-ink) / 两模式强调底：最差 ' + worst.toFixed(2) + ':1 (>=3)')
-  else fail('终末地灰 readout bar contrast is only ' + worst.toFixed(2) + ':1')
+  if (worst >= 3) pass('终末地灰 信号箭头(accent-ink) / 两模式强调底：最差 ' + worst.toFixed(2) + ':1 (>=3)')
+  else fail('终末地灰 signal arrow contrast is only ' + worst.toFixed(2) + ':1')
+}
+
+/* ---------- 13. the 划词灰 pair and its three 2026-10 applications ----------
+   The model-menu / permission current rows and the composer + hover paint with
+   the ::selection pair (--edge-select-fill / --edge-select-ink). The VALUES are
+   the scheme-gray declared on the plain body blocks (this test reads them from
+   client.js, never restating a hex); what this section adds is (a) the pair's
+   contrast in both schemes, and (b) the guarantee that all three applications
+   actually reference those tokens — a hardcoded #d9d9d9 would pass (a) and still
+   break the dark scheme, which is exactly the class of drift (a) alone cannot
+   see. */
+{
+  /* The pair is SCHEME-only (declared on plain body / body[data-ds-dark-theme],
+     never per palette — see the ::selection block in client.js), so read the two
+     scheme blocks the same way defaultBlock is found. */
+  const schemeBlock = (dark) => {
+    const needle = dark ? '\n      body[data-ds-dark-theme] {' : '\n      body {'
+    let from = 0
+    for (;;) {
+      const i = src.indexOf(needle, from)
+      if (i < 0) return null
+      const b = src.slice(i, src.indexOf('}', i))
+      if (b.includes('--edge-select-fill')) return b
+      from = i + 1
+    }
+  }
+  for (const [blk, label] of [[schemeBlock(false), '亮色'], [schemeBlock(true), '暗色']]) {
+    if (blk === null) { fail('划词灰 ' + label + '：选择令牌块未找到'); continue }
+    const fill = varIn(blk, '--edge-select-fill')
+    const ink = varIn(blk, '--edge-select-ink')
+    if (fill === null || ink === null) { fail('划词灰 ' + label + '：fill/ink 未定义'); continue }
+    const r = ratio(hex(ink), hex(fill))
+    if (r >= 4.5) pass('划词灰 ' + label + ' 选择底 + 选择墨：' + r.toFixed(2) + ':1 (AA)')
+    else fail('划词灰 ' + label + ' pair is only ' + r.toFixed(2) + ':1')
+  }
+  const hooks = [
+    ["[role='menuitemradio'][aria-checked='true']", '模型菜单当前项'],
+    ["[role='menuitem'][class*='_selected']:has([class$='_optionLabel'])", '权限弹层当前项'],
+  ]
+  for (const [needle, name] of hooks) {
+    /* The explanatory COMMENT names these selectors verbatim, so indexOf alone
+       would read the comment. Walk every occurrence and take the one that is a
+       RULE: followed by a declaration block within 300 chars. */
+    let i = -1, body = ''
+    for (let at = src.indexOf(needle); at >= 0; at = src.indexOf(needle, at + 1)) {
+      const candidate = src.slice(at, at + 400)
+      if (candidate.includes('background-color')) { i = at; body = candidate; break }
+    }
+    if (i < 0) { fail('划词灰 · ' + name + ' 的规则不在样式表里'); continue }
+    if (body.includes('var(--edge-select-fill') && body.includes('var(--edge-select-ink')) {
+      pass('划词灰 · ' + name + ' 引用的是 --edge-select-* 令牌（非硬编码）')
+    } else {
+      fail('划词灰 · ' + name + ' 未引用选择令牌  [' + body.slice(0, 80) + ']')
+    }
+  }
+  const addIdx = src.indexOf("[class*='_add']:hover:not(:disabled)")
+  if (addIdx >= 0) {
+    const addBody = src.slice(addIdx, addIdx + 400)
+    if (addBody.includes('var(--edge-select-fill') && addBody.includes('var(--edge-select-ink')) {
+      pass('划词灰 · 添加按钮悬停引用的是 --edge-select-* 令牌（非硬编码）')
+    } else {
+      fail('划词灰 · 添加按钮悬停未引用选择令牌  [' + addBody.slice(0, 80) + ']')
+    }
+  } else {
+    fail('划词灰 · 添加按钮悬停规则缺失')
+  }
+  /* the dark full-inversion rule must carve BOTH surfaces out, or it would
+     repaint them solid accent in dark with !important and win the cascade. */
+  const darkRule = src.indexOf("[class*='selected' i]:not([class*='unselected' i])")
+  if (darkRule >= 0 && src.slice(darkRule, darkRule + 300).includes(":not([role='menuitemradio']):not([role='menuitem']:has([class$='_optionLabel']))")) {
+    pass('划词灰 · 暗色「选中行反转」规则已为两处菜单面开洞（不会盖回强调黄）')
+  } else {
+    fail('划词灰 · 暗色反转规则未开洞，暗色下两处菜单仍会被涂成强调黄')
+  }
 }
 
 /* ---------- 11. three palettes must actually differ ---------- */

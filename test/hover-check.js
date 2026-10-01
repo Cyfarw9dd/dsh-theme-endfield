@@ -254,6 +254,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
     window.__setPalette__=(p)=>{ document.body.classList.toggle('theme-endfield-wuling', p==='wuling')
       document.body.classList.toggle('theme-endfield-gray', p==='gray') }
     window.__statusdark__=()=>getComputedStyle(document.body).getPropertyValue('--edge-status-dark').trim()
+    window.__selectfill__=()=>getComputedStyle(document.body).getPropertyValue('--edge-select-fill').trim()
     localStorage.setItem('dsh-theme-endfield-enabled','1')
     localStorage.setItem('dsh-theme-endfield-loader','0')
     const mod=window.__MOD__.factory(()=>null)
@@ -395,14 +396,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
         }
         await parkPointer()
 
-        /* 3. composer + — the hook's purpose. Scoping it to the composer must not
-           delete the inversion: solid accent fill, black glyph, both schemes.
-           Its rest ink is dark-mode-only by design (in light the app's own
-           label-primary already contrasts on --dsw-specific-selector). */
+        /* 3. composer + — the hook's purpose. Since 2026-10 the hover fill is the
+           划词灰 pair (same tokens as ::selection, per the user's ask), NOT the
+           solid accent: assert the fill equals the selection gray AND that the
+           glyph still reads on it. Its rest ink is dark-mode-only by design (in
+           light the app's own label-primary already contrasts on
+           --dsw-specific-selector). */
         const composer = await hoverSample('composerAdd')
         inkCheck(tag + ' · 输入区 + 真实 :hover', composer, 4.5)
-        if (near(composer.fill, accent, 4)) pass(tag + ' · 输入区 + 悬停仍为实心强调底  [fill=' + rgbText(composer.fill) + ']')
-        else fail(tag + ' · 输入区 + 悬停应为实心强调底  [fill=' + rgbText(composer.fill) + ' vs accent=' + rgbText(accent) + ']')
+        const selFill = hexRgb(await evaluate('window.__selectfill__()'))
+        if (near(composer.fill, selFill, 4)) pass(tag + ' · 输入区 + 悬停为划词灰底（同 ::selection）  [fill=' + rgbText(composer.fill) + ']')
+        else fail(tag + ' · 输入区 + 悬停应为划词灰底  [fill=' + rgbText(composer.fill) + ' vs select=' + rgbText(selFill) + ']')
         await parkPointer()
 
         const rest = JSON.parse(await evaluate('JSON.stringify(window.__style__("composerAdd"))'))

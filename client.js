@@ -2935,22 +2935,31 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       body[data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root'] {
         background-image:
           var(--edge-tex-wave),
+          /* 波纹带的顶边渐隐：官方给 decoTape 挂的是左缘 90 度 mask（宽列里从右侧
+             延伸进来）；DSH 的窄列里图几乎塞满整列，左缘 mask 失效，顶边变成一条
+             横贯全列的硬切线（实测行间跳变 11 个灰阶）。遮罩没法只作用于背景图的
+             某一层，所以这里用一条「与波纹带同盒、顶部不透明底色、往下 3.5rem
+             渐透明」的覆盖层把顶边揉掉——官方 mask 的意图，转了 90 度。 */
+          linear-gradient(180deg, var(--dsw-alias-bg-base, #101110) 0, transparent 3.5rem),
           var(--edge-tex-tape),
           radial-gradient(120% 55% at 50% 0%,
             rgba(var(--edge-accent-rgb, 126, 126, 126), var(--edge-glow-light, 0.08)), transparent 70%);
         background-size:
           39.1875rem 26.3125rem,
           59.125rem 13.5rem,
+          59.125rem 13.5rem,
           100% 100%;
         background-position:
           100% 0,
           30% 62%,
+          30% 62%,
           50% 0;
-        background-repeat: no-repeat, no-repeat, no-repeat;
+        background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
       }
       body[data-ds-dark-theme][data-endfield-texture='standard'] [class$='_centerCol'] > [class$='_root'] {
         background-image:
           var(--edge-tex-wave),
+          linear-gradient(180deg, var(--dsw-alias-bg-base, #101110) 0, transparent 3.5rem),
           var(--edge-tex-tape),
           radial-gradient(120% 55% at 50% 0%,
             rgba(var(--edge-accent-rgb, 126, 126, 126), var(--edge-glow-dark, 0.04)), transparent 70%);

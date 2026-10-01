@@ -17,15 +17,18 @@
  * animations do, so an absolute task threshold would measure the harness instead.
  *
  * Asserted:
- *   1. STATIC GUARD (no browser needed) — the motion section may only transition or
- *      keyframe `transform`, `opacity` and colour properties; no resting
- *      `will-change`.
- *   2. LAYOUT — hovering must not reflow the page. The budget is deliberately loose
- *      (16ms/s) because the bisect that produced it showed ~8-16ms/s on the schemes
- *      that create a pseudo-element on hover, and 0 on the ones that do not. That is
- *      0.13-0.28ms per frame: inside the frame budget, but not zero. Dropping the
- *      entry animation made it WORSE (16.7 vs 8.8ms/s reproduced four times), so the
- *      test asserts the honest ceiling instead of pretending the cost is avoidable.
+ *   1. STATIC GUARD (no browser needed) — the allowlist of every transition and of
+ *      every keyframe in the motion section: `transform`, `opacity`, colour, plus
+ *      A's `border-radius` (which the official site also animates). Hover rules
+ *      that create geometry without any transition are NOT caught here; the layout
+ *      budget is what catches those.
+ *   2. LAYOUT — hovering must not reflow the page, and the budget is 2ms/s rather
+ *      than "some": geometry that only comes into existence on hover makes the
+ *      renderer re-run layout (measured 8-16ms/s for a hover-created pseudo-element,
+ *      11.6ms/s for a hover-created border). Pre-creating that geometry and toggling
+ *      it with opacity takes all six schemes to 0.00ms/s — so zero is the standard,
+ *      and this budget is what stops a future "add the border on hover" from
+ *      creeping back in.
  *   3. FRAMES — requestAnimationFrame p95 / worst interval and the >32ms frame ratio
  *      during the hover. This is the actual "is it smooth" judgement; everything
  *      above is a budget, this is the user-visible outcome.
@@ -81,7 +84,16 @@ if (!/data-endfield-motion='stamp'/.test(motionSection)) {
   process.exit(1)
 }
 {
-  const ALLOWED_TRANSITION = ['background-color', 'color', 'border-color', 'opacity', 'transform', 'none']
+  /* Scope note, because the previous version of this guard overstated itself: it
+     checks (a) the property allowlist of every `transition:` declaration and (b) the
+     properties touched by every `@keyframes` block. It does NOT statically detect
+     the other per-frame cost this section has already been bitten by — a hover rule
+     that merely *creates* something (a pseudo-element, a border, a `position`
+     change) with no transition at all. That class is deliberately left to the
+     layout budget below, which caught it for real (29ms/s for one `position:
+     absolute` added on hover). Saying so here is the point: a guard whose name
+     promises more than it checks is worse than a narrow one with a comment. */
+  const ALLOWED_TRANSITION = ['background-color', 'color', 'border-color', 'opacity', 'transform', 'none', 'border-radius']
   const offences = []
   for (const m of motionSection.matchAll(/transition:\s*([^;]+);/g)) {
     for (const part of m[1].split(',')) {
@@ -89,7 +101,10 @@ if (!/data-endfield-motion='stamp'/.test(motionSection)) {
       if (hit && !ALLOWED_TRANSITION.includes(hit[1])) offences.push('transition 驱动 ' + hit[1])
     }
   }
-  for (const m of motionSection.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n      \}/g)) {
+  /* Indentation-agnostic: match a keyframes block up to the first line that closes
+     it at the same column. A hard-coded 6-space terminator silently stopped
+     matching the moment the section was re-indented. */
+  for (const m of motionSection.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n\s*\}/g)) {
     for (const prop of new Set([...m[2].matchAll(/([a-z-]+)\s*:/g)].map((x) => x[1]))) {
       if (prop !== 'transform' && prop !== 'opacity') offences.push('@keyframes ' + m[1] + ' 驱动 ' + prop)
     }
@@ -108,7 +123,7 @@ if (!/data-endfield-motion='stamp'/.test(motionSection)) {
 /* ---------------- fixture: ~400 interactive rows ---------------- */
 const fixture = `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body{margin:0;background:#e8e8e2;color:#101110;font:13px Arial}
-  body{--edge-accent:#fff500;--edge-accent-onpaper:#d9c700;--edge-accent-ink:#101110;
+  body{--edge-accent:#fff500;--edge-accent-deep:#e8e000;--edge-accent-onpaper:#d9c700;--edge-accent-ink:#101110;
     --dsw-alias-bg-base:#e8e8e2;--dsw-alias-bg-layer-1:#f2f2ec;--dsw-alias-label-primary:#101110;
     --dsw-alias-border-l2:#b6b8b3;--dsw-alias-button-elevated-fill:#f2f2ec}
   #list{width:260px;float:left}
@@ -258,7 +273,11 @@ const pct = (arr, p) => {
       const t0 = Date.now()
       let i = 0
       while (Date.now() - t0 < seconds * 1000) {
-        await move(120, 12 + ((i * 37) % 640))
+        /* Alternate columns so the CTA / icon / plain buttons on the right are
+           hovered too. The first version only walked x=120, i.e. inside #list, so
+           the readout bar, the crosshair ticks and the stamp outline were never
+           exercised by any of the budgets above. */
+        await move(i % 2 === 0 ? 120 : 300 + (i % 3) * 90, 12 + ((i * 37) % 640))
         i++
         await sleep(16)
       }
@@ -287,11 +306,11 @@ const pct = (arr, p) => {
     results['silent#2'] = await sweep('silent')
 
     const perSecond = (v, wall) => v / wall
-    const LAYOUT_BUDGET = 16  // measured 8-16ms/s where a hover-created pseudo-element exists; 0 otherwise
+    const LAYOUT_BUDGET = 2  // all six schemes measure 0.00; this is the tripwire for hover-created geometry
     const P95_BUDGET = 40
     const MAX_BUDGET = 120
     const SLOW_FRAME_RATIO = 0.05
-    const PARKED_LAYOUT_BUDGET = 4  // a resting pointer must not keep the layout engine busy
+    const PARKED_LAYOUT_BUDGET = 2  // a resting pointer must not keep the layout engine busy
     const TASK_BUDGET = 250  // main thread ms per second, i.e. <= ~4ms of a 16.7ms frame
 
     console.log('')
@@ -312,8 +331,12 @@ const pct = (arr, p) => {
     console.log('')
 
     const drift = Math.abs(results.silent.task - results['silent#2'].task) / Math.max(results.silent.task, 1)
-    if (drift <= 0.5) pass(`基线稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%（≤50%）`)
-    else fail(`基线不稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%，本轮数字仅供参考`)
+    const driftLayout = Math.abs(results.silent.layout - results['silent#2'].layout)
+    if (drift <= 0.5 && driftLayout <= 2) {
+      pass(`基线稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s`)
+    } else {
+      fail(`基线不稳定 · 两次 silent 的 task 相差 ${(drift * 100).toFixed(0)}%、layout 相差 ${driftLayout.toFixed(2)}ms/s，本轮数字仅供参考`)
+    }
 
     for (const scheme of Object.keys(results)) {
       const r = results[scheme]
@@ -322,8 +345,7 @@ const pct = (arr, p) => {
       const maxv = pct(r.intervals, 1)
       const slowRatio = r.intervals.length ? r.intervals.filter((v) => v > 32).length / r.intervals.length : 0
       const detail = `layout ${lay.toFixed(2)}ms/s (≤${LAYOUT_BUDGET}) · 帧 p95 ${p95v.toFixed(1)}ms (≤${P95_BUDGET}) · max ${maxv.toFixed(1)}ms (≤${MAX_BUDGET}) · >32ms ${(slowRatio * 100).toFixed(1)}% (≤${SLOW_FRAME_RATIO * 100}%)`
-      void maxv
-      if (lay <= LAYOUT_BUDGET && p95v <= P95_BUDGET && slowRatio <= SLOW_FRAME_RATIO) {
+      if (lay <= LAYOUT_BUDGET && p95v <= P95_BUDGET && maxv <= MAX_BUDGET && slowRatio <= SLOW_FRAME_RATIO) {
         pass(`${scheme.padEnd(10)} · ${detail}`)
       } else {
         fail(`${scheme.padEnd(10)} · ${detail}`)
@@ -334,10 +356,14 @@ const pct = (arr, p) => {
     const frameBudget = 1000 / 60
     for (const scheme of Object.keys(results)) {
       const r = results[scheme]
-      const perFrame = r.task / 1000 * (frameBudget / 1000) * 1000
-      const ratio = r.task / Math.max(results.silent.task, 1)
-      const detail = `${r.task.toFixed(0)}ms/s ≈ ${perFrame.toFixed(3)}ms per frame（预算 ${TASK_BUDGET}ms/s；silent 的 ${ratio.toFixed(2)}×）`
-      if (r.task <= TASK_BUDGET) pass(`task 预算 · ${scheme.padEnd(10)} ${detail}`)
+      /* r.task is CUMULATIVE ms for the sweep, so it must be divided by the wall
+         time before it can be compared with a per-second budget. Comparing the raw
+         value silently tightened the budget by ~1.6x (the sweep length). */
+      const perSecond = r.task / r.wall
+      const perFrame = perSecond / 1000 * frameBudget
+      const ratio = perSecond / Math.max(results.silent.task / results.silent.wall, 1)
+      const detail = `${perSecond.toFixed(0)}ms/s ≈ ${perFrame.toFixed(3)}ms per frame（预算 ${TASK_BUDGET}ms/s；silent 的 ${ratio.toFixed(2)}×）`
+      if (perSecond <= TASK_BUDGET) pass(`task 预算 · ${scheme.padEnd(10)} ${detail}`)
       else fail(`task 预算 · ${scheme.padEnd(10)} ${detail} 超预算`)
     }
 

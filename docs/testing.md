@@ -106,8 +106,8 @@ node test/perf-motion.test.js        # 量「流畅」：静态守卫 + layout/�
 
 **`perf-motion.test.js`** 回答另一个问题：这些动效**花掉多少**。它的方法是**同一次运行里的 A/B**——指针按同样的坐标、同样的节奏扫过 300 行 + 120 个按钮，唯一变量是 `<body>` 上的 `data-endfield-motion`，所以 `silent` 是同一轮里测得的地板。断言分四层：
 
-1. **静态守卫**（无需浏览器，秒级）：动效段只许过渡/关键帧 `transform`、`opacity` 与颜色；出现 `width`/`padding`/`box-shadow`/`filter`/`clip-path` 直接红。还断言没有常态 `will-change`。
-2. **layout 预算**：`LayoutDuration ≤ 16ms/s`。这个数字是量出来的上限而不是零——悬停时才生成的伪元素本身会带来 8–15ms/s。
+1. **静态守卫**（无需浏览器，秒级）：动效段里**每一条 `transition` 与每个 `@keyframes`** 的属性只许是 `transform`、`opacity`、颜色，外加方案 A 的 `border-radius`（官网也动画它）。还断言没有常态 `will-change`。**它抓不到「悬停时才生成几何」这一类**（没有 transition、没有关键帧的 `position`/`border`/伪元素创建）——那一类由 layout 预算兜住，这一点写在脚本注释里，不假装守卫比它实际更宽。
+2. **layout 预算**：`LayoutDuration ≤ 2ms/s`。六个方案实测都是 **0.00**，这个预算就是防回归的绊线——任何「悬停时才生成几何」（伪元素、border、position 变化）都会立刻把它顶红（实测一次 `position:absolute` 加在悬停规则里 = 29ms/s）。
 3. **帧间隔**：页面内 `requestAnimationFrame` 采样的 p95 ≤40ms、>32ms 帧占比 ≤5%。这才是「看起来顺不顺」的判据。
 4. **task 预算**：主线程 ≤250ms/s（≈每帧 ≤4ms）。**刻意用绝对值而不是「静默基线的 N 倍」**：silent 几乎什么都不做，一个每帧只花 0.15ms 的方案会被读成「基线的 6 倍」，比例在这里是误导。
 5. **停留不做事**：指针停在按钮上 1.6s，layout 必须 ≤4ms/s——代价只许发生在指针**移动**时。

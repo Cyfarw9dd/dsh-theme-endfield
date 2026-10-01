@@ -290,6 +290,49 @@ if (ac !== null) {
   }
 }
 
+/* ---------- 12. the meter readout bar vs the FILL it is drawn on ----------
+   The meter scheme paints a 3px readout bar along the bottom of the new-session
+   button, whose own fill IS --edge-accent (hover --edge-accent-deep). The bar is
+   therefore a graphic ON a solid accent surface, and it must be checked THERE.
+   Its first version used --edge-accent (1.00:1 at rest — literally invisible) and
+   the second used --edge-accent-onpaper, which is EQUAL to the accent in both
+   bright palettes (1.00-1.51:1). The role that actually pairs with an accent fill
+   everywhere in this theme is --edge-accent-ink, so that is what the CSS uses and
+   what this section checks. Non-text UI graphics need 3:1 (WCAG 1.4.11).
+   Nothing here covered either candidate token before, which is exactly why two
+   invisible-bar versions could ship. */
+for (const [name, block] of Object.entries(palettes)) {
+  const ink = varIn(block, '--edge-accent-ink')
+  const accent = varIn(block, '--edge-accent')
+  const deep = varIn(block, '--edge-accent-deep')
+  if (ink === null) { fail(name + ': --edge-accent-ink is not defined'); continue }
+  for (const [label, fill] of [['强调实心底', accent], ['悬停加深底', deep]]) {
+    if (fill === null) { fail(name + ': ' + label + ' 未定义'); continue }
+    const r = ratio(hex(ink), hex(fill))
+    if (r >= 3) pass(name + ' 读数条(accent-ink) / ' + label + '：' + r.toFixed(2) + ':1 (>=3 非文本下限)')
+    else fail(name + ' readout bar on ' + label + ' is only ' + r.toFixed(2) + ':1 — the bar disappears')
+  }
+}
+/* 终末地灰 owns both schemes: its ink flips (dark on the light fill, white on the
+   dark one), so the pairing is checked against each scheme's own block. */
+{
+  const darkGray = grayDarkBlock || grayBlock
+  const pairs = [
+    [varIn(grayBlock, '--edge-accent-ink'), varIn(grayBlock, '--edge-accent'), '亮色'],
+    [varIn(grayBlock, '--edge-accent-ink'), varIn(grayBlock, '--edge-accent-deep'), '亮色加深'],
+    [varIn(darkGray, '--edge-accent-ink'), varIn(darkGray, '--edge-accent'), '暗色'],
+    [varIn(darkGray, '--edge-accent-ink'), varIn(darkGray, '--edge-accent-deep'), '暗色加深'],
+  ]
+  let worst = Infinity
+  for (const [ink, fill, label] of pairs) {
+    if (ink === null || fill === null) { fail('终末地灰 ' + label + ' 的 accent-ink / 填充未定义'); continue }
+    const r = ratio(hex(ink), hex(fill))
+    worst = Math.min(worst, r)
+  }
+  if (worst >= 3) pass('终末地灰 读数条(accent-ink) / 两模式强调底：最差 ' + worst.toFixed(2) + ':1 (>=3)')
+  else fail('终末地灰 readout bar contrast is only ' + worst.toFixed(2) + ':1')
+}
+
 /* ---------- 11. three palettes must actually differ ---------- */
 {
   const accents = [varIn(palettes['谷地黄'], '--edge-accent'), varIn(palettes['武陵青'], '--edge-accent'), varIn(grayBlock, '--edge-accent')]

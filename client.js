@@ -2910,11 +2910,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
          方案C impact：冲压反馈
            · 全局 .2s 颜色过渡 + :active 暗一档
-           · 悬停硬阴影位移（4px→2px，模拟被压入页面）
-           · 悬停时左侧信号色边条闪现（width 0→3px）
+           · 硬阴影位移（常态 4px → 按下 2px，模拟被压入页面）
+           · 左侧信号色边条：常态透明占位，悬停只改颜色（不加边框，避免重排）
 
          方案D clamp：工程标注（角标母题）
-           · 悬停时四角亮起 12px L 形角标（.18s 自角落弹出）——工程图纸的
+           · 四角 12px L 形角标常态存在、悬停淡入（.18s）——工程图纸的
              「框选/定位」语法；圆形图标按钮被排除在外
            · 主 CTA：左缘 3px 信号边条 + 文字横移 2px（像被标注框对齐）
            · 颜色过渡与 :active 沿用共通段；无整体位移、无缩放
@@ -2922,8 +2922,9 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          方案E meter：仪表读数（计量母题）
            · 图形按钮（类名以 _iconButton 结尾、且未被恢复成圆的那个）：
              悬停四角出现准星刻度，按下 scale(.92)——仪表按钮被按下
-           · 主 CTA：底部读数条 6% → 100% 展开，按下瞬间炸成满条亮色
-           · 悬停文字切信号色 + 方括号字形（工业面板的「选中通道」语法）
+           · 主 CTA：底部读数条 6% → 100% 展开（用 accent-ink 色，因为它压在
+           强调色实心底上——同色会消失），按下变为满条
+           · 列表行/菜单项：左缘信号色指示条淡入（工业面板的「选中通道」语法）
            · 零位移：所有变化都是 line/scale，不推挤相邻元素
 
          方案F stamp：冲压盖章（落印母题）
@@ -2935,13 +2936,17 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
          off：完全关闭，回到无动效的瞬变状态。
 
-         官网实测数据支撑（见 endfield-ui-research.md）：
+         官网实测数据支撑（动效部分见 docs/notes/endfield-motion-research.md）：
          · 时长全部 ≤.3s；无弹跳/无回弹（keyframes 的 cubic-bezier y ≤ 1）
          · 变形优先于位移；颜色就是状态（hover亮/active暗）
          · 零 JS 动画库，纯 CSS transition
 
-         色彩取值：信号色边条/角标/读数条一律走 --edge-accent-onpaper（各调色板
-         都有、且都已通过亮暗双底对比度断言），因此 D–F 不需要任何新色值。
+         色彩取值：信号色边条/角标/读数条一律走 --edge-accent-onpaper——它是各
+         调色板的「深/亮一档」版本，压在纸底、面板底**或强调色实心底**上都读得出来。
+         反例（曾经的 bug）：读数条一开始用 --edge-accent，而主 CTA 自己的底就是
+         --edge-accent，同色叠同色 1.00–1.28:1，条子完全看不见。D–F 没有引入新色值，
+         但「onpaper 已被对比度测试覆盖」这句话不成立——见 test/perf-motion.test.js
+         末尾的调色板断言（palette-contrast 覆盖的是别的角色）。
 
          prefers-reduced-motion：A–F 的位移动画全部关掉，保留颜色过渡，见本节末尾。 */
 
@@ -2970,7 +2975,15 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
 
       /* ================= 方案A signal：官网签名复刻 ================= */
 
-      /* A-1. 悬停圆角软化（仅直角模式） */
+      /* A-1. 悬停圆角软化（仅直角模式）。官网上 border-radius 是被过渡的属性之一
+         （transition: color .2s, background-color .2s, border-radius .2s），
+         所以这里也给它一条自己的过渡；注意它**在共通过渡里**：border-radius 会被
+         浏览器当作可能触发重排的属性，放进全局规则会让长列表每次悬停整屏布局失效。 */
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) button:not(:disabled),
+      body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:not(:disabled) {
+        transition: background-color .2s ease, color .2s ease, border-color .2s ease,
+          border-radius .2s ease;
+      }
       body[data-endfield-motion='signal']:not(.theme-endfield-round) button:hover:not(:disabled),
       body[data-endfield-motion='signal']:not(.theme-endfield-round) [role='button']:hover:not(:disabled) {
         border-radius: 6px !important;
@@ -3053,7 +3066,22 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
       /* A-5. Sidebar session/search rows + menu/option items + table rows:
          left signal border on hover. Uses --edge-accent-onpaper (a DARK step
          that reads on both paper and panel) because --edge-accent alone is
-         #d9d9d9 in the default gray palette — invisible on cream hover tints. */
+         #d9d9d9 in the default gray palette — invisible on cream hover tints.
+
+         The border is declared at REST as 3px solid transparent and only its
+         colour changes on hover. Adding the border on hover instead would make
+         every hovered row lay out again: measured over a 300-row sweep, the
+         hover-created border cost 11.6ms/s of LayoutDuration against 0.00ms/s
+         for the always-present version (the same reason the meter/menu rules
+         pre-paint their geometry). */
+      body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow'],
+      body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_searchResultRow'],
+      body[data-endfield-motion='signal'] [role='menuitem'],
+      body[data-endfield-motion='signal'] [role='option'],
+      body[data-endfield-motion='signal'] tbody tr,
+      body[data-endfield-motion='signal'] .endfield-settings button {
+        border-left: 3px solid transparent !important;
+      }
       body[data-endfield-motion='signal'] [class$='_sidebarCol'] [class$='_sessionRow']:hover {
         border-left: 3px solid var(--edge-accent-onpaper, var(--edge-accent)) !important;
       }
@@ -3111,16 +3139,23 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          子串的图标按钮变体（走纸/危险态）同样是圆的——圆形按钮上放角标是错的。
          命中 4n+3 个类名：':not()' 自身不增加特异性，净特异性 = 元素 + 4 属性 +
          伪元素，高于应用的同名 hover 规则。 */
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
-      body[data-endfield-motion='clamp'] [role='option']:hover::before,
-      body[data-endfield-motion='clamp'] [role='option']:hover::after {
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]),
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]),
+      body[data-endfield-motion='clamp'] [role='tab'],
+      body[data-endfield-motion='clamp'] [role='menuitem'],
+      body[data-endfield-motion='clamp'] [role='option'] {
+        position: relative;
+      }
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::before,
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::after,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::before,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::after,
+      body[data-endfield-motion='clamp'] [role='tab']::before,
+      body[data-endfield-motion='clamp'] [role='tab']::after,
+      body[data-endfield-motion='clamp'] [role='menuitem']::before,
+      body[data-endfield-motion='clamp'] [role='menuitem']::after,
+      body[data-endfield-motion='clamp'] [role='option']::before,
+      body[data-endfield-motion='clamp'] [role='option']::after {
         content: '';
         position: absolute;
         width: 12px;
@@ -3130,44 +3165,46 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-color: var(--edge-accent-onpaper, var(--edge-accent));
         -webkit-mask-repeat: no-repeat;
         mask-repeat: no-repeat;
-        /* 入场只淡入，不缩放：opacity 与 transform 都在合成器上，但「只动 opacity」
-           让浏览器可以只做一次栅格化，之后每帧只合成——这是全站最省的一档动效，
-           官网 7 个关键帧也是这个写法。角标本就是细几何，缩放带来的观感收益
-           不值得多付一份逐帧重绘的代价。 */
-        animation: endfield-clamp-in .18s ease 1 both;
+        /* 角标常态就存在、只由 opacity 控制显隐——这不是审美选择而是性能事实：
+         「悬停时才生成盒子」会让每次悬停都走一遍布局失效，300 行扫掠实测
+         LayoutDuration 13.4ms/s；改成常态存在 + 只切 opacity 之后是 0.00ms/s
+         （同一夹具同一次运行；同轮的 meter 指示条与 impact 透明边条本来就
+         是常态存在的，也都是 0.00）。入场只淡入、不缩放，道理相同：opacity
+         单属性动画允许浏览器只栅格化一次，之后每帧只合成。 */
+        opacity: 0;
+        transition: opacity .18s ease;
       }
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::before,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
-      body[data-endfield-motion='clamp'] [role='option']:hover::before {
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::before,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::before,
+      body[data-endfield-motion='clamp'] [role='tab']::before,
+      body[data-endfield-motion='clamp'] [role='menuitem']::before,
+      body[data-endfield-motion='clamp'] [role='option']::before {
         left: -1px;
         top: -1px;
-        transform-origin: left top;
         -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
         mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M0 5V0h5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
       }
-      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i]):hover:not(:disabled)::after,
-      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
-      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
-      body[data-endfield-motion='clamp'] [role='option']:hover::after {
+      body[data-endfield-motion='clamp'] button:not(.actionButton):not([class*='actionButton' i])::after,
+      body[data-endfield-motion='clamp'] [role='button']:not(.actionButton):not([class*='actionButton' i])::after,
+      body[data-endfield-motion='clamp'] [role='tab']::after,
+      body[data-endfield-motion='clamp'] [role='menuitem']::after,
+      body[data-endfield-motion='clamp'] [role='option']::after {
         right: -1px;
         bottom: -1px;
-        transform-origin: right bottom;
         -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
         mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M12 7v5H7' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
       }
-      @keyframes endfield-clamp-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      body[data-endfield-motion='clamp'] button,
-      body[data-endfield-motion='clamp'] [role='button'],
-      body[data-endfield-motion='clamp'] [role='tab'],
-      body[data-endfield-motion='clamp'] [role='menuitem'],
-      body[data-endfield-motion='clamp'] [role='option'] {
-        position: relative;
+      body[data-endfield-motion='clamp'] button:hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] button:hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='button']:hover:not(:disabled)::before,
+      body[data-endfield-motion='clamp'] [role='button']:hover:not(:disabled)::after,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::before,
+      body[data-endfield-motion='clamp'] [role='tab']:hover::after,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::before,
+      body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
+      body[data-endfield-motion='clamp'] [role='option']:hover::before,
+      body[data-endfield-motion='clamp'] [role='option']:hover::after {
+        opacity: 1;
       }
 
       /* D-2. 主 CTA：左缘边条 + 文字横移 2px（被标注框对齐）。
@@ -3219,11 +3256,18 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         filter: none;
       }
 
-      /* E-2. 主 CTA：底部读数条 6% → 100%，按下瞬间炸成满条亮色。
-         用 scaleX 而不是 width——官网自己的黄条揭示就是
-         transform-origin:left + scaleX(0→1)，并明确不写 width：
+      /* E-2. 主 CTA：底部读数条 6% → 100%。用 scaleX 而不是 width——官网自己的
+         黄条揭示就是 transform-origin:left + scaleX(0→1)，并明确不写 width：
          合成器能直接对已栅格化的图层做横向拉伸，width 则每帧都要重排重绘。
-         元素本身按 100% 宽静态存在（只栅格化一次），初始视觉宽度由 scaleX(.06) 给出。 */
+         元素本身按 100% 宽静态存在（只栅格化一次），初始视觉宽度由 scaleX(.06) 给出。
+
+         颜色必须是 --edge-accent-ink，**不能**用 --edge-accent、也不能用
+         --edge-accent-onpaper：这个按钮的底就是 --edge-accent（悬停
+         --edge-accent-deep，见下方 New session 段），而 onpaper 在亮黄/亮青
+         两套配色里**等于** accent（1.00–1.51:1）——读数条会彻底消失。
+         accent-ink 是「与强调实心底配对」的那一档（题字、::selection、选中行
+         用的就是它），既有对比度测试覆盖，又随亮暗模式正确翻转：
+         亮色墨字压亮底 13.4–16.5:1，暗色白字压灰底 10.1:1。 */
       body[data-endfield-motion='meter'] [class$='_newSession'] {
         position: relative;
       }
@@ -3234,7 +3278,7 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         bottom: 0;
         width: 100%;
         height: 3px;
-        background-color: var(--edge-accent, currentColor);
+        background-color: var(--edge-accent-ink, #101110);
         transform-origin: left center;
         transform: scaleX(.06);
         transition: transform .22s cubic-bezier(.16, 1, .3, 1), background-color .12s linear;
@@ -3360,15 +3404,27 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         body[data-endfield-motion='meter'] [class$='_newSession']::after {
           transition: none !important;
           transform: scaleX(.06) !important;
-          background-color: var(--edge-accent-onpaper, var(--edge-accent)) !important;
         }
-        body[data-endfield-motion='clamp'] button:hover::after,
-        body[data-endfield-motion='clamp'] [role='button']:hover::after,
-        body[data-endfield-motion='clamp'] [role='menuitem']:hover::after,
-        body[data-endfield-motion='clamp'] [role='option']:hover::after,
-        body[data-endfield-motion='meter'] [class$='_iconButton']:hover::before,
-        body[data-endfield-motion='meter'] [role='menuitem']:hover::before,
-        body[data-endfield-motion='meter'] [role='option']:hover::before {
+        /* EVERY decorative pseudo-element, on every role the schemes paint, and on
+           both corners: a scheme that only kills ::after leaves the ::before corner
+           painted (measured — the clamp top-left bracket survived 'reduce' until
+           this list included it). [role='tab'] is in here for the same reason. */
+        body[data-endfield-motion='clamp'] button::before,
+        body[data-endfield-motion='clamp'] button::after,
+        body[data-endfield-motion='clamp'] [role='button']::before,
+        body[data-endfield-motion='clamp'] [role='button']::after,
+        body[data-endfield-motion='clamp'] [role='tab']::before,
+        body[data-endfield-motion='clamp'] [role='tab']::after,
+        body[data-endfield-motion='clamp'] [role='menuitem']::before,
+        body[data-endfield-motion='clamp'] [role='menuitem']::after,
+        body[data-endfield-motion='clamp'] [role='option']::before,
+        body[data-endfield-motion='clamp'] [role='option']::after,
+        body[data-endfield-motion='signal'] [class$='_newSession']::after,
+        body[data-endfield-motion='signal'] [data-cordis-approve]::after,
+        body[data-endfield-motion='signal'] :is([class$='_composerSeat'], [class$='_composerHero']) button[class*='_primary']::after,
+        body[data-endfield-motion='meter'] [class$='_iconButton']::before,
+        body[data-endfield-motion='meter'] [role='menuitem']::before,
+        body[data-endfield-motion='meter'] [role='option']::before {
           content: none !important;
         }
       }

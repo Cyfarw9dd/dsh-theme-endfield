@@ -58,10 +58,9 @@ const pass = (m) => console.log('ok    ' + m)
 const fail = (m) => { console.error('FAIL  ' + m); failures++ }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-/* Onpaper accents per palette, read from the DOCUMENT (not restated here): the
-   fixture declares the same --edge-accent-onpaper values the theme's palette
-   blocks do, and the expected colour is whatever the page resolves the variable
-   to. That keeps this test from duplicating a value the theme owns. */
+/* Colour expectations are read from the DOCUMENT, never restated as literals:
+   the fixture declares the gray palette's tokens (the theme's default) and the
+   expected colour is whatever the page resolves the variable to. */
 const decodePng = (buf) => {
   let pos = 8, w = 0, h = 0, bd = 0, ct = 0
   const idat = []
@@ -192,14 +191,28 @@ const connectWs = (url) => new Promise((resolve, reject) => {
 const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-8">
 <style>
   html,body{margin:0}
+  /* A COMPLETE palette block, mirroring body.theme-endfield-gray. Leaving a token
+     out is not harmless: without --edge-accent-deep the theme's own
+     '[class$=_newSession]:hover { background: var(--edge-accent-deep) }' becomes
+     an invalid declaration, the button keeps its accent fill, and every pixel
+     assertion about decorations ON that button silently measures the button
+     itself. That is exactly how the meter readout-bar assertion passed while the
+     bar was transparent. */
   body{
-    --edge-accent:#fff500;
-    --edge-accent-onpaper:#d9c700;
+    --edge-accent:#d9d9d9;
+    --edge-accent-deep:#cccccc;
+    --edge-accent-onpaper:#666666;
     --edge-accent-ink:#101110;
+    --edge-accent-rgb:126, 126, 126;
+    --edge-status-dark:#d9d9d9;
     --dsw-alias-bg-base:#e8e8e2;
     --dsw-alias-bg-layer-1:#f2f2ec;
+    --dsw-alias-bg-layer-2:#dcddd6;
     --dsw-alias-label-primary:#101110;
+    --dsw-alias-border-l1:#d8d9d5;
     --dsw-alias-border-l2:#b6b8b3;
+    --dsw-alias-button-info-fill:#101110;
+    --dsw-alias-button-elevated-fill:#f2f2ec;
     background:#e8e8e2;color:#101110;font:600 12px Arial;
     padding:24px;
   }
@@ -381,19 +394,29 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     await park()
 
     const restD = await styleOf('plain', '::before')
+    const restDAfter = await styleOf('plain', '::after')
     await hover('plain')
     const beforeD = await styleOf('plain', '::before')
     const afterD = await styleOf('plain', '::after')
     const maskD = (s) => String(s.maskImage || s.webkitMaskImage || '')
-    if (restD.content === 'none' || !restD.content) {
-      pass('D clamp · 未悬停时不生成角标（无常态噪音）')
+    /* The bracket boxes exist at rest and hover only toggles their opacity. This
+       is deliberate and load-bearing: creating them on hover re-invalidates layout
+       on every hover (13.4ms/s over a 300-row sweep) while an always-present box
+       costs 0.00. So "not generated at rest" is the WRONG expectation — what must
+       hold is "not PAINTED at rest". */
+    if (restD.content && restD.content !== 'none' && restD.opacity === '0' && restDAfter.opacity === '0'
+      && beforeD.opacity === '1' && afterD.opacity === '1') {
+      pass('D clamp · 角标常态存在但不绘制（opacity 0 → 1，避免悬停时才创建盒子）')
     } else {
-      fail('D clamp · 未悬停就生成了角标  [content=' + restD.content + ']')
+      fail('D clamp · 角标应常态存在且 opacity 0→1  [content=' + restD.content
+        + ' rest=' + restD.opacity + '/' + restDAfter.opacity
+        + ' hover=' + beforeD.opacity + '/' + afterD.opacity + ']')
     }
-    if (afterD.content && afterD.content !== 'none' && /svg/.test(maskD(beforeD)) && /svg/.test(maskD(afterD))) {
-      pass('D clamp · 悬停时 ::before/::after 各切出一个 L 角  [' + maskD(beforeD).slice(0, 40) + '…]')
+    if (beforeD.opacity === '1' && afterD.opacity === '1' && /svg/.test(maskD(beforeD)) && /svg/.test(maskD(afterD))) {
+      pass('D clamp · 悬停时 ::before/::after 各切出一个 L 角并点亮  [' + maskD(beforeD).slice(0, 40) + '…]')
     } else {
-      fail('D clamp · 悬停未生成两个角标伪元素  [before=' + maskD(beforeD).slice(0, 30) + ' after=' + maskD(afterD).slice(0, 30) + ']')
+      fail('D clamp · 悬停应点亮两个角标  [before=' + beforeD.opacity + ' ' + maskD(beforeD).slice(0, 30)
+        + ' after=' + afterD.opacity + ' ' + maskD(afterD).slice(0, 30) + ']')
     }
     const dimsD = (s) => s.width + '×' + s.height
     if (beforeD.position === 'absolute' && beforeD.width === '12px' && beforeD.height === '12px'
@@ -446,9 +469,28 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     else fail('E meter · 读数条宽度被改变了，说明仍在动 width  [' + w(restE) + ' → ' + w(hovE) + ']')
     const imgE = await shoot()
     const bNs = JSON.parse(await evaluate('JSON.stringify(window.__rect__("newSession"))'))
-    const pxE = countNear(imgE, { x: bNs.x + bNs.w * 0.5, y: bNs.y + bNs.h - 5, w: bNs.w * 0.45, h: 5 }, '#fff500', 60)
-    if (pxE >= 20) pass('E meter · 展开后的读数条是实心信号黄像素  [' + pxE + ' px]')
-    else fail('E meter · 底部未见信号黄读数条  [' + pxE + ' px]')
+    /* The bar must be --edge-accent-ink: the CTA's own fill IS --edge-accent, so a
+       bar in accent (1.00:1) or in accent-onpaper (1.00-1.51:1 in the bright
+       palettes — it equals the accent there) is invisible. accent-ink is the token
+       paired with accent fills, and test/palette-contrast.test.js now asserts it
+       across all three palettes. Read both colours off the page. */
+    const barColor = await evaluate("getComputedStyle(document.body).getPropertyValue('--edge-accent-ink').trim()")
+    const barRgb = toRgb(barColor)
+    const fillRgb = toRgb(await evaluate("getComputedStyle(document.getElementById('newSession')).backgroundColor"))
+    const barBox = { x: bNs.x + bNs.w * 0.5, y: bNs.y + bNs.h - 5, w: bNs.w * 0.45, h: 5 }
+    /* Tight tolerance on purpose: the onpaper bar (217,199,0) and the hover fill
+       (232,224,0) are only 72 apart in Manhattan distance, so a loose tolerance
+       counts each as the other — the first version of this assertion had exactly
+       that bug (bar=1630 px, fill=1630 px, i.e. every pixel matched both). */
+    const pxE = countNear(imgE, barBox, barRgb, 8)
+    const pxFill = countNear(imgE, barBox, fillRgb, 8)
+    if (pxE >= 20 && pxE > pxFill) {
+      pass('E meter · 底部读数条是 onpaper 信号色且与按钮底色可分辨  [' + pxE + ' px ' + barColor
+        + ' vs 底色 ' + pxFill + ' px]')
+    } else {
+      fail('E meter · 底部读数条不可见或与底色同色  [bar=' + pxE + ' px ' + barColor + ' fill=' + pxFill
+        + ' px rgb(' + (fillRgb || []) + ') region=' + topColors(imgE, barBox) + ']')
+    }
     await park()
 
     await hover('iconButton')
@@ -528,7 +570,11 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     await park()
 
     /* ============ control: off ============ */
-    await setMotion('off')
+    /* The runtime removes the attribute for `off` (client.js syncMotion), it does
+       not write the literal 'off'. Setting 'off' would exercise a state that never
+       ships. */
+    await evaluate("document.body.removeAttribute('data-endfield-motion')")
+    await sleep(120)
     await hover('plain')
     const offAfter = await styleOf('plain', '::after')
     const offStyle = await styleOf('plain')
@@ -544,8 +590,14 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     await holdOff.release()
     if (!/endfield-stamp/.test(offAnims)) pass('off · 关闭后按下不再有落印动画')
     else fail('off · 关闭后仍在播放落印动画  [' + offAnims + ']')
-    if (/brightness/.test(offMid.filter)) pass('off · 关闭后按下仍是共通的暗一档反馈  [' + offMid.filter + ']')
-    else fail('off · 关闭后按下应保留 brightness(.85)  [' + offMid.filter + ']')
+    /* With the attribute gone the shared `:active` dim is gone too — that rule is
+       gated on the same attribute. So the expectation is NOT brightness; it is that
+       nothing the theme adds is left behind. */
+    if (!/brightness/.test(offMid.filter)) {
+      pass('off · 属性移除后主题不再叠加任何按下反馈  [filter=' + offMid.filter + ']')
+    } else {
+      fail('off · 属性已移除但主题仍在施加 filter  [' + offMid.filter + ']')
+    }
     await park()
 
     /* ============ control: prefers-reduced-motion ============ */
@@ -575,6 +627,26 @@ const fixture = (css, motion) => `<!doctype html><html><head><meta charset="utf-
     /* The meter readout bar is the other half of "no motion": sliding it from 6%
        to 100% is motion even with a compositor-only transform. Under reduce it must
        stay at its 6% rest scale. */
+    /* reduce × clamp: every decorative pseudo-element must be gone, on BOTH
+       corners. The earlier version of the reduced-motion block only killed
+       ::after, so the top-left bracket stayed painted and nothing failed. */
+    await cdp.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    await setMotion('clamp')
+    await hover('plain')
+    const rmBefore = await styleOf('plain', '::before')
+    const rmAfter = await styleOf('plain', '::after')
+    const bRm = JSON.parse(await evaluate('JSON.stringify(window.__rect__("plain"))'))
+    const imgRm = await shoot()
+    const rmCorner = countNear(imgRm, { x: bRm.x - 1, y: bRm.y - 1, w: 14, h: 14 }, accent, 30)
+    if ((rmBefore.content === 'none' || !rmBefore.content) && (rmAfter.content === 'none' || !rmAfter.content)
+      && rmCorner === 0) {
+      pass('reduce-motion · clamp 两个角标都不生成（含 ::before 与像素验证）')
+    } else {
+      fail('reduce-motion · clamp 仍有角标  [before=' + rmBefore.content + ' after=' + rmAfter.content
+        + ' corner px=' + rmCorner + ']')
+    }
+    await park()
+
     /* Re-assert the emulated media: the probe above reads a media-sensitive rule,
        and a silent re-navigation or a fresh document (the page reloads the fixture
        between sections in some renderer builds) drops the override. Assert it is

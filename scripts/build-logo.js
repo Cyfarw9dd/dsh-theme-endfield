@@ -17,12 +17,17 @@
  *
  * WHY TWO MASKS AND NOT THE COLOURED SVG ITSELF.
  *   The sticker is three flat colours (body #ffe01d, hatched step #f4d73e, wordmark
- *   #d2d3d4) and reads correctly only on a dark page: on the light theme's cream
- *   paper #d2d3d4 measures 1.2:1. Painting the artwork through an ALPHA MASK lets the
- *   stylesheet own the colours, so each scheme can carry values measured against the
- *   surface it really lands on (test/hero-logo.test.js enforces the bars) instead of
- *   baking a dark-only asset into the sheet. It is also 20x smaller: the traced
- *   outline + wordmark are 6.6KB of SVG, where the full three-colour vector is 197KB.
+ *   #d2d3d4) — but the masks are not about recolouring. They are about size and
+ *   geometry: the traced outline + wordmark are 6.6KB of SVG where the full
+ *   three-colour vector is 197KB, and the hatching (a rigid line family) becomes ONE
+ *   repeating gradient instead of fifty traced bars. Masking also keeps the colours
+ *   in the stylesheet, which is what lets test/hero-logo.test.js compare what the
+ *   browser actually paints against THIS file's own palette.
+ *
+ *   Those colours are the artwork's own on BOTH schemes (the owner's call):
+ *   #d2d3d4 measures 12.62:1 on the dark page but 1.22:1 on the light theme's cream
+ *   paper, so the light scheme shows a pale print rather than a headline. That is
+ *   deliberate — WCAG exempts logotypes from its contrast minimums.
  *
  * HOW THE MASKS WERE PRODUCED (reproducible; potrace is not a build dependency, so
  * the traced output is checked in rather than regenerated here):

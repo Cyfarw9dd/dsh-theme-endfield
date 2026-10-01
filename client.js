@@ -3132,11 +3132,19 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          every colour — see scripts/build-logo.js for provenance and the trace
          recipe, and the two body blocks below for the measured values.
 
-         Why not embed the artwork itself: it is a dark-page asset (its wordmark is
-         #d2d3d4, which is 1.2:1 on this theme's cream paper). Painting the two
-         shapes through masks lets each scheme carry a colour measured against the
-         surface it really lands on, and it is 30x smaller than the three-colour
-         vector (5.7KB of minimized SVG against 197KB).
+         Why masks rather than the three-colour vector itself: it is 30x smaller
+         (5.7KB of minimized SVG against 197KB), its hatch becomes ONE gradient
+         instead of fifty traced bars, and its colours live in the stylesheet, where
+         a scheme can restate them without re-tracing anything.
+
+         The colours are the artwork's own on BOTH schemes — the owner's call, and a
+         deliberate trade: #ffe01d / #f4d73e / #d2d3d4 measure 14.36 / 13.19 /
+         12.62:1 against the dark page, but only 1.25 / 1.12 / 1.22:1 against the
+         light scheme's cream paper, so on light the mark reads as a pale print
+         instead of a headline. WCAG exempts logotypes from its contrast minimums,
+         and test/hero-logo.test.js therefore asserts that what is PAINTED is the
+         artwork's own triple (decoded from assets/hero-logo-3-summer.png) rather
+         than asserting AA on the light scheme.
 
          The hatching is a gradient, not fifty traced bars, and its geometry is
          MEASURED off the artwork rather than eyeballed: the stripe boundaries are
@@ -3147,19 +3155,11 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
          39.7% of that = 0.6166% (the body colour fills 0..0.936%). Percentages,
          not px, keep the hatch exact at every size. */
       body {
-        /* Light scheme, cream paper #e8e8e2. The wordmark carries the reading, so
-           it takes the theme ink (15.38:1); the arrow takes the measured on-paper
-           step of the signal hue (#6b5d00, 5.35:1 — the same value the palettes
-           already use for signal-yellow text on paper). The artwork's own #ffe01d
-           is 1.25:1 here, i.e. invisible, which is exactly why the source file
-           cannot simply be dropped in. */
-        --edge-hero-logo-body: #6b5d00;
-        --edge-hero-logo-hatch: #574b00;
-        --edge-hero-logo-ink: #101110;
-      }
-      body[data-ds-dark-theme] {
-        /* Dark scheme: the artwork's own colours, unchanged. Against the #101110
-           page they measure body 14.36:1 · hatch 13.19:1 · wordmark 12.62:1. */
+        /* The artwork's own colours, on both schemes (see the note above). Kept as
+           three variables rather than baked into the masks so a future fork can
+           restate them in one place, and so the test can compare what is painted
+           against the source file. No scheme override: brand art is not a
+           theme-relative ink. */
         --edge-hero-logo-body: #ffe01d;
         --edge-hero-logo-hatch: #f4d73e;
         --edge-hero-logo-ink: #d2d3d4;

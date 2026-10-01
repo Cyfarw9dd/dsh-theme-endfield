@@ -11,12 +11,15 @@
  *      '*_headline' (fish + title group); 0.1.x rendered the text node as
  *      '*_headlineText'. The theme accepts either, and this runs the fixture twice
  *      because the selector that works for one silently does nothing for the other.
- *   3. COLOUR, MEASURED. The artwork is a dark-page asset: its own wordmark
- *      #d2d3d4 is 1.2:1 on the light theme's cream paper, which is why the sheet
- *      paints masks with scheme-dependent colours instead of embedding the file.
- *      The bars are checked against the LAUNCHED PAGE's own painted background, in
- *      both schemes — the failure this guards against is invisible on the dark
- *      theme the feature was designed on.
+ *   3. COLOUR, FROM THE SOURCE FILE. The mark is painted through alpha masks, so
+ *      the stylesheet decides every colour it shows. What it must show is the
+ *      artwork's own palette — in BOTH schemes, by the owner's decision — so this
+ *      decodes assets/hero-logo-3-summer.png and compares the browser's computed
+ *      values against it. That is a brand-fidelity invariant, not a contrast bar:
+ *      the logotype is exempt from WCAG's minimums, and the light scheme's low
+ *      ratios (1.25 / 1.12 / 1.22:1 on cream) are printed as the recorded
+ *      consequence. The failure it catches is a colour drifting into an invented
+ *      value, or a scheme quietly keeping an override nobody asked for.
  *   4. THE PAGE IT MUST NOT APPEAR ON. An active conversation gets no mark.
  *
  * Usage: node test/hero-logo.test.js     (needs CHROME_PATH; see docs/testing.md)
@@ -55,6 +58,71 @@ const parse = (c) => {
 const lin = (v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4) }
 const lum = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
 const ratio = (a, b) => { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05) }
+
+/* ---------- the artwork's own palette, decoded from the real source file ----------
+   The mark is painted through alpha masks, so the only thing that decides its
+   colour is the stylesheet. That colour is the artwork's own, on both schemes
+   (owner's call — see the note in client.js), so the test does not restate the hex
+   values: it decodes them out of assets/hero-logo-3-summer.png and compares what
+   the browser PAINTS against them. Restating them here would only test the copy.
+   Flat art makes the extraction unambiguous: one neutral (the wordmark) plus two
+   yellows, the more frequent of which is the body and the rarer the hatching. */
+const zlib = require('zlib')
+const decodeRgba = (file) => {
+  const buf = fs.readFileSync(file)
+  let i = 8
+  let w = 0; let h = 0; let depth = 0; let colourType = 0
+  const idat = []
+  while (i < buf.length) {
+    const len = buf.readUInt32BE(i)
+    const type = buf.toString('ascii', i + 4, i + 8)
+    const data = buf.subarray(i + 8, i + 8 + len)
+    if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); depth = data[8]; colourType = data[9] } else if (type === 'IDAT') idat.push(data)
+    i += 12 + len
+  }
+  if (depth !== 8 || colourType !== 6) throw new Error('assets/hero-logo-3-summer.png must stay 8-bit RGBA')
+  const raw = zlib.inflateSync(Buffer.concat(idat))
+  const stride = w * 4
+  const out = Buffer.alloc(stride * h)
+  let prev = Buffer.alloc(stride)
+  for (let y = 0, p = 0; y < h; y++) {
+    const filter = raw[p++]
+    const line = Buffer.from(raw.subarray(p, p + stride)); p += stride
+    for (let x = 0; x < stride; x++) {
+      const a = x >= 4 ? line[x - 4] : 0
+      const b = prev[x]
+      const c = x >= 4 ? prev[x - 4] : 0
+      if (filter === 1) line[x] = (line[x] + a) & 255
+      else if (filter === 2) line[x] = (line[x] + b) & 255
+      else if (filter === 3) line[x] = (line[x] + ((a + b) >> 1)) & 255
+      else if (filter === 4) {
+        const pp = a + b - c
+        const pa = Math.abs(pp - a); const pb = Math.abs(pp - b); const pc = Math.abs(pp - c)
+        line[x] = (line[x] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255
+      }
+    }
+    line.copy(out, y * stride)
+    prev = line
+  }
+  return { w, h, data: out }
+}
+const artworkColours = () => {
+  const { w, h, data } = decodeRgba(path.join(ROOT, 'assets', 'hero-logo-3-summer.png'))
+  const counts = new Map()
+  for (let p = 0; p < w * h; p++) {
+    if (data[p * 4 + 3] < 128) continue
+    const hex = '#' + [0, 1, 2].map((k) => data[p * 4 + k].toString(16).padStart(2, '0')).join('')
+    counts.set(hex, (counts.get(hex) || 0) + 1)
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([hex, n]) => ({ hex, n, rgb: parse(hex) }))
+  const neutral = top.filter((c) => Math.max(...c.rgb) - Math.min(...c.rgb) <= 8)
+  const yellows = top.filter((c) => c.rgb[0] > 200 && c.rgb[1] > 170 && c.rgb[2] < 120)
+  if (neutral.length < 1 || yellows.length < 2) {
+    throw new Error('the artwork no longer carries one neutral + two flat yellows — inspect the source before trusting this test')
+  }
+  return { ink: neutral[0].hex, body: yellows[0].hex, hatch: yellows[1].hex }
+}
 
 /* ---------- the two real hero shapes ----------
    Every class name and every token below is copied from the installed bundles, so
@@ -209,22 +277,23 @@ for (const [name, , gen] of scenarios) {
   else fail(where + ': hatching gradient missing — got ' + r.gradient.slice(0, 80))
 }
 
-/* ---------- 2. colour: measured against the page the browser actually paints ---------- */
+/* ---------- 2. colour: what is painted must BE the artwork's own palette ----------
+   Not a contrast bar. The logotype is exempt from WCAG's minimums and the owner
+   asked for brand fidelity in both schemes, so the correct invariant is "the
+   painted colours equal the source file's", in the light scheme too — where the
+   numbers below are deliberately low and recorded rather than enforced. */
+const art = artworkColours()
+pass('artwork palette decoded from assets/hero-logo-3-summer.png: body ' + art.body + ' · hatch ' + art.hatch + ' · ink ' + art.ink)
 for (const [name] of scenarios) {
   const r = results[name]
   if (!r.present) continue
+  const got = { body: r.body, hatch: r.hatch, ink: r.ink }
+  const bad = Object.keys(got).filter((k) => String(got[k]).toLowerCase() !== art[k].toLowerCase())
+  if (bad.length === 0) pass(name + ': paints the artwork\'s own colours (' + got.body + ' / ' + got.hatch + ' / ' + got.ink + ')')
+  else fail(name + ': ' + bad.map((k) => k + ' is ' + got[k] + ' but the artwork says ' + art[k]).join('; '))
   const paper = parse(r.paper)
-  const pairs = [['wordmark', r.ink], ['arrow', r.body], ['hatch', r.hatch]]
-  let worst = Infinity
-  let worstName = ''
-  for (const [label, value] of pairs) {
-    if (!/^#|rgb/.test(value)) { fail(name + ': ' + label + ' colour is not a colour: "' + value + '"'); continue }
-    const cr = ratio(parse(value), paper)
-    if (cr < worst) { worst = cr; worstName = label }
-    if (cr >= 4.5) pass(name + ' ' + label + ' ' + value + ' on ' + r.paper + ': ' + cr.toFixed(2) + ':1 (AA)')
-    else fail(name + ' ' + label + ' ' + value + ' on ' + r.paper + ' is only ' + cr.toFixed(2) + ':1 — the mark washes out on this scheme')
-  }
-  pass(name + ': worst pair ' + worstName + ' ' + worst.toFixed(2) + ':1')
+  const cr = (v) => ratio(parse(v), paper).toFixed(2) + ':1'
+  console.log('      ' + name + ' on ' + r.paper + ': body ' + cr(r.body) + ' · hatch ' + cr(r.hatch) + ' · ink ' + cr(r.ink) + ' (logotype, no bar)')
 }
 
 /* ---------- 3. nothing on an active conversation ---------- */

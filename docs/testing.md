@@ -102,7 +102,8 @@ node test/texture.test.js               # 三档开关 + 装饰强度 + 静态�
 1. **开关接线**：CSS 有三档、`TEXTURE_OPTIONS` 与之一致、`PREFS_KEY_TO_FIELD` 有映射、Host schema 有默认值、`off` 通过**移除属性**实现（与 motion 的运行时行为一致）。
 2. **装饰强度**（核心）：从 stylesheet 读出 `--edge-tex-ink` 与两个 alpha，按 WCAG 公式合成到真实底面上，断言落在**装饰区间 1.06–1.60:1**——与水印、hero 光晕同一条产品规则。数值不复述，改 alpha 就是改断言输入。
 3. **静态性**：纹理段没有 `transition`/`@keyframes`/`will-change`，且承载面只走 `background-*`（不改宽高/内外边距）。
-4. **降级与来源**：`prefers-reduced-transparency`/`prefers-contrast` 会关掉纹理；三色信号线逐字沿用官方 `decoLine` 停靠值。
+4. **降级与来源**：`prefers-reduced-transparency`/`prefers-contrast` 会关掉纹理（含两个叠加层的 `display:none`）；三色信号线逐字沿用官方 `decoLine` 停靠值。
+5. **内容锚定绊线**：纹理段不得出现 `[class$='_frame']` / `[class$='_sidebarCol']`（第一版挂了三个面 + `position:fixed` 叠加层 = 整窗平铺，官方做法是每层锚定内容区域）；叠加层必须 `z-index:-1`（否则画在正文上面）。另：三档按**值**匹配，属性残留 `'off'` 不会画。
 
 反向对照：把网格 alpha 从 5% 提到 25% → 断言必须变红（实测亮色 1.69:1、1.71:1，超出 1.6 上限）。
 

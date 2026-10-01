@@ -3008,6 +3008,25 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
       }
 
+      /* 「已编辑 N 个文件」卡片（deliverables 的 ChangedFiles）：底部装饰线。
+         官方 decoLine 的分划用法放在这个卡片的底边（用户指定）。选择器无哈希：
+         「直接子元素是 _header 的 _card」——该组件的卡片形态（header 是 60px
+         的展开按钮）；卡片自带 overflow:hidden，线条被裁进边角（直角模式下
+         无圆角可裁）。伪元素无占用（bundle 全量查过）。静态、无动画。 */
+      [class$='_card']:has(> [class$='_header']) {
+        position: relative;
+      }
+      [class$='_card']:has(> [class$='_header'])::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        pointer-events: none;
+        background-image: linear-gradient(90deg,#ff00f0 16.6667%,#fffa00 0,#fffa00 33.4259%,#00ffa2 0);
+      }
+
       /* 降级：要求减少透明/更高对比时整段让位（装饰不与无障碍偏好争）。
          注意伪元素：列上的 background-image:none 只清背景图层，两个叠加层
          （::before 网格 / ::after 斜纹）必须各自 display:none。 */
@@ -3019,7 +3038,8 @@ function apply(ctx) {    // Idempotency: the installed bundle can be applied mor
         body[data-endfield-texture] [class$='_centerCol'] [class$='_root'][data-phase]::after {
           display: none !important;
         }
-        .endfield-settings .endfield-settings-group-title:has(> span)::after {
+        .endfield-settings .endfield-settings-group-title:has(> span)::after,
+        [class$='_card']:has(> [class$='_header'])::after {
           background-image: none !important;
         }
         [class$='_centerCol'] [class$='_tabs'] :is([class$='_tab'],[class$='_tabActive'])::before {
